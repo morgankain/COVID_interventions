@@ -1,0 +1,1 @@
+Modeling effort for COVID to predict responses to various intervention strategies
