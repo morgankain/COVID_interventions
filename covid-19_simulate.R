@@ -10,6 +10,14 @@ library(pomp)
 library(scales)
 library(lubridate)
 
+
+## Santa Clara County data 
+# to read in these data, should set working directory to main COVID-interventions directory
+SCC = read.csv("./SantaClara_CumCases_20200317.csv", stringsAsFactors = F) %>% 
+  select(-X, -X.1) %>%
+  mutate(Date = as.Date(Date, format = "%m/%d/%Y"))
+
+
 # To do: 
 # control caused by crossing a threshhold --> seems dependent on time step because if people are reevaluating by fractions of a day, they can respond faster vs if the time step is 1 day?
 # add case detection? 
@@ -84,18 +92,20 @@ sir_init <- Csnippet("
                      ")
 
 # define simulation length, set up data frame, right now it just has days but 0s for the observation
-sim_length = as.Date("2020-12-01") - as.Date("2019-12-01")
+sim_start = as.Date("2020-01-15")
+sim_end = as.Date("2020-12-01")
+sim_length =  sim_end - sim_start
 dat = data.frame(day= 0:sim_length, 
                  B = rep(0, sim_length+1))
 
-int_start = as.Date("2020-01-23") - as.Date("2019-12-01") # in Wuhan, the intervention started around January 23
-int_length = sim_length - int_start + 1 
-int_level = 0.3
+int_start = as.Date("2020-03-17") - sim_start # SCC intervention date 
+# in Wuhan, the intervention started around January 23
+int_length = sim_length - int_start +1
+int_level = 0.1
 # # use the intervention info to construct a covariate table for use in the pomp object
-contact_rate = covariate_table(day= 0:(sim_length),
-                              contact = c(rep(1, int_start),
-                                          rep(int_level, int_length),
-                                          rep(1, sim_length - int_start - int_length + 1)),
+contact_rate = covariate_table(day= 1:(sim_length),
+                              contact = c(rep(1, int_start-1),
+                                          rep(int_level, int_length)),
                               order = "constant",
                               times = "day")
 
@@ -141,12 +151,13 @@ sim = covid %>%
                     delta = 0.2, # fraction of hospitalized cases that are fatal
                     mu = 19/20, # fraction of cases that are minor
                     rho = 1/0.5, # 1/time in pre-symptomatic 
-                    N=59.02e6, # population size 
-                    E0 = 10,  # initially exposed
-                    intervention = 2, # 1 is for social distancing, 2 is for threshhold based, currently threshH is based on 
+                    # N=59.02e6, # population size in Wuhan
+                    N = 1937570, # Santa Clara County population
+                    E0 = 1,  # initially exposed
+                    intervention = 1, # 1 is for social distancing, 2 is for threshhold based, currently threshH is based on 
                     thresh_H = 10, # currently thressholding on total people in the hospital
                     thresh_int_level = 0.01), # multiplier on beta when the thresshold causes the intervention to kick in
-           nsim=10,format="d",include.data=F) %>%
+           nsim=50,format="d",include.data=F) %>%
 # calulate the median of the simulations
   {rbind(.,
          group_by(., day) %>%
@@ -155,14 +166,20 @@ sim = covid %>%
                     mutate(.id = "median"))} 
 
 sim %>% 
-  mutate(date = as.Date("2019-12-01") + day) %>%
+  mutate(date = sim_start + day - 1) %>%
 ggplot() +
   geom_line(aes(x=date, 
-                y = Is + Im + Ia + Ip,
+                # y = Is + Im + Ia + Ip,
+                y = D,
                 group=.id, 
                 color = .id == "median")) + 
   scale_x_date(labels = date_format("%Y-%b")) +
-  # geom_vline(xintercept = as.Date("2020-01-23"), col = "red") + # current intervention date for social distancing
   guides(color=FALSE)+
   scale_color_manual(values=c("#D5D5D3", "#24281A")) +
+  geom_step(data = SCC, aes(x = Date, y = Cumulative_Deaths),
+            color = "red") +
+  geom_vline(xintercept = as.Date("2020-03-17"), col = "blue") + # shelter in place date for SCC
+  # geom_vline(xintercept = as.Date("2020-01-23"), col = "red") + # lockdown date for Wuhan
+  # ylim(0, 100) + 
   theme_bw()
+
