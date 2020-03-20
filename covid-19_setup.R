@@ -31,7 +31,7 @@ sir_step <- Csnippet("
                      if(intervention == 2 & thresh_crossed == 1){ // 2 is for threshhold intervention
                        betat =  beta0*thresh_int_level; 
                      }
-                     else if(intervention == 1) betat = beta0*contact; // 1 is for social distancing
+                     else if(intervention == 1) betat = beta0*soc_dist_level; // 1 is for social distancing
                      else betat = beta0; // everything else is no intervention
                      double dSE = rbinom(S, 1-exp(-betat*(Ca*Ia/N + Cp*Ip/N + Cm*Im/N + Cs*Is/N)*dt)); 
                      double rateE[2];
@@ -94,17 +94,19 @@ sir_init <- Csnippet("
 sim_start = as.Date("2020-01-15")
 sim_end = as.Date("2020-12-01")
 sim_length =  sim_end - sim_start
-dat = data.frame(day= 0:sim_length, 
-                 B = rep(0, sim_length+1))
-
-int_start = as.Date("2020-03-17") - sim_start # SCC intervention date 
+dat = data.frame(day= 1:sim_length, 
+                 B = rep(0, sim_length))
+ 
 # in Wuhan, the intervention started around January 23
-int_length = sim_length - int_start +1
-int_level = 0.1
 # # use the intervention info to construct a covariate table for use in the pomp object
-contact_rate = covariate_table(day= 1:(sim_length),
-                               contact = c(rep(1, int_start-1),
-                                           rep(int_level, int_length)),
+intervention = covariate_table(day= 1:(sim_length),
+                               intervention = c(rep(0, as.Date("2020-03-17") - sim_start - 1), # start with no intervention until SCC intervened
+                                                rep(1, 21),  # go to social distancing 
+                                                rep(2, sim_length - (as.Date("2020-03-17")- sim_start - 1) - 21)), # threshhold based interventiosn after
+                               soc_dist_level = rep(0.2, sim_length),
+                               thresh_H_start = rep(20, sim_length),
+                               thresh_H_end = rep(2, sim_length),
+                               thresh_int_level = rep(0.2, sim_length),
                                order = "constant",
                                times = "day")
 
@@ -112,8 +114,8 @@ contact_rate = covariate_table(day= 1:(sim_length),
 covid <- dat %>%
   pomp(
     time= "day",
-    t0=0,
-    covar = contact_rate,
+    t0=1,
+    covar = intervention,
     rprocess=euler(sir_step,delta.t=1/6),
     rinit=sir_init,
     accumvars= c("sympt_new", "H_new"), # accumulate H until it gets measured, then zero it
@@ -126,11 +128,7 @@ covid <- dat %>%
                  "mu",
                  "rho", 
                  "N", # population size
-                 "E0", # number of people initially exposed 
-                 "intervention",
-                 "thresh_H_start",
-                 "thresh_H_end",
-                 "thresh_int_level"),
+                 "E0"), # number of people initially exposed
     statenames=c("S","E","Ia", 
                  "Ip","Is","Im",
                  "R", "H","D", 

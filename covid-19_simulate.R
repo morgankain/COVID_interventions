@@ -49,10 +49,6 @@ covid_params <- c(
 , rho              = 1/0.5
 , N                = 1937570 # (Santa Clara County) 59.02e6 (Wuhan)
 , E0               = 1
-, intervention     = 2
-, thresh_H_start   = 15
-, thresh_H_end     = 2
-, thresh_int_level = 0.1
 )
 
 # simulate with a set of parameters
