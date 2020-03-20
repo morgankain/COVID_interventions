@@ -5,13 +5,19 @@ needed_packages <- c(
 , "shinydashboard"
 )
 
+# Commented out because package installation is not possible on shinyapps.io 
+# If you are running locally, uncomment and run these lines to install missing packages
+
 ## Check if the packages are installed. *If they are not install them*, then load them
-if (length(setdiff(needed_packages, rownames(installed.packages()))) > 0) {
-  install.packages(setdiff(needed_packages, rownames(installed.packages())))  
-}
+# if (length(setdiff(needed_packages, rownames(installed.packages()))) > 0) {
+#    install.packages(setdiff(needed_packages, rownames(installed.packages())))  
+# }
 
 lapply(needed_packages, require, character.only = TRUE)
 
+# these packages need to be manually loaded for shinyapps.io 
+library("shinythemes")
+library("shinydashboard")
 
 fluidPage(
   

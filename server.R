@@ -1,4 +1,3 @@
-
 needed_packages <- c(
   "shiny"
 , "ggplot2"
@@ -14,14 +13,22 @@ needed_packages <- c(
 , "shinydashboard"
 )
 
+# Commented out because package installation is not possible on shinyapps.io 
+# If you are running locally, uncomment and run these lines to install missing packages
+
 ## Check if the packages are installed. *If they are not install them*, then load them
-if (length(setdiff(needed_packages, rownames(installed.packages()))) > 0) {
-  install.packages(setdiff(needed_packages, rownames(installed.packages())))  
-}
+# if (length(setdiff(needed_packages, rownames(installed.packages()))) > 0) {
+#   install.packages(setdiff(needed_packages, rownames(installed.packages())))
+# }
 
 lapply(needed_packages, require, character.only = TRUE)
 
+# these packages need to be manually loaded for shinyapps.io 
+library("scales")
+library("lubridate")
+
 source("ggplot_theme.R")
+source("covid-19_setup.R")
 
 SCC <- read.csv("./SantaClara_CumCases_20200317.csv", stringsAsFactors = F) %>% 
   select(-X, -X.1) %>%

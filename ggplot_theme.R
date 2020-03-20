@@ -1,4 +1,4 @@
-theme_set(theme_bw())
+ggplot2::theme_set(theme_bw())
 suppressWarnings(
 theme_update(
   axis.text.x = element_text(size = 16)
