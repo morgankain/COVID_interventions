@@ -43,10 +43,10 @@ covid_params <- c(
 , lambda_a         = 1/7
 , lambda_s         = 1/4
 , lambda_m         = 1/7
-, lambda_h         = 1/10.7
+, lambda_p         = 1/0.5
+, rho              = 1/10.7
 , delta            = 0.2
 , mu               = 19/20
-, rho              = 1/0.5
 , N                = 1937570 # (Santa Clara County) 59.02e6 (Wuhan)
 , E0               = 1
 )
