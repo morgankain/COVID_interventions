@@ -1,14 +1,17 @@
 # model adapted from Aaron King's boarding school flu example https://kingaa.github.io/pomp/FAQ.html
 # https://kingaa.github.io/short-course/stochsim/stochsim.html#the-boarding-school-flu-outbreak
 # and from John Drake and Pejman Rohani's model https://github.com/CEIDatUGA/ncov-wuhan-stochastic-model/blob/master/stochastic-model.pdf
-library(pomp)
-library(plyr)
-library(dplyr)
-library(ggplot2)
-library(magrittr)
-library(pomp)
-library(scales)
-library(lubridate)
+needed_packages <- c(
+  "pomp"
+, "plyr"
+, "dplyr"
+, "ggplot2"
+, "magrittr"
+, "scales"
+, "lubridate"
+)
+
+lapply(needed_packages, require, character.only = TRUE)
 
 # To do: 
 # control caused by crossing a threshhold --> seems dependent on time step because if people are reevaluating by fractions of a day, they can respond faster vs if the time step is 1 day?
@@ -19,7 +22,6 @@ library(lubridate)
 # add some information on the age structure of our population? to estimate fatality rates?
 # add hospital capacity affecting mortality?
 # add contact tracing as an intervention which will require another category for exposed people who know they are exposed
-
 
 
 # define the changes for a time step forward
