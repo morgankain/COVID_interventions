@@ -26,9 +26,10 @@ fluidPage(
   ## Title
   , headerPanel("Predicting the effects of COVID intervention strategies")
   
-    , h5("Model development and coding: Marissa Childs, Devin Kirk, Morgan Kain, Nicole Nova")
+    , h5("Model development: Marissa Childs, Devin Kirk, Morgan Kain, Mallory Harris, Nicole Nova")
+    , h5("Model coding: Marissa Childs")
     , h5("Shiny app:", tags$a("Morgan Kain", href = "http://www.morgankain.weebly.com"))
-    , h5("Planning and parameter estimate search: Mallory Harris, Lisa Couper")
+    , h5("Parameter estimate search: Mallory Harris, Lisa Couper")
   
     , h4("Click on the tab 'Model Details' below for a description of the model and this shiny app")
   
@@ -38,29 +39,78 @@ fluidPage(
       box(width = 20
       , column(8
         
+  , sliderInput("num_sims"
+    , label = h5("Number of simulations")
+    , min   = 5
+    , max   = 200
+    , value = 50
+    , step  = 5
+    )  
+        
         , radioButtons("int_type"
                 , h5("Intervention strategy")
                 , choices = list(
-                    "None"              = "None"
-                  , "Shelter in Place"  = "STP"
-                  , "Social Distancing" = "SD")
-                  , selected  = "None")
+               #    "None"              = "None"
+                    "Social Distancing" = 1
+                  , "Threshold Based"   = 2)
+                  , selected  = 1
+                 )
         
-      , conditionalPanel(condition = "input.int_type != 'None'"
+      , conditionalPanel(condition = "input.int_type == '1'"
         
-          , numericInput("int_size"
-           , label = h5("Magnitude of intervention (0 - 1)")
-           , value = 0)       
+  , sliderInput("int_start"
+    , label = h5("Start date of intervention (days since first case entered exposed box)")
+    , min   = 0
+    , max   = 100
+    , value = 30
+    , step  = 2
+    )  
         
-          , numericInput("int_start"
-           , label = h5("Start date of intervention (day since first case enters exposed box)")
-           , value = 0)          
+  , sliderInput("int_size"
+    , label = h5("Proportion of baseline contact rate (0 - 1)")
+    , min   = 0
+    , max   = 1
+    , value = 0.3
+    , step  = 0.05
+    )  
         
-          , numericInput("int_len"
-           , label = h5("Length of intervention (number of days)")
-           , value = 0)  
+  , sliderInput("int_len"
+    , label = h5("Length of intervention (number of days)")
+    , min   = 0
+    , max   = 100
+    , value = 30
+    , step  = 2
+    )
+       
+      )
+         
+      , conditionalPanel(condition = "input.int_type == '2'"
         
-          )
+  , sliderInput("int_start_t"
+    , label = h5("Threshold quantity: number of daily hospitalized cases before intervention STARTS")
+    , min   = 0
+    , max   = 100
+    , value = 15
+    , step  = 1
+    )  
+        
+  , sliderInput("int_end_t"
+    , label = h5("Threshold quantity: number of daily hospitalized cases before intervention ENDS")
+    , min   = 0
+    , max   = 100
+    , value = 2
+    , step  = 1
+    )  
+        
+  , sliderInput("int_size_t"
+    , label = h5("Proportion of baseline contact rate (0 - 1)")
+    , min   = 0
+    , max   = 1
+    , value = 0.1
+    , step  = 0.05
+    )
+
+          )        
         )
       )
       
@@ -92,6 +142,7 @@ fluidPage(
     )
   )
 )
+  
         
 
         

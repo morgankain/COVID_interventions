@@ -1,6 +1,7 @@
 # model adapted from Aaron King's boarding school flu example https://kingaa.github.io/pomp/FAQ.html
 # https://kingaa.github.io/short-course/stochsim/stochsim.html#the-boarding-school-flu-outbreak
 # and from John Drake and Pejman Rohani's model https://github.com/CEIDatUGA/ncov-wuhan-stochastic-model/blob/master/stochastic-model.pdf
+
 needed_packages <- c(
   "pomp"
 , "plyr"

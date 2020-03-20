@@ -24,13 +24,12 @@ SCC = read.csv("./SantaClara_CumCases_20200317.csv", stringsAsFactors = F) %>%
 ##' @param rho          1/time in pre-symptomatic 
 ##' @param N            Population size
 ##' @param E0           initially exposed
-##' @param intervention       1 is for social distancing, 2 is for threshhold based, currently threshH is based on
+##' @param intervention       1 is for social distancing, 2 is for threshhold based, currently thresh_H is based on
+##' @param int_level          proportional reduction in contact rate
 ##' @param thresh_H_start     currently thresholding on total people in the hospital to start intervention
 ##' @param thresh_H_end       currently thresholding on total people in the hospital to end intervention
 ##' @param thresh_int_level   multiplier on beta when the thresshold causes the intervention to kick in
-##' @param nsim               number of simulations
-##' @param format             
-##' @param include.data
+
 
 # Simulation parameters
 covid_params <- c(
@@ -48,7 +47,7 @@ covid_params <- c(
 , delta            = 0.2
 , mu               = 19/20
 , rho              = 1/0.5
-, N                = 1937570 # (Santa Clara County) N=59.02e6 (Wuhan)
+, N                = 1937570 # (Santa Clara County) 59.02e6 (Wuhan)
 , E0               = 1
 , intervention     = 2
 , thresh_H_start   = 15

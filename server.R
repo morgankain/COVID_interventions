@@ -23,10 +23,10 @@ lapply(needed_packages, require, character.only = TRUE)
 
 source("ggplot_theme.R")
 
-function(input, output) {
-  
-  epi.dat <- reactive({
-  
+SCC <- read.csv("./SantaClara_CumCases_20200317.csv", stringsAsFactors = F) %>% 
+  select(-X, -X.1) %>%
+  mutate(Date = as.Date(Date, format = "%m/%d/%Y"))
+
 sir_step <- Csnippet("
                      double betat;
                      if(intervention == 2 & thresh_crossed == 1){ // 2 is for threshhold intervention
@@ -71,8 +71,8 @@ sir_step <- Csnippet("
                      D  += dHD; // fatalities
                      sympt_new  +=  dIpIs + dIpIm;
                      H_new += dIsH;
-                     thresh_crossed = 0; 
-                     if(intervention == 2 & H >= thresh_H) thresh_crossed = 1;
+                     if(intervention == 2 & H >= thresh_H_start) thresh_crossed = 1;
+                     else if(intervention == 2 & thresh_crossed == 1 & H < thresh_H_end) thresh_crossed = 0;
                      ")
 
 # define the initial set up, currently, every is susceptible except the exposed people
@@ -90,6 +90,10 @@ sir_init <- Csnippet("
                      H_new = 0;
                      thresh_crossed = 0;
                      ")
+
+function(input, output) {
+  
+  epi.dat <- reactive({
   
 sim_length <- as.Date("2020-12-01") - as.Date("2019-12-01")
 dat        <- data.frame(
@@ -97,10 +101,11 @@ dat        <- data.frame(
 , B   = rep(0, sim_length + 1)
   )
 
-## in Wuhan, the intervention started around January 23
-int_start  <- as.Date("2020-01-23") - as.Date("2019-12-01") 
-int_length <- sim_length - int_start + 1 
-int_level  <- 0.3
+## Intervention start and end date (only used if intervention == 1)
+
+int_start  <- (sim_start + input$int_start) - sim_start
+int_length <- (sim_start + input$int_len)   - sim_start
+int_level  <- input$int_size
 
 ## use the intervention info to construct a covariate table for use in the pomp object
 contact_rate <- covariate_table(
@@ -115,59 +120,76 @@ contact_rate <- covariate_table(
 
 covid <- dat %>%
   pomp(
-    time = "day",
-    t0 = 0,
-    covar = contact_rate,
-    rprocess=euler(sir_step,delta.t=1/6),
-    rinit=sir_init,
-    accumvars= c("sympt_new", "H_new"), # accumulate H until it gets measured, then zero it
-    paramnames=c("beta0",
-                 "Ca", "Cp", "Cs", "Cm",
-                 "alpha",
-                 "gamma", 
-                 "lambda_a", "lambda_s","lambda_m", "lambda_h",
-                 "delta",
-                 "mu",
-                 "rho", 
-                 "N", # population size
-                 "E0", # number of people initially exposed 
-                 "intervention",
-                 "thresh_H",
-                 "thresh_int_level"),
-    statenames=c("S","E","Ia", 
-                 "Ip","Is","Im",
-                 "R", "H","D", 
-                 "sympt_new", "H_new",
-                 "thresh_crossed")
+    time       = "day"
+  , t0         = 0
+  , covar      = contact_rate
+  , rprocess   = euler(sir_step, delta.t = 1/6)
+  , rinit      = sir_init
+  , accumvars  = c("sympt_new", "H_new"), # accumulate H until it gets measured, then zero it
+    paramnames = c(
+      "beta0"
+    , "Ca", "Cp", "Cs", "Cm"
+    , "alpha"
+    , "gamma"
+    , "lambda_a", "lambda_s","lambda_m", "lambda_h"
+    , "delta"
+    , "mu"
+    , "rho"
+    , "N"
+    , "E0"
+    , "intervention"
+    , "thresh_H_start"
+    , "thresh_H_end"
+    , "thresh_int_level"
+  )
+  , statenames = c(
+   "S","E","Ia", "Ip","Is","Im"
+  ,"R", "H","D", "sympt_new", "H_new"
+  , "thresh_crossed"
+    )
   ) 
 
-sim = covid %>%
-  simulate(params=c(beta0 = 0.5, # without intervention beta for all categories
-                    Ca = 1, Cp = 1, Cs = 1, Cm = 1, # category specific contact rates
-                    alpha = 1/3, # fraction of cases asymptomatic
-                    gamma = 1/5.2, # 1 over time in exposed class
-                    lambda_a = 1/7, # 1/time for asympomatic to recover
-                    lambda_s = 1/4, # 1/time for severely symptomatic to go to the hospitl 
-                    lambda_m = 1/7, # 1/time for minorly sympomatic to recover
-                    lambda_h = 1/10.7, # 1/time  to leaving hospital  
-                    delta = 0.2, # fraction of hospitalized cases that are fatal
-                    mu = 19/20, # fraction of cases that are minor
-                    rho = 1/0.5, # 1/time in pre-symptomatic 
-                    N=59.02e6, # population size 
-                    E0 = 10,  # initially exposed
-                    intervention = 2, # 1 is for social distancing, 2 is for threshhold based, currently threshH is based on 
-                    thresh_H = 10, # currently thressholding on total people in the hospital
-                    thresh_int_level = 0.01), # multiplier on beta when the thresshold causes the intervention to kick in
-           nsim=10,format="d",include.data=F) %>%
-# calulate the median of the simulations
-  {rbind(.,
+## Simulation parameters
+covid_params <- c(
+  beta0            = 0.5
+, Ca               = 1
+, Cp               = 1
+, Cs               = 1
+, Cm               = 1
+, alpha            = 1/3
+, gamma            = 1/5.2
+, lambda_a         = 1/7
+, lambda_s         = 1/4
+, lambda_m         = 1/7
+, lambda_h         = 1/10.7
+, delta            = 0.2
+, mu               = 19/20
+, rho              = 1/0.5
+, N                = 1937570 # (Santa Clara County) 59.02e6 (Wuhan)
+, E0               = 1
+, intervention     = as.numeric(input$int_type)
+, thresh_H_start   = input$int_start_t
+, thresh_H_end     = input$int_end_t
+, thresh_int_level = input$int_size_t
+)
+
+## Simulate with a set of parameters
+epi.out <- do.call(
+  pomp::simulate
+, list(
+  object       = covid
+, params       = covid_params
+, nsim         = input$num_sims
+, format       = "d"
+, include.data = F
+, seed         = 1001)
+  ) %>% {rbind(.,
          group_by(., day) %>%
            select(-.id) %>%
            summarise_all(median) %>%
                     mutate(.id = "median"))} 
 
-epi.out <- sim %>% mutate(date = as.Date("2019-12-01") + day)
-
+## return
   list(
     epi.out = epi.out
     )
@@ -176,14 +198,17 @@ epi.out <- sim %>% mutate(date = as.Date("2019-12-01") + day)
 
   output$graph1 <- renderPlot({ 
     
-  ggplot(epi.dat()[["epi.out"]]) + geom_line(aes(x=date, 
-                y = Is + Im + Ia + Ip,
-                group=.id, 
-                color = .id == "median")) + 
+  epi.dat()[["epi.out"]] %>% 
+   mutate(date = sim_start + day - 1) %>%
+   ggplot() + geom_line(
+     aes(x = date
+       , y = H # y = Is + Im + Ia + Ip,
+       , group = .id
+       , color = .id == "median")
+     ) + 
   scale_x_date(labels = date_format("%Y-%b")) +
-  # geom_vline(xintercept = as.Date("2020-01-23"), col = "red") + # current intervention date for social distancing
-  guides(color=FALSE)+
-  scale_color_manual(values=c("#D5D5D3", "#24281A"))
+  guides(color = FALSE) +
+  scale_color_manual(values = c("#D5D5D3", "#24281A")) 
     
     })
   
