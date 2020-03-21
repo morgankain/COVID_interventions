@@ -7,7 +7,6 @@ SCC = read.csv("./SantaClara_CumCases_20200317.csv", stringsAsFactors = F) %>%
   select(-X, -X.1) %>%
   mutate(Date = as.Date(Date, format = "%m/%d/%Y"))
 
-##' draw new mutation values
 ##' @param beta0        without intervention beta for all categories   
 ##' @param Ca           category specific contact rate
 ##' @param Cp           category specific contact rate
@@ -30,7 +29,6 @@ SCC = read.csv("./SantaClara_CumCases_20200317.csv", stringsAsFactors = F) %>%
 ##' @param thresh_H_end       currently thresholding on total people in the hospital to end intervention
 ##' @param thresh_int_level   multiplier on beta when the thresshold causes the intervention to kick in
 
-
 # Simulation parameters
 covid_params <- c(
   beta0            = 0.5
@@ -48,7 +46,7 @@ covid_params <- c(
 , mu               = 19/20
 , rho              = 1/0.5
 , N                = 1937570 # (Santa Clara County) 59.02e6 (Wuhan)
-, E0               = 1
+, E0               = 20
 , intervention     = 2
 , thresh_H_start   = 15
 , thresh_H_end     = 2

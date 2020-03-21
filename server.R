@@ -149,6 +149,8 @@ covid <- dat %>%
     )
   ) 
 
+pop_size <- 1937570
+
 ## Simulation parameters
 covid_params <- c(
   beta0            = 0.5
@@ -165,7 +167,7 @@ covid_params <- c(
 , delta            = 0.2
 , mu               = 19/20
 , rho              = 1/0.5
-, N                = 1937570 # (Santa Clara County) 59.02e6 (Wuhan)
+, N                = pop_size # (Santa Clara County) 59.02e6 (Wuhan)
 , E0               = 1
 , intervention     = as.numeric(input$int_type)
 , thresh_H_start   = input$int_start_t
