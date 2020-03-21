@@ -37,13 +37,15 @@ fluidPage(
     , h5("Shiny app:", tags$a("Morgan Kain", href = "http://www.morgankain.weebly.com"))
     , h5("Parameter estimate search: Mallory Harris, Lisa Couper")
   
-    , h4("Click on the tab 'Model Details' below for a description of the model and this shiny app")
+  # , h4("Click on the tab 'Model Details' below for a description of the model and this shiny app")
   
     , mainPanel(
     
     ## Box to hold a series of optional changes to the model, which change what parameters users can alter
       box(width = 20
-      , column(8
+      , column(3
+        
+  , actionButton("do", "Simulate")
         
   , sliderInput("num_sims"
     , label = h5("Number of simulations")
@@ -53,46 +55,91 @@ fluidPage(
     , step  = 5
     )  
         
-        , radioButtons("int_type"
-                , h5("Intervention strategy")
+  , sliderInput("sim_len"
+    , label = h5("Length of simulation")
+    , min   = 200
+    , max   = 600
+    , value = 300
+    , step  = 5
+    )
+      )
+   
+    , column(3     
+        
+        , radioButtons("int_type1"
+                , h5("Initial intervention strategy")
                 , choices = list(
-               #    "None"              = "None"
                     "Social Distancing" = 1
                   , "Threshold Based"   = 2)
                   , selected  = 1
                  )
         
-      , conditionalPanel(condition = "input.int_type == '1'"
+        , radioButtons("int_type2"
+                , h5("Secondary intervention strategy")
+                , choices = list(
+                    "Social Distancing" = 1
+                  , "Threshold Based"   = 2)
+                  , selected  = 1
+                 )
+ 
+        , radioButtons("iso"
+                , h5("Quarantine of symptomatic infected individuals?")
+                , choices = list(
+                    "No"  = 1
+                  , "Yes" = 2)
+                  , selected  = 1
+                 )
         
-  , sliderInput("int_start"
-    , label = h5("Start date of intervention (days since first case entered exposed box)")
+         , conditionalPanel(condition = "input.iso == '2'"
+           
+   , sliderInput("iso_start"
+    , label = h5("Start date of symptomatic infected quarantine")
+    , min   = 0
+    , max   = 100
+    , value = 30
+    , step  = 2
+    ) 
+           
+   , sliderInput("iso_length"
+    , label = h5("Length of symptomatic infected quarantine")
+    , min   = 0
+    , max   = 100
+    , value = 30
+    , step  = 2
+    ) 
+           
+      )
+      
+    )
+         , column(3
+    
+  , sliderInput("int_start1"
+    , label = h5("Start date of FIRST intervention (days since first case entered exposed box)")
     , min   = 0
     , max   = 100
     , value = 30
     , step  = 2
     )  
-        
-  , sliderInput("int_size"
-    , label = h5("Proportion of baseline contact rate (0 - 1)")
-    , min   = 0
-    , max   = 1
-    , value = 0.3
-    , step  = 0.05
-    )  
-        
-  , sliderInput("int_len"
-    , label = h5("Length of intervention (number of days)")
+
+  , sliderInput("int_length1"
+    , label = h5("Length of FIRST intervention (number of days)")
     , min   = 0
     , max   = 100
     , value = 30
     , step  = 2
     )
-       
-      )
-         
-      , conditionalPanel(condition = "input.int_type == '2'"
-        
-  , sliderInput("int_start_t"
+
+  , sliderInput("sd_m1"
+    , label = h5("Proportion of baseline contact rate (0 - 1)")
+    , min   = 0
+    , max   = 1
+    , value = 0.3
+    , step  = 0.05
+    ) 
+      
+      , conditionalPanel(condition = "input.int_type1 == '2'"
+
+  , sliderInput("t_s1"
     , label = h5("Threshold quantity: number of daily hospitalized cases before intervention STARTS")
     , min   = 0
     , max   = 100
@@ -100,7 +147,7 @@ fluidPage(
     , step  = 1
     )  
         
-  , sliderInput("int_end_t"
+  , sliderInput("t_e1"
     , label = h5("Threshold quantity: number of daily hospitalized cases before intervention ENDS")
     , min   = 0
     , max   = 100
@@ -108,17 +155,57 @@ fluidPage(
     , step  = 1
     )  
         
-  , sliderInput("int_size_t"
+      )  
+        
+        ) , column(3
+          
+    ## dates get updated according to choice in int_start1: see server.R
+  , sliderInput("int_start2"
+    , label = h5("Start date of SECOND intervention (days since first case entered exposed box)")
+    , min   = 50
+    , max   = 200
+    , value = 80
+    , step  = 2
+    ) 
+        
+    ## dates get updated according to choice in int_start1: see server.R       
+  , sliderInput("int_length2"
+    , label = h5("Length of SECOND intervention (number of days)")
+    , min   = 0
+    , max   = 200
+    , value = 150
+    , step  = 2
+    )
+          
+  , sliderInput("sd_m2"
     , label = h5("Proportion of baseline contact rate (0 - 1)")
     , min   = 0
     , max   = 1
-    , value = 0.1
+    , value = 0.3
     , step  = 0.05
-    )
-
-          )        
+    )  
+    
+      , conditionalPanel(condition = "input.int_type2 == '2'"
+        
+  , sliderInput("t_s2"
+    , label = h5("Threshold quantity: number of daily hospitalized cases before intervention STARTS")
+    , min   = 0
+    , max   = 100
+    , value = 15
+    , step  = 1
+    )  
+        
+  , sliderInput("t_e2"
+    , label = h5("Threshold quantity: number of daily hospitalized cases before intervention ENDS")
+    , min   = 0
+    , max   = 100
+    , value = 2
+    , step  = 1
+    )  
+        
+      )  
         )
-      )
+          )
       
   ## Box to for the parameters
   , box(width = 12
