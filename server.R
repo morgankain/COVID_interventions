@@ -349,6 +349,26 @@ d2.2 <- data.frame(
 , y2 = c(max(epi.dat.s$H))
 )
 
+if (input$iso == 2) {
+  
+d3.1 <- data.frame(
+  x1 = c(sim_start + input$iso_start)
+, x2 = c(sim_start + input$iso_start + input$iso_length)
+, y1 = c(max(epi.dat.s$total_I) - max(epi.dat.s$total_I) / 5)
+, y2 = c(max(epi.dat.s$total_I))
+)
+
+d3.2 <- data.frame(
+  x1 = c(sim_start + input$iso_start)
+, x2 = c(sim_start + input$iso_start + input$iso_length)
+, y1 = c(max(epi.dat.s$H) - max(epi.dat.s$H) / 5)
+, y2 = c(max(epi.dat.s$H))
+)
+
+col3 <- "brown4"
+    
+}
+
 col1   <- ifelse(input$int_type1 == "1", "seagreen4", "cadetblue4")
 alpha1 <- ifelse(input$int_type1 == "1", 0.8, 0.6)
 col2   <- ifelse(input$int_type2 == "1", "seagreen4", "cadetblue4")
@@ -356,14 +376,19 @@ alpha2 <- ifelse(input$int_type2 == "1", 0.8, 0.6)
 
 gg1 <- epi.dat.s %>% ggplot() +
   geom_rect(data = d1.1, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2), fill = col1, color = "white", alpha = alpha1) + 
-  geom_rect(data = d1.2, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2), fill = col2, color = "white", alpha = alpha2) + 
+  geom_rect(data = d1.2, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2), fill = col2, color = "white", alpha = alpha2) +
+  
+  {
+if (input$iso == 2) {
+geom_rect(data = d3.1, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2), fill = col3, color = "white", alpha = 0.5)  
+  }
+  } +
+  
   geom_line(aes(x = date, 
                 y = total_I,
                 group = .id, 
                 color = .id == "median")) + 
   scale_x_date(labels = date_format("%Y-%b")) +
-# scale_y_continuous(trans = "pseudo_log", breaks = c(0, 10, 100, 1000, 10000, 100000), labels = comma) + 
-# scale_y_log10() + 
   xlab("Date") + ylab("Cases") +
   guides(color = FALSE)+
   scale_color_manual(values=c("#D5D5D3", "#24281A"))
@@ -371,6 +396,13 @@ gg1 <- epi.dat.s %>% ggplot() +
 gg2 <- epi.dat.s %>% ggplot() +
   geom_rect(data = d2.1, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2), fill = col1, color = "white", alpha = alpha1) + 
   geom_rect(data = d2.2, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2), fill = col2, color = "white", alpha = alpha2) + 
+  
+  {
+if (input$iso == 2) {
+geom_rect(data = d3.2, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2), fill = col3, color = "white", alpha = 0.5)  
+  }
+  } +
+
   geom_line(aes(x = date, 
                 y = H,
                 group = .id, 
