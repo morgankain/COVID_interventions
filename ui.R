@@ -43,7 +43,7 @@ fluidPage(
     
     ## Box to hold a series of optional changes to the model, which change what parameters users can alter
       box(width = 20
-      , column(3
+      , column(4
         
   , actionButton("do", "Simulate")
         
@@ -62,33 +62,14 @@ fluidPage(
     , value = 300
     , step  = 5
     )
+      
+  , radioButtons("iso"
+    , h5("Quarantine of symptomatic infected individuals?")
+    , choices = list(
+        "No"  = 1
+       , "Yes" = 2)
+       , selected  = 1
       )
-   
-    , column(3     
-        
-        , radioButtons("int_type1"
-                , h5("Initial intervention strategy")
-                , choices = list(
-                    "Social Distancing" = 1
-                  , "Threshold Based"   = 2)
-                  , selected  = 1
-                 )
-        
-        , radioButtons("int_type2"
-                , h5("Secondary intervention strategy")
-                , choices = list(
-                    "Social Distancing" = 1
-                  , "Threshold Based"   = 2)
-                  , selected  = 1
-                 )
- 
-        , radioButtons("iso"
-                , h5("Quarantine of symptomatic infected individuals?")
-                , choices = list(
-                    "No"  = 1
-                  , "Yes" = 2)
-                  , selected  = 1
-                 )
         
          , conditionalPanel(condition = "input.iso == '2'"
            
@@ -111,8 +92,16 @@ fluidPage(
       )
       
     )
-         , column(3
+         , column(4
     
+        , radioButtons("int_type1"
+                , h5("Initial intervention strategy")
+                , choices = list(
+                    "Social Distancing" = 1
+                  , "Threshold Based"   = 2)
+                  , selected  = 1
+                 )
+           
   , sliderInput("int_start1"
     , label = h5("Start date of FIRST intervention (days since first case entered exposed box)")
     , min   = 0
@@ -124,7 +113,7 @@ fluidPage(
   , sliderInput("int_length1"
     , label = h5("Length of FIRST intervention (number of days)")
     , min   = 0
-    , max   = 100
+    , max   = 200
     , value = 30
     , step  = 2
     )
@@ -157,8 +146,16 @@ fluidPage(
         
       )  
         
-        ) , column(3
-          
+        ) , column(4
+       
+        , radioButtons("int_type2"
+                , h5("Secondary intervention strategy")
+                , choices = list(
+                    "Social Distancing" = 1
+                  , "Threshold Based"   = 2)
+                  , selected  = 1
+                 )
+             
     ## dates get updated according to choice in int_start1: see server.R
   , sliderInput("int_start2"
     , label = h5("Start date of SECOND intervention (days since first case entered exposed box)")

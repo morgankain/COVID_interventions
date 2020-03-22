@@ -11,6 +11,7 @@ needed_packages <- c(
 , "reshape2"
 , "shinythemes"
 , "shinydashboard"
+, "gridExtra"
 )
 
 # Commented out because package installation is not possible on shinyapps.io 
@@ -195,7 +196,9 @@ intervention <- covariate_table(
   , rep(0, sim_length - input$int_start2 - input$int_length2)
   ) 
   
-, isolation        = c(
+, isolation        = 
+   { if (input$iso == 2) {
+    c(
       # 0 is no isolation of cases
     rep(0, input$iso_start)      
       # 1 is isolation of symptomatic
@@ -203,7 +206,12 @@ intervention <- covariate_table(
       # Post isolation close  
   , rep(0, sim_length - input$iso_length - input$iso_start)
   ) 
-  
+   } else {
+    c(
+    rep(0, sim_length)      
+    )     
+   }
+   }
 , iso_severe_level = rep(iso_sm, sim_length)  # % of contats that severe cases maintain
 , iso_mild_level   = rep(iso_mm, sim_length)  # % of contats that mild cases maintain
   
@@ -316,18 +324,32 @@ epi.dat.s <- epi.dat()[["epi.out"]] %>%
   dplyr::group_by(.id) %>%
   dplyr::mutate(daily_cases = c(0, diff(total_I)))
 
-d <- data.frame(
+d1.1 <- data.frame(
   x1 = c(sim_start + input$int_start1)
 , x2 = c(sim_start + input$int_start1 + input$int_length1)
 , y1 = c(0)
 , y2 = c(max(epi.dat.s$total_I))
 )
 
-d2 <- data.frame(
+d1.2 <- data.frame(
   x1 = c(sim_start + input$int_start2)
 , x2 = c(sim_start + input$int_start2 + input$int_length2)
 , y1 = c(0)
 , y2 = c(max(epi.dat.s$total_I))
+)
+
+d2.1 <- data.frame(
+  x1 = c(sim_start + input$int_start1)
+, x2 = c(sim_start + input$int_start1 + input$int_length1)
+, y1 = c(0)
+, y2 = c(max(epi.dat.s$H))
+)
+
+d2.2 <- data.frame(
+  x1 = c(sim_start + input$int_start2)
+, x2 = c(sim_start + input$int_start2 + input$int_length2)
+, y1 = c(0)
+, y2 = c(max(epi.dat.s$H))
 )
 
 col1   <- ifelse(input$int_type1 == "1", "seagreen4", "cadetblue4")
@@ -336,8 +358,8 @@ col2   <- ifelse(input$int_type2 == "1", "seagreen4", "cadetblue4")
 alpha2 <- ifelse(input$int_type2 == "1", 0.8, 0.6)
 
 gg1 <- epi.dat.s %>% ggplot() +
-  geom_rect(data = d, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2), fill = col1, color = "white", alpha = alpha1) + 
-  geom_rect(data = d2, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2), fill = col2, color = "white", alpha = alpha2) + 
+  geom_rect(data = d1.1, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2), fill = col1, color = "white", alpha = alpha1) + 
+  geom_rect(data = d1.2, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2), fill = col2, color = "white", alpha = alpha2) + 
   geom_line(aes(x = date, 
                 y = Is + Im + Ia + Ip,
                 group = .id, 
@@ -347,10 +369,21 @@ gg1 <- epi.dat.s %>% ggplot() +
 # scale_y_log10() + 
   xlab("Date") + ylab("Cases") +
   guides(color = FALSE)+
-  scale_color_manual(values=c("#D5D5D3", "#24281A"))# +
- # geom_text(data = df, aes(x = x, y = y, label = text), colour = "black")
+  scale_color_manual(values=c("#D5D5D3", "#24281A"))
 
-gg1
+gg2 <- epi.dat.s %>% ggplot() +
+  geom_rect(data = d2.1, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2), fill = col1, color = "white", alpha = alpha1) + 
+  geom_rect(data = d2.2, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2), fill = col2, color = "white", alpha = alpha2) + 
+  geom_line(aes(x = date, 
+                y = H,
+                group = .id, 
+                color = .id == "median")) + 
+  scale_x_date(labels = date_format("%Y-%b")) +
+  xlab("Date") + ylab("Hospitalizations") +
+  guides(color = FALSE)+
+  scale_color_manual(values=c("#D5D5D3", "#24281A"))
+
+grid.arrange(gg1, gg2, ncol = 2)
 
     })
   
