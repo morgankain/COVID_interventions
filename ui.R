@@ -37,16 +37,24 @@ fluidPage(
     , h5("Shiny app:", tags$a("Morgan Kain", href = "http://www.morgankain.weebly.com"))
     , h5("Parameter estimate search: Mallory Harris, Lisa Couper")
   
-  # , h4("Click on the tab 'Model Details' below for a description of the model and this shiny app")
+, sidebarPanel(
   
-    , mainPanel(
-    
-    ## Box to hold a series of optional changes to the model, which change what parameters users can alter
-      box(width = 20
-      , column(4
-        
+  fluidRow(
+  
+  div(style = "display: inline-block;vertical-align:top; width: 150px;"
   , actionButton("do", "Simulate")
-        
+    )
+, div(style = "display: inline-block;vertical-align:top; width: 150px;"
+  , radioButtons("pscale"
+                , p("")
+                , choices = list(
+                    "Linear Scale" = 1
+                  , "Log Scale"    = 2)
+                  , selected  = 1
+                 )
+  )
+  )
+  
   , sliderInput("num_sims"
     , label = h5("Number of simulations")
     , min   = 5
@@ -62,6 +70,22 @@ fluidPage(
     , value = 300
     , step  = 5
     )
+  
+        , radioButtons("int_type1"
+                , h5("FIRST intervention strategy")
+                , choices = list(
+                    "Social Distancing" = 1
+                  , "Threshold Based"   = 2)
+                  , selected  = 1
+                 )
+  
+        , radioButtons("int_type2"
+                , h5("SECOND intervention strategy")
+                , choices = list(
+                    "Social Distancing" = 1
+                  , "Threshold Based"   = 2)
+                  , selected  = 1
+                 )
       
   , radioButtons("iso"
     , h5("Quarantine of symptomatic infected individuals?")
@@ -91,19 +115,16 @@ fluidPage(
            
       )
       
-    )
-         , column(4
+)
+
+    , mainPanel(
     
-        , radioButtons("int_type1"
-                , h5("Initial intervention strategy")
-                , choices = list(
-                    "Social Distancing" = 1
-                  , "Threshold Based"   = 2)
-                  , selected  = 1
-                 )
-           
+       column(6
+         
+  , h3("First Intervention", style = "color:maroon")
+
   , sliderInput("int_start1"
-    , label = h5("Start date of FIRST intervention (days since first case entered exposed box)")
+    , label = h5("Start date of intervention (days since first case)")
     , min   = 0
     , max   = 100
     , value = 30
@@ -111,7 +132,7 @@ fluidPage(
     )  
 
   , sliderInput("int_length1"
-    , label = h5("Length of FIRST intervention (number of days)")
+    , label = h5("Length of intervention (number of days)")
     , min   = 0
     , max   = 200
     , value = 30
@@ -146,19 +167,13 @@ fluidPage(
         
       )  
         
-        ) , column(4
+        ) , column(6
+          
+    , h3("Second Intervention", style = "color:maroon")
        
-        , radioButtons("int_type2"
-                , h5("Secondary intervention strategy")
-                , choices = list(
-                    "Social Distancing" = 1
-                  , "Threshold Based"   = 2)
-                  , selected  = 1
-                 )
-             
     ## dates get updated according to choice in int_start1: see server.R
   , sliderInput("int_start2"
-    , label = h5("Start date of SECOND intervention (days since first case entered exposed box)")
+    , label = h5("Start date of intervention (days since first case)")
     , min   = 50
     , max   = 200
     , value = 80
@@ -167,7 +182,7 @@ fluidPage(
         
     ## dates get updated according to choice in int_start1: see server.R       
   , sliderInput("int_length2"
-    , label = h5("Length of SECOND intervention (number of days)")
+    , label = h5("Length of intervention (number of days)")
     , min   = 0
     , max   = 200
     , value = 150
@@ -202,7 +217,7 @@ fluidPage(
         
       )  
         )
-          )
+#          )
       
   ## Box to for the parameters
   , box(width = 12

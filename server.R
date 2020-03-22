@@ -361,7 +361,7 @@ gg1 <- epi.dat.s %>% ggplot() +
   geom_rect(data = d1.1, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2), fill = col1, color = "white", alpha = alpha1) + 
   geom_rect(data = d1.2, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2), fill = col2, color = "white", alpha = alpha2) + 
   geom_line(aes(x = date, 
-                y = Is + Im + Ia + Ip,
+                y = total_I,
                 group = .id, 
                 color = .id == "median")) + 
   scale_x_date(labels = date_format("%Y-%b")) +
@@ -382,6 +382,13 @@ gg2 <- epi.dat.s %>% ggplot() +
   xlab("Date") + ylab("Hospitalizations") +
   guides(color = FALSE)+
   scale_color_manual(values=c("#D5D5D3", "#24281A"))
+
+if (input$pscale == 2) {
+yscale1 <- c(seq(1, 10, by = 10) %o% 10^(1:ceiling(log10(max(epi.dat.s$total_I)))))
+yscale2 <- c(seq(1, 10, by = 10) %o% 10^(1:ceiling(log10(max(epi.dat.s$H)))))
+gg1    <- gg1 + scale_y_continuous(trans = "pseudo_log", breaks = yscale1, labels = comma)
+gg2    <- gg2 + scale_y_continuous(trans = "pseudo_log", breaks = yscale2, labels = comma)
+}
 
 grid.arrange(gg1, gg2, ncol = 2)
 
