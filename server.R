@@ -31,9 +31,14 @@ library("lubridate")
 source("ggplot_theme.R")
 source("covid-19_setup.R")
 
-SCC <- read.csv("./SantaClara_CumCases_20200317.csv", stringsAsFactors = F) %>% 
+SCC    <- read.csv("./SantaClara_CumCases_20200317.csv", stringsAsFactors = F) %>% 
   select(-X, -X.1) %>%
   mutate(Date = as.Date(Date, format = "%m/%d/%Y"))
+
+params <- read.csv("covid_params.csv")
+params <- params %>% 
+  filter(!(Symbol %in% c("N", "E0", "Multiple"))) %>% 
+  mutate(Value = as.numeric(as.character(Value)))
 
 sir_step <- Csnippet("
                      // adjust betat for social distancing interventions
@@ -120,6 +125,14 @@ iso_mm   <- 0.1
  ## Population Size: to be added as a parameter later
 pop_size <- 1937570
   
+## Simulation parameters
+covid_params        <- params$Value
+names(covid_params) <- params$Symbol
+covid_params        <- c(
+    covid_params
+  , N  = pop_size
+  , E0 = 20)
+
 ## Update all of the sliders based on the user's first intervention parameters so dates wont break
 observe({
   
@@ -148,7 +161,7 @@ updateSliderInput(
 })
 
 observe({
-  
+
 updateSliderInput(
   session
 , "iso_start"
@@ -157,7 +170,11 @@ updateSliderInput(
 , value = round((input$sim_len - input$int_start1 + input$int_length1) / 2)
 , step  = 2
 )
+  
+})
 
+observe({
+  
 updateSliderInput(
   session
 , "iso_length"
@@ -270,26 +287,6 @@ covid <- dat %>%
     , "thresh_crossed"
       )
   ) 
-
-## Simulation parameters
-covid_params <- c(
-  beta0            = 0.5
-, Ca               = 1
-, Cp               = 1
-, Cs               = 1
-, Cm               = 1
-, alpha            = 1/3
-, gamma            = 1/5.2
-, lambda_a         = 1/7
-, lambda_s         = 1/4
-, lambda_m         = 1/7
-, lambda_p         = 1/0.5
-, rho              = 1/10.7
-, delta            = 0.2
-, mu               = 19/20
-, N                = pop_size # (Santa Clara County) 59.02e6 (Wuhan)
-, E0               = 20
-)
 
 ## Simulate with a set of parameters
 epi.out <- do.call(

@@ -91,7 +91,7 @@ fluidPage(
     , h5("Quarantine of symptomatic infected individuals?")
     , choices = list(
         "No"  = 1
-       , "Yes" = 2)
+      , "Yes" = 2)
        , selected  = 1
       )
         
