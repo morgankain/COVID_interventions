@@ -31,44 +31,14 @@ fluidPage(
 
   ## Title
   , headerPanel("Predicting the effects of COVID intervention strategies")
-  
-    , h5("Model development: Marissa Childs, Devin Kirk, Morgan Kain, Mallory Harris, Nicole Nova")
-    , h5("Model coding: Marissa Childs")
-    , h5("Shiny app:", tags$a("Morgan Kain", href = "http://www.morgankain.weebly.com"))
-    , h5("Parameter estimate search: Mallory Harris, Lisa Couper")
-  
+
 , sidebarPanel(
   
-  fluidRow(
-  
-  div(style = "display: inline-block;vertical-align:top; width: 150px;"
-  , actionButton("do", "Simulate")
-    )
-, div(style = "display: inline-block;vertical-align:top; width: 150px;"
-  , radioButtons("pscale"
-                , p("")
-                , choices = list(
-                    "Linear Scale" = 1
-                  , "Log Scale"    = 2)
-                  , selected  = 1
-                 )
-  )
-  )
-  
-  , sliderInput("num_sims"
-    , label = h5("Number of simulations")
-    , min   = 5
-    , max   = 200
-    , value = 50
-    , step  = 5
-    )  
-        
-  , sliderInput("sim_len"
-    , label = h5("Length of simulation")
-    , min   = 200
-    , max   = 600
-    , value = 300
-    , step  = 5
+    numericInput("pop_size"
+      , label = h5("Starting population size")
+      , min   = NA
+      , max   = NA
+      , value = 1937570
     )
   
         , radioButtons("int_type1"
@@ -84,7 +54,7 @@ fluidPage(
                 , choices = list(
                     "Social Distancing" = 1
                   , "Threshold Based"   = 2)
-                  , selected  = 1
+                  , selected  = 2
                  )
       
   , radioButtons("iso"
@@ -95,13 +65,14 @@ fluidPage(
        , selected  = 1
       )
         
-         , conditionalPanel(condition = "input.iso == '2'"
-           
+   , conditionalPanel(condition = "input.iso == '2'"
+   
+  ## these values get updated according to other parameters, so they are just placeholders        
    , sliderInput("iso_start"
     , label = h5("Start date of symptomatic infected quarantine")
     , min   = 0
-    , max   = 100
-    , value = 30
+    , max   = 200
+    , value = 100
     , step  = 2
     ) 
            
@@ -114,9 +85,43 @@ fluidPage(
     ) 
            
       )
-      
-)
+  
+  , sliderInput("num_sims"
+    , label = h5("Number of simulations")
+    , min   = 5
+    , max   = 200
+    , value = 50
+    , step  = 5
+    )  
+  
+  , selectInput(
+    "plotval", "Class to plot:"
+    , c(
+      "Total Infected"          = "total_I"
+    , "Hospitalized"            = "H"
+    , "Asymptomatic Infections" = "Ia"
+    , "Severe Infections"       = "Is"
+    , "Minor Infections"        = "Im"
+    , "Recoveries"              = "new_recoveries"
+    , "Dead"                    = "new_deaths")
+    )
+  
+, tags$head(
+    tags$style(HTML('#do{background-color:orange}'))
+  )
+  
+, actionButton("do", "Simulate", width = '100%')
 
+, radioButtons("pscale"
+                , p("")
+                , choices = list(
+                    "Linear Scale" = 1
+                  , "Log Scale"    = 2)
+                  , selected  = 1
+                 )
+  
+  )
+    
     , mainPanel(
     
        column(6
@@ -135,7 +140,7 @@ fluidPage(
     , label = h5("Length of intervention (number of days)")
     , min   = 0
     , max   = 200
-    , value = 30
+    , value = 80
     , step  = 2
     )
 
@@ -143,7 +148,7 @@ fluidPage(
     , label = h5("Proportion of baseline contact rate (0 - 1)")
     , min   = 0
     , max   = 1
-    , value = 0.3
+    , value = 0.25
     , step  = 0.05
     ) 
       
@@ -193,7 +198,7 @@ fluidPage(
     , label = h5("Proportion of baseline contact rate (0 - 1)")
     , min   = 0
     , max   = 1
-    , value = 0.3
+    , value = 0.25
     , step  = 0.05
     )  
     
@@ -203,7 +208,7 @@ fluidPage(
     , label = h5("Threshold quantity: number of daily hospitalized cases before intervention STARTS")
     , min   = 0
     , max   = 100
-    , value = 15
+    , value = 20
     , step  = 1
     )  
         
@@ -211,7 +216,7 @@ fluidPage(
     , label = h5("Threshold quantity: number of daily hospitalized cases before intervention ENDS")
     , min   = 0
     , max   = 100
-    , value = 2
+    , value = 5
     , step  = 1
     )  
         
@@ -226,17 +231,64 @@ fluidPage(
     
     , tabPanel("Dynamics"
       , plotOutput("graph1")
-    #  , plotOutput("graph2")
       )
     
-    , tabPanel("Summary Statistics"
-      , plotOutput("graph3")
-   #   , plotOutput("graph4")
+    , tabPanel("Cumulative"
+      , plotOutput("graph2")
       )
     
-    , tabPanel("Model Details"
-       , h4("Click the link below to see details about the model. Click refresh at the top of this page to return.")
-       , tags$a(href='info.pdf', 'Model Details')
+    , tabPanel("Remaining model parameters"
+      
+    ,  column(6
+
+  , sliderInput("sim_len"
+    , label = h5("Length of simulation")
+    , min   = 200
+    , max   = 800
+    , value = 550
+    , step  = 5
+    )  
+      
+  , sliderInput("hosp_cap"
+    , label = h5("Available hospital beds")
+    , min   = 200
+    , max   = 10000
+    , value = 4400
+    , step  = 50
+    )  
+      
+      )
+      
+  , column(6
+        
+  , sliderInput("iso_mm"
+    , label = h5("Proportion of baseline contact rate (0 - 1) for quarantine intervention on minor infection")
+    , min   = 0
+    , max   = 1
+    , value = 0.1
+    , step  = 0.05
+    )
+      
+  , sliderInput("iso_sm"
+    , label = h5("Proportion of baseline contact rate (0 - 1) for quarantine intervention on severe infection")
+    , min   = 0
+    , max   = 1
+    , value = 0
+    , step  = 0.05
+    )
+    
+  )
+      
+  ### Add:
+   ## beta0
+   ## Ca, Cp, Cs, Cm
+   ## alpha
+   ## gamma
+   ## lambda_a, lambda_s, lambda_m, lambda_p
+   ## rho
+   ## delta
+   ## mu
+  
       )
     
     , tabPanel("Download Current Run"

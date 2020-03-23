@@ -1,18 +1,18 @@
 Parameter,Symbol,Value,Source,Content with this value?,Notes
 Without intervention transmission across categories,beta0,0.5,,Think we should switch to this ->,"Drake and Rohani have beta0 = 0.6584, not sure if compatible or not"
-Category specific contact rate,Ca,1,Assume same without intervention,yes,
+Category specific contact rate,Ca,0.666666666666667,Assume same without intervention,yes,
 Category specific contact rate,Cp,1,Assume same without intervention,yes,
 Category specific contact rate,Cs,1,Assume same without intervention,yes,
 Category specific contact rate,Cm,1,Assume same without intervention,yes,
 Fraction of cases that are asymptomatic,alpha,0.333333333333333,,,"Reported as 51.7% for the Diamond Princess in Mizuomoto et al. Eurosurveillance, Reported as 30.8% among Japanese evacuees from Wuhan in Nishiura et al. International journal of intectious diseases"
 1/time in exposed class,gamma,0.192307692307692,,,Drake's code has incubation period of 6 days
 1/time for asymptomatic to recover,lambda_a,0.142857142857143,,,Drake's code has natural infectious period of 7 days but not sure if that is assumption
-1/time for severely symptomatic to be hospitalized,lambda_s,0.25,,,"Other values on MIDAS: 1/5.9 (Tindale et al. Singapore), 1/2.7 (Linton et al. China)"
+1/time for severely symptomatic to be hospitalized,lambda_s,0.173611111111111,,,"Other values on MIDAS: 1/5.9 (Tindale et al. Singapore), 1/2.7 (Linton et al. China)"
 1/time for minorly symptomatic to recover,lambda_m,0.142857142857143,,,"Other values on MIDAS: ""time from symtpom onset to recover: 22.2, Dorigatti et al.), Drake's code has natural infectious period of 7 days but not sure if that is assumption"
 1/time in pre-symptomatic,lambda_p,2,,,
-1/time for leaving hospital,rho,0.0934579439252336,,,"Other values on MIDAS: 1/13.3 (Tindale et al. Singapore), 1/11.5 (Sanche et al. China)"
+1/time for leaving hospital,rho,0.0689179875947622,,,"Other values on MIDAS: 1/13.3 (Tindale et al. Singapore), 1/11.5 (Sanche et al. China)"
 Fraction of hospitalized cases that are fatal,delta,0.2,,,"Other values on MIDAS: 0.14 (Wu et al. for Wuhan), 0.33 (Famulare et al. for China)"
-Fraction of cases that are minor,mu,0.95,,,
+Fraction of cases that are minor,mu,0.956,,,
 Population size,N,variable,No source needed,yes,
 Initially exposed,E0,variable,No source needed,yes,
 Intervention parameters,Multiple,variable,No source needed,yes,
