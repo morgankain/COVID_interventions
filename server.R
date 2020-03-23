@@ -176,7 +176,7 @@ updateSliderInput(
   
 })
 
-  epi.dat <- eventReactive(input$do, {
+epi.dat <- eventReactive(input$do, {
     
 covid_params        <- c(
     covid_params
@@ -300,25 +300,10 @@ epi.out <- do.call(
            summarise_all(median) %>%
                     mutate(.id = "median"))} 
 
-## return
-  list(
-    epi.out = epi.out
-    )
-  
-  })
-  
-  output$graph1 <- renderPlot({ 
-    
-epi.dat.s <- epi.dat()[["epi.out"]] %>%
+epi.out <- epi.out %>%
   dplyr::mutate(
       date    = sim_start + day - 1
     , total_I = Is + Im + Ia + Ip
-    ) %>%
-  dplyr::group_by(.id) %>%
-  dplyr::mutate(
-    daily_cases = c(0, diff(total_I))
-  , new_deaths     = c(0, diff(D))
-  , new_recoveries = c(0, diff(R))
     )
 
 d1.1 <- data.frame(
@@ -326,7 +311,7 @@ d1.1 <- data.frame(
 , x2  = c(sim_start + input$int_start1 + input$int_length1)
 , y1  = c(0)
 , y2  = c(max(
-  epi.dat.s[input$plotval]
+  epi.out[input$plotval]
   ))
 , Intervention = "First Intervention"
 )
@@ -336,40 +321,55 @@ d1.2 <- data.frame(
 , x2  = c(sim_start + input$int_start2 + input$int_length2)
 , y1  = c(0)
 , y2  = c(max(
-  epi.dat.s[input$plotval]
+  epi.out[input$plotval]
   ))
 , Intervention = "Second Intervention"
 )
+
+d1.3 <- data.frame(
+  x1 = c(sim_start + input$iso_start)
+, x2 = c(sim_start + input$iso_start + input$iso_length)
+, y1 = c(max(epi.out[input$plotval]) - max(epi.out[input$plotval]) / ifelse(input$pscale == 1, 20, 5))
+, y2 = c(max(epi.out[input$plotval]))
+, Intervention = "Infected Quarantine"
+)
+
+dtot     <- rbind(d1.1, d1.2, d1.3)
+
+## return
+  list(
+    epi.out = epi.out
+  , dtot    = dtot
+    )
+  
+  })
+  
+  output$graph1 <- renderPlot({ 
+    
+epi.dat.s <- epi.dat()[["epi.out"]] %>%
+  dplyr::group_by(.id) %>%
+  dplyr::mutate(
+    daily_cases = c(0, diff(total_I))
+  , new_deaths     = c(0, diff(D))
+  , new_recoveries = c(0, diff(R))
+    )
+
+## Not used, for later...
+adj_thresh <- epi.dat.s %>%
+  dplyr::group_by(date) %>% 
+  dplyr::summarize(thresh_c = mean(thresh_crossed)) %>% 
+  mutate(adj_thresh = ifelse(thresh_c < 0.5, 0, 1))
 
 col1   <- ifelse(input$int_type1 == "1", "seagreen4", "cadetblue4")
 alpha1 <- ifelse(input$int_type1 == "1", 0.8, 0.6)
 col2   <- ifelse(input$int_type2 == "1", "seagreen4", "cadetblue4")
 alpha2 <- ifelse(input$int_type2 == "1", 0.8, 0.6)
 
-if (input$iso == 2) {
-  
-d1.3 <- data.frame(
-  x1 = c(sim_start + input$iso_start)
-, x2 = c(sim_start + input$iso_start + input$iso_length)
-, y1 = c(max(epi.dat.s[input$plotval]) - max(epi.dat.s[input$plotval]) / ifelse(input$pscale == 1, 20, 5))
-, y2 = c(max(epi.dat.s[input$plotval]))
-, Intervention = "Infected Quarantine"
-)
-
-col3 <- "brown4"
-alpha3 <- 0.5
+col3   <- "brown4"
+alpha3 <- ifelse(input$iso == 2, 0.5, 0)
     
-dtot     <- rbind(d1.1, d1.2, d1.3)
 coltot   <- c(col1, col2, col3)
 alphatot <- c(alpha1, alpha2, alpha3)
-
-} else {
- 
-dtot     <- rbind(d1.1, d1.2)
-coltot   <- c(col1, col2)
-alphatot <- c(alpha1, alpha2)
-   
-}
 
 ynames <- c(
       "total_I" = "Total Infected"
@@ -382,7 +382,7 @@ ynames <- c(
 
 gg1 <- epi.dat.s %>% ggplot() +
   
-  geom_rect(data = dtot, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2, fill = Intervention), color = "white", alpha = alphatot) +
+  geom_rect(data = epi.dat()[["dtot"]], aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2, fill = Intervention), color = NA, alpha = alphatot) +
   
   scale_fill_manual(values = coltot) +
   
@@ -411,13 +411,28 @@ if (input$pscale == 2) {
   gg1     <- gg1 + scale_y_continuous(trans = "pseudo_log", breaks = yscale1, labels = comma)
   
 if (input$plotval == "H") {
+  
   gg1     <- gg1 + geom_hline(yintercept = input$hosp_cap, lwd = 1, linetype = "dashed", colour = "firebrick4")
+  
+  tdf     <- data.frame(
+      x = c(sim_start + 200)
+    , y = c(input$hosp_cap) / 2
+    , text = c("Hospital Beds Available")
+)
+  
+  gg1     <- gg1 + geom_text(data = tdf, aes(x = x, y = y, label = text), colour = "firebrick4")
+  
+  }
+  
 }
-
-}
+  
+#  gg1     <- gg1 + geom_line(
+#    data = adj_thresh
+#  , aes(x = date, y = adj_thresh$adj_thres * c(max(epi.dat.s[input$plotval]) - max(epi.dat.s[input$plotval]) / ifelse(input$pscale == 1, 20, 5))
+#  ), lwd = 1, colour = "cadetblue4")
 
   gg1
-
+  
     })
   
   output$graph2 <- renderPlot({ 
@@ -431,68 +446,50 @@ epi.dat.s <- epi.dat()[["epi.out"]] %>%
 
 maxval <- max(c(max(epi.dat.s$R), max(epi.dat.s$D)))
 
-d1.1 <- data.frame(
-  x1  = c(sim_start + input$int_start1)
-, x2  = c(sim_start + input$int_start1 + input$int_length1)
-, y1  = c(0)
-, y2  = maxval
-, Intervention = "First Intervention"
-)
-
-d1.2 <- data.frame(
-  x1  = c(sim_start + input$int_start2)
-, x2  = c(sim_start + input$int_start2 + input$int_length2)
-, y1  = c(0)
-, y2  = maxval
-, Intervention = "Second Intervention"
-)
-
 col1   <- ifelse(input$int_type1 == "1", "seagreen4", "cadetblue4")
 alpha1 <- ifelse(input$int_type1 == "1", 0.8, 0.6)
 col2   <- ifelse(input$int_type2 == "1", "seagreen4", "cadetblue4")
 alpha2 <- ifelse(input$int_type2 == "1", 0.8, 0.6)
 
-if (input$iso == 2) {
-  
-d1.3 <- data.frame(
-  x1 = c(sim_start + input$iso_start)
-, x2 = c(sim_start + input$iso_start + input$iso_length)
-, y1 = c(maxval / ifelse(input$pscale == 1, 20, 5))
-, y2 = maxval
-, Intervention = "Infected Quarantine"
-)
-
 col3 <- "brown4"
-alpha3 <- 0.5
+alpha3 <- ifelse(input$iso == 2, 0.5, 0)
     
-dtot     <- rbind(d1.1, d1.2, d1.3)
 coltot   <- c(col1, col2, col3)
 alphatot <- c(alpha1, alpha2, alpha3)
 
-} else {
- 
-dtot     <- rbind(d1.1, d1.2)
-coltot   <- c(col1, col2)
-alphatot <- c(alpha1, alpha2)
-   
-}
+dtot    <- epi.dat()[["dtot"]]
+dtot$y2 <- maxval
 
 epi.dat.s.r <- epi.dat.s %>% 
   dplyr::select(day, .id, R, D) %>% 
   mutate(date = sim_start + day - 1) %>% 
-  filter(.id == "median") %>%
+#  filter(.id == "median") %>%
   tidyr::pivot_longer(c(R, D), names_to = "Class", values_to = "Count")
 
 gg2 <- epi.dat.s.r %>% ggplot() +
-  geom_rect(data = dtot, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2, fill = Intervention), color = "white", alpha = alphatot) +
+  geom_rect(data = dtot, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2, fill = Intervention), color = NA, alpha = alphatot) +
   scale_fill_manual(values = coltot) +
+  
   geom_line(
-    aes(
+    data = (epi.dat.s.r %>% filter(.id == "median"))
+  , aes(
     x        = date
   , y        = Count
   , colour   = Class
   , linetype = Class
-    ), lwd = 2) + 
+  , group    = interaction(.id, Class)
+    ), lwd = 1.5) + 
+  
+  geom_line(
+    data = (epi.dat.s.r %>% filter(.id != "median"))
+  , aes(
+    x        = date
+  , y        = Count
+  , colour   = Class
+  , linetype = Class
+  , group    = interaction(.id, Class)
+    ), alpha = 0.4, lwd = 0.5) + 
+  
   scale_x_date(labels = date_format("%Y-%b")) +
   xlab("Date") + 
   ylab("Count") +
@@ -506,7 +503,7 @@ if (input$pscale == 2) {
   
 }  
 
-gg2
+  gg2
     
     })
   

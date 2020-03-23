@@ -1,0 +1,10 @@
+name: covid
+title:
+username:
+account: jritchie
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 1977305
+bundleId: 2908584
+url: https://jritchie.shinyapps.io/covid/
+when: 1584890654.2737

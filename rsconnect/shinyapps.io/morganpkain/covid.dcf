@@ -1,0 +1,10 @@
+name: covid
+title:
+username:
+account: morganpkain
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 1977315
+bundleId: 2910831
+url: https://morganpkain.shinyapps.io/covid/
+when: 1584928230.53472

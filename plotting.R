@@ -14,3 +14,5 @@ ggplot() +
   scale_color_manual(values=c("#D5D5D3", "#24281A")) 
 
 
+sim %>% dplyr::group_by(day) %>% summarize(thresh_c = mean(thresh_crossed))
+

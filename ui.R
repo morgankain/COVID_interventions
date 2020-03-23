@@ -132,7 +132,7 @@ fluidPage(
     , label = h5("Start date of intervention (days since first case)")
     , min   = 0
     , max   = 100
-    , value = 30
+    , value = 50
     , step  = 2
     )  
 
@@ -140,7 +140,7 @@ fluidPage(
     , label = h5("Length of intervention (number of days)")
     , min   = 0
     , max   = 200
-    , value = 80
+    , value = 50
     , step  = 2
     )
 
@@ -216,7 +216,7 @@ fluidPage(
     , label = h5("Threshold quantity: number of daily hospitalized cases before intervention ENDS")
     , min   = 0
     , max   = 100
-    , value = 5
+    , value = 8
     , step  = 1
     )  
         
