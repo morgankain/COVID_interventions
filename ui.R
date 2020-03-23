@@ -110,6 +110,8 @@ fluidPage(
     tags$style(HTML('#do{background-color:orange}'))
   )
   
+, h5("Wait 3 seconds after the application loads before
+clicking simulate to avoid an error")
 , actionButton("do", "Simulate", width = '100%')
 
 , radioButtons("pscale"

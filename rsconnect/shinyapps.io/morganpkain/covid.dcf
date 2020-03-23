@@ -5,6 +5,6 @@ account: morganpkain
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 1977315
-bundleId: 2910831
+bundleId: 2912965
 url: https://morganpkain.shinyapps.io/covid/
-when: 1584928230.53472
+when: 1584972012.86612
