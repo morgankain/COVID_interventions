@@ -31,6 +31,11 @@ fluidPage(
 
   ## Title
   , headerPanel("Predicting the effects of COVID intervention strategies")
+  
+, h5("Starting parameter values have been gathered from previous work. 
+However, because parameter values are likely to be variable across space and time, do not interpret our results as quantitative predictions for any specific location. 
+Our goal is to show, qualitatively, the robust result that a second peak arises under a wide variety of intervention scenarios. 
+Our ability to make quantiative predictions will improve as more data becomes available; parameter values will continue to be updated.")
 
 , sidebarPanel(
   
@@ -259,10 +264,6 @@ clicking simulate to avoid an error")
     , step  = 50
     )  
       
-      )
-      
-  , column(6
-        
   , sliderInput("iso_mm"
     , label = h5("Proportion of baseline contact rate (0 - 1) for quarantine intervention on minor infection")
     , min   = 0
@@ -279,18 +280,102 @@ clicking simulate to avoid an error")
     , step  = 0.05
     )
     
-  )
+  , sliderInput("alpha"
+    , label = h5("Fraction of cases asymptomatic")
+    , min   = 0
+    , max   = 1
+    , value = 0.333
+    , step  = 0.05
+    ) 
       
-  ### Add:
-   ## beta0
-   ## Ca, Cp, Cs, Cm
-   ## alpha
-   ## gamma
-   ## lambda_a, lambda_s, lambda_m, lambda_p
-   ## rho
-   ## delta
-   ## mu
+  , sliderInput("mu"
+    , label = h5("Fraction of cases that are minor")
+    , min   = 0
+    , max   = 1
+    , value = 0.956
+    , step  = 0.05
+    )   
+      
+  , sliderInput("Ca"
+    , label = h5("Transmission rate modifier for asymptomatic infection")
+    , min   = 0
+    , max   = 1
+    , value = 0.667
+    , step  = 0.05
+    )    
+      
+  , sliderInput("delta"
+    , label = h5("Fraction of hospitalized cases that are fatal")
+    , min   = 0
+    , max   = 1
+    , value = 0.2
+    , step  = 0.05
+    )  
+      
+      )
+      
+  , column(6
+        
+  , sliderInput("beta0"
+    , label = h5("Daily transmission Rate")
+    , min   = 0
+    , max   = 1
+    , value = 0.5
+    , step  = 0.05
+    )    
+    
+  , sliderInput("gamma"
+    , label = h5("1/time in exposed class")
+    , min   = 0
+    , max   = 1
+    , value = 0.1923
+    , step  = 0.05
+    ) 
+    
+  , sliderInput("lambda_a"
+    , label = h5("1/time for asymptomatics to recover")
+    , min   = 0
+    , max   = 1
+    , value = 0.143
+    , step  = 0.05
+    )  
+    
+  , sliderInput("lambda_s"
+    , label = h5("1/time for severely symptomatic to be hospitalized")
+    , min   = 0
+    , max   = 1
+    , value = 0.174
+    , step  = 0.05
+    )  
+    
+  , sliderInput("lambda_m"
+    , label = h5("1/time for minorly symptomatic to recover")
+    , min   = 0
+    , max   = 1
+    , value = 0.143
+    , step  = 0.05
+    )  
+    
+  , sliderInput("lambda_p"
+    , label = h5("1/time in pre-symptomatic")
+    , min   = 0
+    , max   = 2
+    , value = 2
+    , step  = 0.1
+    )     
+ 
+  , sliderInput("rho"
+    , label = h5("1/time for leaving hospital")
+    , min   = 0
+    , max   = 1
+    , value = 0.0689
+    , step  = 0.05
+    )  
   
+  )
+  
+  ### Add: Cp, Cs, Cm?
+
       )
     
     , tabPanel("Download Current Run"

@@ -183,6 +183,19 @@ covid_params        <- c(
   , N  = input$pop_size
   , E0 = ifelse(input$pop_size > 100000, 10, 1)
   )
+
+## Update covid_params with user input, sort of an ugly way to do this but reduces
+ ## need for input$ statements and reasonable way to be able to modify with new parameters 
+covid_params["beta0"]    <- input$beta0
+covid_params["Ca"]       <- input$Ca
+covid_params["alpha"]    <- input$alpha
+covid_params["lambda_a"] <- input$lambda_a
+covid_params["lambda_s"] <- input$lambda_s
+covid_params["lambda_m"] <- input$lambda_m
+covid_params["lambda_p"] <- input$lambda_p
+covid_params["rho"]      <- input$rho
+covid_params["delta"]    <- input$delta
+covid_params["mu"]       <- input$mu
   
 sim_start  <- as.Date("2020-01-01")
 sim_length <- input$sim_len
