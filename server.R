@@ -344,7 +344,7 @@ d1.3 <- data.frame(
 , x2 = c(sim_start + input$iso_start + input$iso_length)
 , y1 = c(max(epi.out[input$plotval]) - max(epi.out[input$plotval]) / ifelse(input$pscale == 1, 20, 5))
 , y2 = c(max(epi.out[input$plotval]))
-, Intervention = "Infected Quarantine"
+, Intervention = "Infected Isolation"
 )
 
 dtot     <- rbind(d1.1, d1.2, d1.3)

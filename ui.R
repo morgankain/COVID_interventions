@@ -50,7 +50,8 @@ Our ability to make quantiative predictions will improve as more data becomes av
                 , h5("FIRST intervention strategy")
                 , choices = list(
                     "Social Distancing" = 1
-                  , "Threshold Based"   = 2)
+                  , "Threshold Based
+('Lightswitch Method')"   = 2)
                   , selected  = 1
                  )
   
@@ -58,12 +59,13 @@ Our ability to make quantiative predictions will improve as more data becomes av
                 , h5("SECOND intervention strategy")
                 , choices = list(
                     "Social Distancing" = 1
-                  , "Threshold Based"   = 2)
+                  , "Threshold Based
+('Lightswitch Method')"   = 2)
                   , selected  = 2
                  )
       
   , radioButtons("iso"
-    , h5("Quarantine of symptomatic infected individuals?")
+    , h5("Isolation of symptomatic infected individuals?")
     , choices = list(
         "No"  = 1
       , "Yes" = 2)
@@ -74,7 +76,7 @@ Our ability to make quantiative predictions will improve as more data becomes av
    
   ## these values get updated according to other parameters, so they are just placeholders        
    , sliderInput("iso_start"
-    , label = h5("Start date of symptomatic infected quarantine")
+    , label = h5("Start date of symptomatic infected isolation")
     , min   = 0
     , max   = 200
     , value = 100
@@ -82,7 +84,7 @@ Our ability to make quantiative predictions will improve as more data becomes av
     ) 
            
    , sliderInput("iso_length"
-    , label = h5("Length of symptomatic infected quarantine")
+    , label = h5("Length of symptomatic infected isolation")
     , min   = 0
     , max   = 100
     , value = 30
@@ -186,9 +188,9 @@ clicking simulate to avoid an error")
     ## dates get updated according to choice in int_start1: see server.R
   , sliderInput("int_start2"
     , label = h5("Start date of intervention (days since first case)")
-    , min   = 50
-    , max   = 200
-    , value = 80
+    , min   = 100
+    , max   = 550
+    , value = 100
     , step  = 2
     ) 
         
@@ -196,8 +198,8 @@ clicking simulate to avoid an error")
   , sliderInput("int_length2"
     , label = h5("Length of intervention (number of days)")
     , min   = 0
-    , max   = 200
-    , value = 150
+    , max   = 450
+    , value = 450
     , step  = 2
     )
           
@@ -265,7 +267,7 @@ clicking simulate to avoid an error")
     )  
       
   , sliderInput("iso_mm"
-    , label = h5("Proportion of baseline contact rate (0 - 1) for quarantine intervention on minor infection")
+    , label = h5("Proportion of baseline contact rate (0 - 1) for isolation intervention on minor infection")
     , min   = 0
     , max   = 1
     , value = 0.1
@@ -273,7 +275,7 @@ clicking simulate to avoid an error")
     )
       
   , sliderInput("iso_sm"
-    , label = h5("Proportion of baseline contact rate (0 - 1) for quarantine intervention on severe infection")
+    , label = h5("Proportion of baseline contact rate (0 - 1) for isolation intervention on severe infection")
     , min   = 0
     , max   = 1
     , value = 0
