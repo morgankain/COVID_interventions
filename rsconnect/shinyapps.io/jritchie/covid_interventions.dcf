@@ -1,0 +1,10 @@
+name: covid_interventions
+title:
+username:
+account: jritchie
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 1972533
+bundleId: 2906117
+url: https://jritchie.shinyapps.io/covid_interventions/
+when: 1584817235.73454
