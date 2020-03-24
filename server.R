@@ -319,6 +319,14 @@ epi.out <- epi.out %>%
     , total_I = Is + Im + Ia + Ip
     )
 
+epi.out <- epi.out %>% 
+  group_by(.id) %>%
+  mutate(
+      new_deaths     = c(0, diff(D))
+    , new_recoveries = c(0, diff(R))    
+  )
+
+
 d1.1 <- data.frame(
   x1  = c(sim_start + input$int_start1)
 , x2  = c(sim_start + input$int_start1 + input$int_length1)
@@ -363,9 +371,11 @@ epi.dat.s <- epi.dat()[["epi.out"]] %>%
   dplyr::group_by(.id) %>%
   dplyr::mutate(
     daily_cases = c(0, diff(total_I))
-  , new_deaths     = c(0, diff(D))
-  , new_recoveries = c(0, diff(R))
     )
+
+## update Y axis
+dtot <- epi.dat()[["dtot"]]
+dtot <- mutate(dtot, y2 = max(epi.dat()[["epi.out"]][input$plotval]))
 
 ## Not used, for later...
 adj_thresh <- epi.dat.s %>%
@@ -395,7 +405,7 @@ ynames <- c(
 
 gg1 <- epi.dat.s %>% ggplot() +
   
-  geom_rect(data = epi.dat()[["dtot"]], aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2, fill = Intervention), color = NA, alpha = alphatot) +
+  geom_rect(data = dtot, aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2, fill = Intervention), color = NA, alpha = alphatot) +
   
   scale_fill_manual(values = coltot) +
   
@@ -414,6 +424,7 @@ gg1 <- epi.dat.s %>% ggplot() +
   , colour = "black", lwd = 1.5) +
   
   scale_x_date(labels = date_format("%Y-%b")) +
+  scale_y_continuous(limits = c(0, max(epi.dat()[["epi.out"]][input$plotval]))) + 
   xlab("Date") + 
   ylab(ynames[input$plotval]) +
   guides(color = FALSE)
