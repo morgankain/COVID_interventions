@@ -6,13 +6,15 @@ poss_beta0 <- data.frame(
 , loglik = 0
 )
 
+
+## Crude brute force creation of the likelihood surface to get a baseline time check -- compare to using mif2 below just for a sanity check
 timeoneparam <- system.time({
   
 for (i in 1:nrow(poss_beta0)) {
  
   pf <- pfilter(covid, 
-        params = c(fixed_params, c(beta0 = poss_beta0[i, "beta0"], N = 100000, E0 = 10)),
-        Np = 5000) %>% logLik(.) 
+        params = c(fixed_params, c(beta0 = poss_beta0[i, "beta0"], N = 1.938e6, E0 = 3)),
+        Np = 10000) %>% logLik(.) 
   
   poss_beta0[i, "loglik"] <- pf
   
@@ -26,7 +28,27 @@ ggplot(poss_beta0, aes(beta0, loglik)) + geom_point()
 ## with say, 200 samples from the vectors of parameters we want to vary this will only take
 paste(round(timeoneparam[3] * 200 / 3600, 3), "hours", sep = " ")
 
-## then from here simulate runs, store results, and calc samples... 
+## Compare to using mif2 from pomp
+timeoneparam <- system.time({
+mifs_local <- covid %>%
+        mif2(
+          t0 = 15,
+          params=c(fixed_params, c(beta0 = 2.5/7, N = 1.938e6, E0 = 3)),
+          Np=3000,
+          Nmif=50,
+          cooling.fraction.50=0.5,
+          rw.sd=rw.sd(beta0=0.02)
+        )
+})
+
+## Pleasant to see this is actually faster
+paste(round(timeoneparam[3] * 200 / 3600, 3), "hours", sep = " ")
+
+## What am i missing here.. why don't these agree on beta0?
+plot(mifs_local)
+
+
+## Regardless of option, from here simulate runs, store results, and calc samples... 
 
 ## can give the CI but also a hypercube plot that best illustrates the relationship between each of the variables 
  ## and the summary statistics of interest

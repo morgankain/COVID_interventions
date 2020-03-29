@@ -203,7 +203,6 @@ logLik(pf)
 #####
 source("ssc_sim.R")
 
-
 # local search
 library(foreach)
 library(doParallel)
@@ -245,6 +244,8 @@ bake(file="lik_local.rds",{
 }) -> results
 
 pairs(~loglik+beta0,data=results,pch=16)
+
+### Why are we searching over beta0 and not the other parameters since we are fitting beta0?
 
 # global search 
 runifDesign(
