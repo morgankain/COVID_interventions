@@ -1,11 +1,12 @@
 needed_packages <- c(
-  "pomp"
+    "pomp"
   , "plyr"
   , "dplyr"
   , "ggplot2"
   , "magrittr"
   , "scales"
   , "lubridate"
+  , "tidyr"
 )
 
 lapply(needed_packages, require, character.only = TRUE)
@@ -89,15 +90,16 @@ sir_init <- Csnippet("
 rmeas <- Csnippet("double tol = 1e-16;
                    deaths = rpois(D_new + tol);
                   ")
-#define evaluation of model prob density function
+# define evaluation of model prob density function
 dmeas <- Csnippet("double tol = 1e-16;
                    lik = dpois(deaths, D_new + tol, give_log);
                   ")
 
 # US deaths data 
-deaths = read.csv("./covid-interventions/NYT-us-counties.csv",
+deaths <- read.csv("NYT-us-counties.csv",
                   stringsAsFactors = F) %>% 
   mutate(date = as.Date(date))
+
 scc_deaths = deaths %>% 
   filter(county == "Santa Clara")  %>% 
   mutate(day = as.numeric(date - as.Date("2020-01-01"))) %>% select(day, deaths) %>% 
@@ -105,6 +107,7 @@ scc_deaths = deaths %>%
   mutate(deaths = deaths_cum - lag(deaths_cum)) %>% 
   replace_na(list(deaths = 0)) %>%
   select(-deaths_cum)
+
 sim_length = nrow(scc_deaths)
 
 intervention = covariate_table(
@@ -187,13 +190,18 @@ do.call(
   guides(color=FALSE)+
   scale_color_manual(values=c("#D5D5D3", "#24281A")) + theme_bw()
 
-
 # calculate LL
 pf <- pfilter(covid, 
-        params = c(fixed_params, c(beta0 =2.5/7, N = 100000, E0 = 10)),
+        params = c(fixed_params, c(beta0 = 2.5/7, N = 100000, E0 = 10)),
         Np = 5000)
 plot(pf)
 logLik(pf)
+
+#####
+## Alternative coarse brute-force method that may be a lot faster for a first pass
+## given our timeframe
+#####
+source("ssc_sim.R")
 
 
 # local search
@@ -210,7 +218,7 @@ bake(file="local_search.rds",{
       covid %>%
         mif2(
           t0 = 15,
-          params=c(fixed_params, c(beta0 =2.5/7, N = 1.938e6, E0 = 3)),
+          params=c(fixed_params, c(beta0 = 2.5/7, N = 1.938e6, E0 = 3)),
           Np=2000,
           Nmif=50,
           cooling.fraction.50=0.5,
@@ -218,6 +226,7 @@ bake(file="local_search.rds",{
         )
     }
 }) -> mifs_local
+
 plot(mifs_local)
 
 # need to evaluate the LL with more particles
@@ -227,7 +236,7 @@ bake(file="lik_local.rds",{
     {
       library(pomp)
       library(tidyverse)
-      evals <- replicate(10, logLik(pfilter(mf,Np=20000)))
+      evals <- replicate(2, logLik(pfilter(mf,Np=20000)))
       ll <- logmeanexp(evals,se=TRUE)
       mf %>% coef() %>% bind_rows() %>%
         bind_cols(loglik=ll[1],loglik.se=ll[2])
@@ -236,7 +245,6 @@ bake(file="lik_local.rds",{
 }) -> results
 
 pairs(~loglik+beta0,data=results,pch=16)
-
 
 # global search 
 runifDesign(
