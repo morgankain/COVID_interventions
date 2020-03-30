@@ -40,10 +40,10 @@ fixed_params <- c(
   , alpha            = 1/3
   , gamma            = 1/5.2
   , lambda_a         = 1/7
-  , lambda_s         = 1/5
-  , lambda_m         = 1/5
+  , lambda_s         = 1/5.76
+  , lambda_m         = 1/7
   , lambda_p         = 1/2
-  , rho              = 1/16 #10.7
+  , rho              = 1/14.5 #10.7
   , delta            = 0.2
   , mu               = 1-0.044 #19/20
   , N                = 1.938e6
@@ -53,19 +53,19 @@ fixed_params <- c(
 variable_params <- sobolDesign(
   lower = c(
     E0          = 1
-  , sim_start   = 5
+  , sim_start   = 14
   , int_start1  = 60
-  , int_length2 = 30
-  , sd_m1       = 0.5
-  , sd_m2       = 0.1
+  , int_length2 = 60
+  , sd_m1       = 0.6
+  , sd_m2       = 0.05
   )
 , upper = c(
     E0          = 10
-  , sim_start   = 15
+  , sim_start   = 28
   , int_start1  = 69
-  , int_length2 = 180
+  , int_length2 = 200
   , sd_m1       = 0.9
-  , sd_m2       = 0.5
+  , sd_m2       = 0.3
 )
 , nseq  = 500
 ) %>% mutate(
@@ -92,8 +92,16 @@ variable_params <- variable_params %>% mutate(
 
 ## Run parameters
 sim_start  <- variable_params$sim_start
-sim_length <- 300
+sim_length <- 500
 sim_end    <- sim_start + sim_length
+
+## container for results
+SEIR.sim.ss.t.ci <- data.frame(
+  name     = character(0)
+, quant    = character(0)
+, value    = numeric(0)
+, paramset = numeric(0)
+)
 
 for (i in 1:nrow(variable_params)) {
   
@@ -139,9 +147,9 @@ intervention.forecast <- with(variable_params[i, ], {
   , rep(0, sim_length - (int_start2 - sim_start) - int_length2)
   ) 
   
-, isolation        = 0
-, iso_severe_level = 0  # % of contats that severe cases maintain
-, iso_mild_level   = 0.1  # % of contats that mild cases maintain
+, isolation        = rep(0, sim_length)
+, iso_severe_level = rep(0, sim_length)  # % of contats that severe cases maintain
+, iso_mild_level   = rep(0.1, sim_length)  # % of contats that mild cases maintain
   
 , soc_dist_level   = c(                       # intensity of the social distancing interventions
   rep(sd_m1, int_start2 - sim_start)
@@ -149,16 +157,9 @@ intervention.forecast <- with(variable_params[i, ], {
 , rep(sd_m2, sim_length - (int_start2 - sim_start))
   )
   
-, thresh_H_start   = c(                       # starting threshhold on total # in hospital
-  2
-     ## slightly odd way to do this, but should work
-, 2
-)  
-, thresh_H_end     = c(                       # ending threshhold on total # in hospital
-  10
-     ## slightly odd way to do this, but should work
-, 10 
-)
+, thresh_H_start   = rep(2, sim_length)  
+, thresh_H_end     = rep(10, sim_length)
+   
      ## No reason to have a second parameter here, just use the same val that the user picks for social distancing
 , thresh_int_level = c(                       # level of social distancing implemented with the threshhold intervention
   rep(sd_m1, int_start2 - sim_start)
@@ -211,10 +212,10 @@ mifs_local <- covid.fitting %>%
 ggout <- mifs_local %>%
   traces() %>%
   melt() %>%
-  ggplot(aes(x=iteration,y=value))+
-  geom_line()+
-  guides(color=FALSE)+
-  facet_wrap(~variable,scales="free_y")+
+  ggplot(aes(x = iteration, y = value)) +
+  geom_line() +
+  guides(color = FALSE) +
+  facet_wrap(~variable, scales = "free_y") +
   theme_bw()
 
 mif.l  <- ggout$data %>% filter(variable == "loglik" | variable == "beta0") %>% droplevels()
@@ -263,7 +264,7 @@ ggout3 <- ggplot(SEIR.sim) +
 ## C) Timing of maximum number of hospitalizations
 
 ## Maybe somewhat controversial [?] choice here to remove all sims that don't take off as we
- ## know these didn't happen, so will really skew our summary values
+ ## know that this didn't happen in reality (keeping these would really skew our summary values)
 SEIR.sim.s  <- SEIR.sim  %>% 
   group_by(.id) %>% 
   summarize(total_H = sum(H))
@@ -275,25 +276,26 @@ SEIR.sim    <- SEIR.sim %>%
     total_H > 10
   ) %>% droplevels()
 
+## Calc the summary statistics
 SEIR.sim.ss <- SEIR.sim %>% 
   filter(.id != "median") %>%
   mutate(week   = day %/% 7) %>%
   group_by(week, .id) %>%
   summarize(
     ## Mean in hospitalizations by week
-    mean_H = mean(H_new)
+    sum_H = sum(H_new)
     ) %>%
   group_by(.id) %>%  
   mutate(
     ## Difference in hospitalizations at the level of the week
-    diff_H = c(0, diff(mean_H))
+    diff_H = c(0, diff(sum_H))
     ) %>%
   group_by(.id) %>% 
   summarize(
     ## Maximum hospitalizations reached, summarized at the level of the week
-    when_max_H = week[which.max(mean_H)]
+    when_max_H = week[which.max(sum_H)]
     ## How many hospitalizations are reached in that week
-  , max_H      = max(mean_H)
+  , max_H      = max(sum_H)
     ## First week we see a reduction in the number of hospitalizations from a runs _global_ rate peak
   , when_red_H = week[min(which(diff_H == max(diff_H)))]
     )
@@ -301,6 +303,28 @@ SEIR.sim.ss <- SEIR.sim %>%
 SEIR.sim.ss2 <- SEIR.sim %>%
   filter(.id != "median") %>%
   group_by(.id) %>% 
-  
+  summarize(
+    total_D = max(D)
+  , total_R = max(R)
+      )
+
+SEIR.sim.ss.t    <- left_join(SEIR.sim.ss, SEIR.sim.ss2, by = ".id")
+
+## Get their CI
+SEIR.sim.ss.t.ci <- rbind(SEIR.sim.ss.t.ci,
+  (SEIR.sim.ss.t %>%
+  pivot_longer(cols = -.id) %>%
+  group_by(name) %>%
+  summarize(
+    lwr = quantile(value, c(0.025))
+  , est = quantile(value, c(0.500))
+  , upr = quantile(value, c(0.975))
+  ) %>% 
+  pivot_longer(cols = -name, names_to = "quant") %>%
+  mutate(paramset = i))
+)
+
+# print(i)
 
 }
+
