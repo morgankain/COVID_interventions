@@ -19,6 +19,8 @@ needed_packages <- c(
 
 lapply(needed_packages, require, character.only = TRUE)
 
+source("../ggplot_theme.R")
+
 ## Be very careful here, adjust according to your machine
 registerDoParallel(
   cores = 2
@@ -49,6 +51,8 @@ fixed_params <- c(
   , N                = 1.938e6
 )
 
+nparams <- 500
+
  ## parameters that will vary
 variable_params <- sobolDesign(
   lower = c(
@@ -67,7 +71,7 @@ variable_params <- sobolDesign(
   , sd_m1       = 0.9
   , sd_m2       = 0.3
 )
-, nseq  = 500
+, nseq  = nparams
 ) %>% mutate(
   sim_start   = round(sim_start)
 , int_start1  = round(int_start1)
@@ -82,6 +86,7 @@ variable_params <- variable_params %>% mutate(
     int_length1  = round(int_start2 - int_start1)
   ## Column for estimated beta0 (!! see lower down for desire to store likelyhood profile to define pmcmc runs)
   , beta0est     = 0
+  , paramset     = seq(1, nparams)
 ) 
 
 ## !! not implemented yet, to come later: Also add infected isolation after X days?
@@ -98,8 +103,9 @@ sim_end    <- sim_start + sim_length
 ## container for results
 SEIR.sim.ss.t.ci <- data.frame(
   name     = character(0)
-, quant    = character(0)
-, value    = numeric(0)
+, lwr      = numeric(0)
+, est      = numeric(0)
+, upr      = numeric(0)
 , paramset = numeric(0)
 )
 
@@ -320,11 +326,10 @@ SEIR.sim.ss.t.ci <- rbind(SEIR.sim.ss.t.ci,
   , est = quantile(value, c(0.500))
   , upr = quantile(value, c(0.975))
   ) %>% 
-  pivot_longer(cols = -name, names_to = "quant") %>%
   mutate(paramset = i))
 )
 
-# print(i)
+ print(i)
 
 }
 
