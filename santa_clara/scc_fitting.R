@@ -170,13 +170,12 @@ fixed_params <- c(
   , mu               = 1-0.044 #19/20
 )
 
-
 # simulate 
 do.call(
   pomp::simulate
   , list(
     object       = covid
-    , params       = c(fixed_params, c(beta0 =2.5/7, N = 100000, E0 = 10))
+    , params       = c(fixed_params, c(beta0 = 2.5/7, N = 100000, E0 = 10))
     , nsim         = 10
     , format       = "d"
     , include.data = T
@@ -193,7 +192,7 @@ do.call(
 # calculate LL
 pf <- pfilter(covid, 
         params = c(fixed_params, c(beta0 = 2.5/7, N = 100000, E0 = 10)),
-        Np = 5000)
+        Np = 5000, filter.traj = TRUE)
 plot(pf)
 logLik(pf)
 
@@ -206,10 +205,10 @@ source("ssc_sim.R")
 # local search
 library(foreach)
 library(doParallel)
-registerDoParallel()
+registerDoParallel(cores = 2)
 
 bake(file="local_search.rds",{
-  foreach(i=1:10,.combine=c) %dopar%  
+  foreach(i=1:2,.combine=c) %dopar%  
     {
       library(pomp)
       library(tidyverse)
@@ -226,7 +225,14 @@ bake(file="local_search.rds",{
     }
 }) -> mifs_local
 
-plot(mifs_local)
+mifs_local %>%
+  traces() %>%
+  melt() %>%
+  ggplot(aes(x=iteration,y=value,group=L1,colour=factor(L1)))+
+  geom_line()+
+  guides(color=FALSE)+
+  facet_wrap(~variable,scales="free_y")+
+  theme_bw()
 
 # need to evaluate the LL with more particles
 bake(file="lik_local.rds",{

@@ -41,6 +41,19 @@ mifs_local <- covid %>%
         )
 })
 
+ggout <- mifs_local %>%
+  traces() %>%
+  melt() %>%
+  ggplot(aes(x=iteration,y=value))+
+  geom_line()+
+  guides(color=FALSE)+
+  facet_wrap(~variable,scales="free_y")+
+  theme_bw()
+
+mif.l <- ggout$data %>% filter(variable == "loglik" | variable == "beta0") %>% droplevels()
+mif.l <- pivot_wider(mif.l, names_from = variable, values_from = value)
+ggplot(mif.l, aes(beta0, loglik)) + geom_point()
+
 ## Pleasant to see this is actually faster
 paste(round(timeoneparam[3] * 200 / 3600, 3), "hours", sep = " ")
 
