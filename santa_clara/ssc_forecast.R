@@ -467,26 +467,26 @@ SEIR.sim    <- SEIR.sim %>%
 
 SEIR.sim.ss <- SEIR.sim %>% 
   mutate(week   = day %/% 7) %>%
-  group_by(.id) %>%
   group_by(week, .id) %>%
   summarize(
     ## Mean in hospitalizations by week
     mean_H = mean(H)
     ) %>% 
+  group_by(.id) %>%
   mutate(
     ## Difference in hospitalizations at the level of the week
-    diff_H = c(diff(mean_H), 0)
+    diff_H = c(0, diff(mean_H)) # c(diff(mean_H), 0) 
     ) %>%
   group_by(.id) %>% 
   summarize(
     ## Maximum hospitalizations reached, summarized at the level of the week
-    when_max_H = week[min(which(mean_H == max(mean_H)))]
+    when_max_H = week[which.max(mean_H)] #min(which(mean_H == max(mean_H)))]
     ## How many hospitalizations are reached in that week
   , max_H      = max(mean_H)
     ## First week we see a reduction in the number of hospitalizations from a runs _global_ rate peak
-  , when_red_H = week[min(which(diff_H == min(diff_H)))]
+  , when_red_H = week[min(which(diff_H < 0 ))] #week[min(which(diff_H == min(diff_H)))]
     )
-  
+
 ggplot(SEIR.sim.ss[SEIR.sim.ss$.id == 4 | SEIR.sim.ss$.id == 7, ]
   , aes(week, diff_H)) + geom_line(aes(group = .id))
 
