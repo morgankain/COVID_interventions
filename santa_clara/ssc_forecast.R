@@ -18,11 +18,14 @@ needed_packages <- c(
 )
 
 lapply(needed_packages, require, character.only = TRUE)
-source("./scc_pomp_objs.R")
+
 ## Be very careful here, adjust according to your machine
 registerDoParallel(
   cores = 2
   )
+
+## Bring in pomp objects
+source("scc_pomp_objs.R")
 
 ####
 ## Step 1: Establish a reasonable parameter set
@@ -242,7 +245,6 @@ mifs_local <- covid.fitting %>%
         )
 })
 
-
 ##### !!
 ## Not currently used, but want to fit pmcmc with uncertainty in beta0 following the likelihood profile for beta0
 ##### !!
@@ -263,13 +265,12 @@ ggout2 <- ggplot(mif.l, aes(beta0, loglik)) + geom_point()
 
 variable_params[i, "beta0est"] <- coef(mifs_local)["beta0"]
 
-
 ####
 ## Step 4: Simulate from the beginning and project forward with this beta0
 ## !! See above note: would prefer pmcmc for uncertainty in beta0. Next step.
 ####
 
-## Rebuild pomp object for projections
+## Rebuild data frame for projections
 scc_deaths.forecast <- rbind(
   scc_deaths
 , data.frame(
@@ -345,7 +346,7 @@ SEIR.sim.ss <- SEIR.sim %>%
   group_by(week, .id) %>%
   summarize(
     ## Mean in hospitalizations by week
-    mean_H = mean(H)
+    mean_H = mean(H_new)
     ) %>%
   group_by(.id) %>%  
   mutate(
@@ -363,7 +364,8 @@ SEIR.sim.ss <- SEIR.sim %>%
     )
   
 SEIR.sim.ss2 <- SEIR.sim %>%
-
-  group_by()
+  filter(.id != "median") %>%
+  group_by(.id) %>% 
+  
 
 }

@@ -92,7 +92,7 @@ accum_names = c("D_new", "H_new")
 
 # state variables
 state_names = c(
-  "S" , "E" , "Ia"
+    "S" , "E" , "Ia"
   , "Ip", "Is", "Im"
   , "R" , "H" ,"D" 
   , "D_new", "H_new" 
