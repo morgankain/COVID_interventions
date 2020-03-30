@@ -235,13 +235,15 @@ variable_params[i, "beta0est"] <- coef(mifs_local)["beta0"]
 ## !! See above note: would prefer pmcmc for uncertainty in beta0. Next step.
 ####
 
+nsim <- 200
+
 SEIR.sim <- do.call(
   pomp::simulate
   , list(
     object         = covid.fitting
     , times        = intervention.forecast@times
     , params       = c(fixed_params, c(beta0 = variable_params[i, "beta0est"], E0 = variable_params[i, ]$E0))
-    , nsim         = 100
+    , nsim         = nsim
     , format       = "d"
     , include.data = F
     , seed         = 1001)) %>% {
@@ -317,8 +319,7 @@ SEIR.sim.ss2 <- SEIR.sim %>%
 SEIR.sim.ss.t    <- left_join(SEIR.sim.ss, SEIR.sim.ss2, by = ".id")
 
 ## Get their CI
-SEIR.sim.ss.t.ci <- rbind(SEIR.sim.ss.t.ci,
-  (SEIR.sim.ss.t %>%
+SEIR.sim.ss.t.s <- SEIR.sim.ss.t %>%
   pivot_longer(cols = -.id) %>%
   group_by(name) %>%
   summarize(
@@ -326,10 +327,19 @@ SEIR.sim.ss.t.ci <- rbind(SEIR.sim.ss.t.ci,
   , est = quantile(value, c(0.500))
   , upr = quantile(value, c(0.975))
   ) %>% 
-  mutate(paramset = i))
-)
+  mutate(paramset = i)
 
- print(i)
+SEIR.sim.ss.t.s <- rbind(SEIR.sim.ss.t.s
+  , data.frame(
+      name = "prop_ext"
+    , lwr  = nsim - nrow(SEIR.sim.ss.t)
+    , est  = nsim - nrow(SEIR.sim.ss.t)
+    , upr  = nsim - nrow(SEIR.sim.ss.t)
+    , paramset = i))
+
+SEIR.sim.ss.t.ci <- rbind(SEIR.sim.ss.t.ci, SEIR.sim.ss.t.s)
+
+print(i)
 
 }
 
