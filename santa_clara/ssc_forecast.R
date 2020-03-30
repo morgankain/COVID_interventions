@@ -144,7 +144,7 @@ variable_params <- sobolDesign(
     E0          = 10
   , sim_start   = 15
   , int_start1  = 69
-  , int_length2 = 120
+  , int_length2 = 180
   , sd_m1       = 0.9
   , sd_m2       = 0.5
 )
@@ -176,7 +176,7 @@ sim_start  <- variable_params$sim_start
 sim_length <- 300
 sim_end    <- sim_start + sim_length
 
-i = 1
+for (i in 1:nrow(variable_params)) {
 
 ## US deaths data, pull out Santa Clara County
 deaths     <- read.csv(
@@ -351,9 +351,12 @@ mifs_local <- covid.fitting %>%
         )
 })
 
-## super ugly way of retreiving likelihood plot, 
- ## !! Not currently used, but want to fit pmcmc with uncertainty in beta0 following the
-  ## likelihood profile for beta0
+
+##### !!
+## Not currently used, but want to fit pmcmc with uncertainty in beta0 following the likelihood profile for beta0
+##### !!
+
+## super ugly way of retreiving likelihood plot, come back to this when adding pmcmc
 ggout <- mifs_local %>%
   traces() %>%
   melt() %>%
@@ -433,18 +436,71 @@ SEIR.sim <- do.call(
       } 
 
 ggout3 <- ggplot(SEIR.sim) +
-  geom_line(aes(x     = day, 
-                y     = deaths,
-                group =.id, 
-                color = .id == "data")) + 
+  geom_line(aes(x      = day, 
+                y      = deaths,
+                group  = .id, 
+                color  = .id == "data")) + 
   xlab("Date") + ylab("New fatalities") +
   guides(color = FALSE)+
-  scale_color_manual(values=c("#D5D5D3", "#24281A")) + theme_bw()
-
+  scale_color_manual(values = c("#D5D5D3", "#24281A")) + theme_bw()
 
 ####
 ## Step 5: Calculate summary statistics from these runs
 ####
 
+## A) Rate of change calculated with hospitalizations
+## B) Maximum number of hospitalizations at one point in time
+## C) Timing of maximum number of hospitalizations
+
+## Maybe somewhat controversial [?] choice here to remove all sims that don't take off as we
+ ## know these didn't happen, so will really skew our summary values
+SEIR.sim.s  <- SEIR.sim  %>% 
+  group_by(.id) %>% 
+  summarize(total_H = sum(H))
+
+SEIR.sim    <- left_join(SEIR.sim, SEIR.sim.s, by = ".id")
+
+SEIR.sim    <- SEIR.sim %>% 
+  filter(
+    total_H > 10
+  ) %>% droplevels()
+
+SEIR.sim.ss <- SEIR.sim %>% 
+  mutate(week   = day %/% 7) %>%
+  group_by(.id) %>%
+  group_by(week, .id) %>%
+  summarize(
+    ## Mean in hospitalizations by week
+    mean_H = mean(H)
+    ) %>% 
+  mutate(
+    ## Difference in hospitalizations at the level of the week
+    diff_H = c(diff(mean_H), 0)
+    ) %>%
+  group_by(.id) %>% 
+  summarize(
+    ## Maximum hospitalizations reached, summarized at the level of the week
+    when_max_H = week[min(which(mean_H == max(mean_H)))]
+    ## How many hospitalizations are reached in that week
+  , max_H      = max(mean_H)
+    ## First week we see a reduction in the number of hospitalizations from a runs _global_ rate peak
+  , when_red_H = week[min(which(diff_H == min(diff_H)))]
+    )
+  
+ggplot(SEIR.sim.ss[SEIR.sim.ss$.id == 4 | SEIR.sim.ss$.id == 7, ]
+  , aes(week, diff_H)) + geom_line(aes(group = .id))
+
+ggplot(SEIR.sim[SEIR.sim$.id == 4 | SEIR.sim$.id == 7, ]
+  , aes(day, H)) + geom_line(aes(group = .id))
+
+ggplot(sum.test) +
+  geom_line(aes(x     = day, 
+                y     = diff_H,
+                group =.id, 
+                color = .id == "data")) + 
+  xlab("Date") + ylab("Rate of change of H") +
+  guides(color = FALSE)+
+  scale_color_manual(values=c("#D5D5D3", "#24281A")) + theme_bw()
 
 
+}
