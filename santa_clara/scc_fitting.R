@@ -181,7 +181,7 @@ do.call(
     , include.data = T
     , seed         = 1001)) %>% 
   ggplot() +
-  geom_line(aes(x=day, 
+  geom_line(aes(x = day, 
                 y = deaths,
                 group=.id, 
                 color = .id == "data")) + 

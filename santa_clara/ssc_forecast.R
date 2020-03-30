@@ -270,9 +270,9 @@ intervention.fitting  <- with(variable_params[i, ], {
   , rep(0, sim_length - (int_start2 - sim_start) - int_length2)
   )[1:length(scc_deaths$day)] 
   
-, isolation        = 0
-, iso_severe_level = 0  # % of contats that severe cases maintain
-, iso_mild_level   = 0.1  # % of contats that mild cases maintain
+, isolation        = rep(0, length(scc_deaths$day))
+, iso_severe_level = rep(0, length(scc_deaths$day))  # % of contats that severe cases maintain
+, iso_mild_level   = rep(0.1, length(scc_deaths$day))  # % of contats that mild cases maintain
   
 , soc_dist_level   = c(                       # intensity of the social distancing interventions
   rep(sd_m1, int_start2 - sim_start)
@@ -280,16 +280,8 @@ intervention.fitting  <- with(variable_params[i, ], {
 , rep(sd_m2, sim_length - (int_start2 - sim_start))
   )[1:length(scc_deaths$day)]
   
-, thresh_H_start   = c(                       # starting threshhold on total # in hospital
-  2
-     ## slightly odd way to do this, but should work
-, 2
-)  
-, thresh_H_end     = c(                       # ending threshhold on total # in hospital
-  10
-     ## slightly odd way to do this, but should work
-, 10 
-)
+, thresh_H_start   = rep(2, length(scc_deaths$day)) 
+, thresh_H_end     = rep(2, length(scc_deaths$day))
      ## No reason to have a second parameter here, just use the same val that the user picks for social distancing
 , thresh_int_level = c(                       # level of social distancing implemented with the threshhold intervention
   rep(sd_m1, int_start2 - sim_start)
@@ -466,41 +458,30 @@ SEIR.sim    <- SEIR.sim %>%
   ) %>% droplevels()
 
 SEIR.sim.ss <- SEIR.sim %>% 
+  filter(.id != "median") %>%
   mutate(week   = day %/% 7) %>%
   group_by(week, .id) %>%
   summarize(
     ## Mean in hospitalizations by week
     mean_H = mean(H)
-    ) %>% 
-  group_by(.id) %>%
+    ) %>%
+  group_by(.id) %>%  
   mutate(
     ## Difference in hospitalizations at the level of the week
-    diff_H = c(0, diff(mean_H)) # c(diff(mean_H), 0) 
+    diff_H = c(0, diff(mean_H))
     ) %>%
   group_by(.id) %>% 
   summarize(
     ## Maximum hospitalizations reached, summarized at the level of the week
-    when_max_H = week[which.max(mean_H)] #min(which(mean_H == max(mean_H)))]
+    when_max_H = week[which.max(mean_H)]
     ## How many hospitalizations are reached in that week
   , max_H      = max(mean_H)
     ## First week we see a reduction in the number of hospitalizations from a runs _global_ rate peak
-  , when_red_H = week[min(which(diff_H < 0 ))] #week[min(which(diff_H == min(diff_H)))]
+  , when_red_H = week[min(which(diff_H == max(diff_H)))]
     )
+  
+SEIR.sim.ss2 <- SEIR.sim %>%
 
-ggplot(SEIR.sim.ss[SEIR.sim.ss$.id == 4 | SEIR.sim.ss$.id == 7, ]
-  , aes(week, diff_H)) + geom_line(aes(group = .id))
-
-ggplot(SEIR.sim[SEIR.sim$.id == 4 | SEIR.sim$.id == 7, ]
-  , aes(day, H)) + geom_line(aes(group = .id))
-
-ggplot(sum.test) +
-  geom_line(aes(x     = day, 
-                y     = diff_H,
-                group =.id, 
-                color = .id == "data")) + 
-  xlab("Date") + ylab("Rate of change of H") +
-  guides(color = FALSE)+
-  scale_color_manual(values=c("#D5D5D3", "#24281A")) + theme_bw()
-
+  group_by()
 
 }
