@@ -93,7 +93,7 @@ sim_length <- 300
 sim_end    <- sim_start + sim_length
 
 for (i in 1:nrow(variable_params)) {
-
+  
 ## US deaths data, pull out Santa Clara County
 deaths     <- read.csv(
   "NYT-us-counties.csv"
@@ -169,53 +169,11 @@ intervention.forecast <- with(variable_params[i, ], {
 
 })
 
-## Subset this table to the dates for fitting 
-intervention.fitting  <- with(variable_params[i, ], {
-
- covariate_table(
-  day              = scc_deaths$day
-  
-, intervention     = c(
-      # No intervention until intervention start time
-    rep(0, int_start1 - sim_start)                   
-      # Intervention style 1
-  , rep(1, int_length1)
-      # Intervention style 2
-  , rep(1, int_length2)
-      # Post intervention close
-  , rep(0, sim_length - (int_start2 - sim_start) - int_length2)
-  )[1:length(scc_deaths$day)] 
-  
-, isolation        = rep(0, length(scc_deaths$day))
-, iso_severe_level = rep(0, length(scc_deaths$day))  # % of contats that severe cases maintain
-, iso_mild_level   = rep(0.1, length(scc_deaths$day))  # % of contats that mild cases maintain
-  
-, soc_dist_level   = c(                       # intensity of the social distancing interventions
-  rep(sd_m1, int_start2 - sim_start)
-     ## slightly odd way to do this, but should work
-, rep(sd_m2, sim_length - (int_start2 - sim_start))
-  )[1:length(scc_deaths$day)]
-  
-, thresh_H_start   = rep(2, length(scc_deaths$day)) 
-, thresh_H_end     = rep(2, length(scc_deaths$day))
-     ## No reason to have a second parameter here, just use the same val that the user picks for social distancing
-, thresh_int_level = c(                       # level of social distancing implemented with the threshhold intervention
-  rep(sd_m1, int_start2 - sim_start)
-     ## slightly odd way to do this, but should work
-, rep(sd_m2, sim_length - (int_start2 - sim_start))
-)[1:length(scc_deaths$day)]
-  
-, order            = "constant"
-, times            = "day"
-  )
-
-})
-
 covid.fitting <- scc_deaths %>%
   pomp(
     time       = "day"
   , t0         = 1
-  , covar      = intervention.fitting
+  , covar      = intervention.forecast
   , rprocess   = euler(sir_step, delta.t = 1/6)
   , rmeasure   = rmeas 
   , dmeasure   = dmeas
@@ -269,34 +227,12 @@ variable_params[i, "beta0est"] <- coef(mifs_local)["beta0"]
 ## !! See above note: would prefer pmcmc for uncertainty in beta0. Next step.
 ####
 
-## Rebuild pomp object for projections
-scc_deaths.forecast <- rbind(
-  scc_deaths
-, data.frame(
-    day    = (max(scc_deaths$day) + 1):sim_length
-  , date   = as.Date(seq((max(scc_deaths$day) + 1):sim_length), origin = variable_params[i, ]$sim_start)
-  , deaths = NA
-  )
-)
-
-covid.forecast <- scc_deaths.forecast %>% pomp(
-    time       = "day"
-  , t0         = 1
-  , covar      = intervention.forecast
-  , rprocess   = euler(sir_step, delta.t = 1/6)
-  , rmeasure   = rmeas 
-  , dmeasure   = dmeas
-  , rinit      = sir_init
-  , partrans   = par_trans
-  , accumvars  = accum_names
-  , paramnames = param_names
-  , statenames = state_names
-  ) 
-
+## Simulate for projections
 SEIR.sim <- do.call(
   pomp::simulate
   , list(
-    object         = covid.forecast
+    object         = covid.fitting
+    , times        = intervention.forecast@times
     , params       = c(fixed_params, c(beta0 = variable_params[i, "beta0est"], E0 = variable_params[i, ]$E0))
     , nsim         = 100
     , format       = "d"
