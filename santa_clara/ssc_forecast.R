@@ -29,6 +29,9 @@ registerDoParallel(
 ## Bring in pomp objects
 source("scc_pomp_objs.R")
 
+## Add in infected isolation? (contact tracing?)
+inf_iso <- TRUE
+
 ####
 ## Step 1: Establish a reasonable parameter set
 ####
@@ -53,6 +56,7 @@ fixed_params <- c(
 
 nparams <- 500
 
+set.seed(10001)
  ## parameters that will vary
 variable_params <- sobolDesign(
   lower = c(
@@ -88,6 +92,13 @@ variable_params <- variable_params %>% mutate(
   , beta0est     = 0
   , paramset     = seq(1, nparams)
 ) 
+
+if (inf_iso) {
+  variable_params <- variable_params %>% 
+    mutate(
+     iso_start = int_start2 + 60
+    ) 
+}
 
 ## !! not implemented yet, to come later: Also add infected isolation after X days?
 
@@ -150,18 +161,53 @@ intervention.forecast <- with(variable_params[i, ], {
       # Intervention style 2
   , rep(1, int_length2)
       # Post intervention close
-  , rep(0, sim_length - (int_start2 - sim_start) - int_length2)
+  , {
+    if (!inf_iso) {
+    rep(0, sim_length - (int_start2 - sim_start) - int_length2)
+    } else {
+    rep(1, sim_length - (int_start2 - sim_start) - int_length2)  
+    }
+  }
   ) 
   
-, isolation        = rep(0, sim_length)
-, iso_severe_level = rep(0, sim_length)  # % of contats that severe cases maintain
-, iso_mild_level   = rep(0.1, sim_length)  # % of contats that mild cases maintain
+, isolation = { 
   
-, soc_dist_level   = c(                       # intensity of the social distancing interventions
+if (!inf_iso) {
+  
+  rep(0, sim_length)
+  
+} else {
+  
+  c(
+    rep(0, iso_start - sim_start)  
+  , rep(1, sim_length - (iso_start - sim_start))
+  )
+  
+}}
+
+, iso_severe_level = rep(0, sim_length)      # % of contats that severe cases maintain
+, iso_mild_level   = rep(0.05, sim_length)   # % of contats that mild cases maintain
+  
+, soc_dist_level = {
+  
+if (!inf_iso) {
+   
+  c(                       # intensity of the social distancing interventions
   rep(sd_m1, int_start2 - sim_start)
      ## slightly odd way to do this, but should work
-, rep(sd_m2, sim_length - (int_start2 - sim_start))
+, rep(sd_m2, sim_length - (int_start2 - sim_start)))
+  
+} else {
+  
+  c(                       # intensity of the social distancing interventions
+  rep(sd_m1, int_start2 - sim_start)
+     ## slightly odd way to do this, but should work
+, rep(sd_m2, iso_start - int_start2)
+     ## if infected isolation is going on, increase the background contact rate
+, rep(sd_m1, sim_length - (iso_start - sim_start))
   )
+  
+}}
   
 , thresh_H_start   = rep(2, sim_length)  
 , thresh_H_end     = rep(10, sim_length)
@@ -198,6 +244,9 @@ covid.fitting <- scc_deaths %>%
 ## Step 3: Particle filter to get a fitted beta0
 ####
 
+## So that the runs can be stopped and picked up again
+if (variable_params[i, "beta0est"] == 0) {
+
 timeoneparam <- system.time({
 mifs_local <- covid.fitting %>%
   mif2(
@@ -230,6 +279,8 @@ ggout2 <- ggplot(mif.l, aes(beta0, loglik)) + geom_point()
 
 variable_params[i, "beta0est"] <- coef(mifs_local)["beta0"]
 
+}
+
 ####
 ## Step 4: Simulate from the beginning and project forward with this beta0
 ## !! See above note: would prefer pmcmc for uncertainty in beta0. Next step.
@@ -254,14 +305,8 @@ SEIR.sim <- do.call(
                     mutate(.id = "median"))
       } 
 
-ggout3 <- ggplot(SEIR.sim) +
-  geom_line(aes(x      = day, 
-                y      = deaths,
-                group  = .id, 
-                color  = .id == "data")) + 
-  xlab("Date") + ylab("New fatalities") +
-  guides(color = FALSE)+
-  scale_color_manual(values = c("#D5D5D3", "#24281A")) + theme_bw()
+## Plot of a single run
+## source("scc_sr_plot.R")
 
 ####
 ## Step 5: Calculate summary statistics from these runs
