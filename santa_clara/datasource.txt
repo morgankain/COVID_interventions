@@ -1,0 +1,1 @@
+We use data from The New York Times, based on reports from state and local health agencies. These data are available at https://github.com/nytimes/covid-19-data.
