@@ -59,7 +59,7 @@ sir_step <- Csnippet("
                      }
                     
                      // calculate transition numbers
-                     double dSE = rbinom(S, 1-exp(-betat*(Ca*Ia/N + Cp*Ip/N + iso_m*Cm*Im/N + iso_s*Cs*Is/N)*dt)); 
+                     double dSE = rbinom(S, 1-exp(-betat*(iso_t*Ca*Ia/N + iso_t*Cp*Ip/N + iso_m*Cm*Im/N + iso_s*Cs*Is/N)*dt)); 
                      double rateE[2];
                      double dE_all[2];
                      rateE[0] = alpha*gamma; // going to asymtomatic
