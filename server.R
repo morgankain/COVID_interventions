@@ -87,7 +87,7 @@ sir_step <- Csnippet("
                      
                      // update the compartments
                      S  -= dSE; // susceptible 
-                     E  += dSE - dEIa - dEIp; // exposed
+                     E  += dSE - dEIa - dEIp + dEi; // exposed, DEi:the number of imported "Exposed" cases daily
                      Ia += dEIa - dIaR; // infectious and asymptomatic
                      Ip += dEIp - dIpIs - dIpIm; // infectious and pre-symptomatic
                      Is += dIpIs - dIsH; // infectious and severe symptoms (that will be hospitalized)
