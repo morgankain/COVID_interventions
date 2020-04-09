@@ -111,3 +111,18 @@ param_names = c(
   , "N"
   , "E0"
 )
+
+## R0 here just based on the simple transmission rate / recovery rate (weighted by the probability of going into different classes)
+covid_R0 <- function (beta0est, fixed_params, sd_strength) {
+## transmission rate
+    beta0est * sd_strength * 
+    (                
+## proportion * time in asymptomatic
+      fixed_params["alpha"] * fixed_params["Ca"] * (1/fixed_params["lambda_a"]) +                  
+## proportion * time in mildly symptomatic
+      (1 - fixed_params["alpha"]) * fixed_params["mu"] * ((1/fixed_params["lambda_p"]) + (1/fixed_params["lambda_m"])) +    
+## proportion * time in severely symptomatic
+      (1 - fixed_params["alpha"]) * (1 - fixed_params["mu"]) * ((1/fixed_params["lambda_p"]) + (1/fixed_params["lambda_s"]))      
+      )
+}
+

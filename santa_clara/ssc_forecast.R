@@ -2,8 +2,23 @@
 ## Use pomp to simulate dynamics up until time t and then project forward ##
 ############################################################################
 
-## Search !! for next steps
+## Other scripts used:
+ ## scc_pomp_objs.R -- pomp stuff and R0 function
+ ## scc_summary.R   -- summarize simulated dynamics
+ ## scc_plotting.R  -- plot results
 
+## Notes:
+ ## parameters in params.R -- update there
+ ## Fill in the "Parameters to adjust below" and then run from the top 
+
+### Parameters to adjust for the given runs
+focal.county  <- "Santa Clara"
+county.N      <- 1.938e6
+relax.sip.t   <- 60             ## days after the initial shelter in place order before relaxing a bit
+nparams       <- 5              ## number of parameter samples (more = longer)
+nsim          <- 200            ## number of simulations for each fitted beta0
+
+## Search !! for next steps
 needed_packages <- c(
     "pomp"
   , "plyr"
@@ -15,6 +30,7 @@ needed_packages <- c(
   , "tidyr"
   , "foreach"
   , "doParallel"
+  , "data.table"
 )
 
 lapply(needed_packages, require, character.only = TRUE)
@@ -22,6 +38,7 @@ lapply(needed_packages, require, character.only = TRUE)
 source("../ggplot_theme.R")
 
 ## Be very careful here, adjust according to your machine
+ ## Not acutally used in the script right now, but important for expanding pomp fits
 registerDoParallel(
   cores = 2
   )
@@ -33,28 +50,23 @@ source("scc_pomp_objs.R")
 inf_iso <- TRUE
 
 ####
+## Step 1: Pull the data
+####
+
+deaths     <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
+deaths     <- deaths %>% mutate(date = as.Date(date)) %>% filter(county == focal.county)
+
+####
 ## Step 1: Establish a reasonable parameter set
 ####
 
- ## parameters that wont vary
-fixed_params <- c(
-    Ca               = 2/3
-  , Cp               = 1
-  , Cs               = 1
-  , Cm               = 1
-  , alpha            = 1/3
-  , gamma            = 1/5.2
-  , lambda_a         = 1/7
-  , lambda_s         = 1/5.76
-  , lambda_m         = 1/7
-  , lambda_p         = 1/2
-  , rho              = 1/14.5 #10.7
-  , delta            = 0.2
-  , mu               = 1-0.044 #19/20
-  , N                = 1.938e6
-)
+params <- read.csv("params.csv", stringsAsFactors = FALSE)
+params <- params %>% mutate(Value = sapply(Value, function(x) eval(parse(text = x))))
 
-nparams <- 500
+fixed_params        <- params$Value
+names(fixed_params) <- params$Parameter
+
+fixed_params        <- c(fixed_params, N = county.N)
 
 set.seed(10001)
  ## parameters that will vary
@@ -93,12 +105,10 @@ variable_params <- variable_params %>% mutate(
   , paramset     = seq(1, nparams)
 ) 
 
-if (inf_iso) {
-  variable_params <- variable_params %>% 
-    mutate(
-     iso_start = int_start2 + 60
-    ) 
-}
+variable_params <- variable_params %>% 
+  mutate(
+    iso_start = int_start2 + relax.sip.t
+  ) 
 
 ## !! not implemented yet, to come later: Also add infected isolation after X days?
 
@@ -122,30 +132,24 @@ SEIR.sim.ss.t.ci <- data.frame(
 
 for (i in 1:nrow(variable_params)) {
   
-## US deaths data, pull out Santa Clara County
-deaths     <- read.csv(
-  "NYT-us-counties.csv"
-, stringsAsFactors = F) %>% 
-  mutate(date = as.Date(date))
-
-scc_deaths <- deaths %>% 
-  filter(county == "Santa Clara")  %>% 
+## Adjust the data for the current start date
+county.data <- deaths %>% 
   mutate(day = as.numeric(date - variable_params[i, ]$sim_start)) %>% 
   select(day, date, deaths) %>% 
-  rename(deaths_cum = deaths) %>% 
+  mutate(deaths_cum = deaths) %>% 
   mutate(deaths = deaths_cum - lag(deaths_cum)) %>% 
   replace_na(list(deaths = 0)) %>%
   select(-deaths_cum)
-
+  
 ## Add days from the start of the sim to the first recorded day in the dataset
-scc_deaths <- rbind(
+county.data <- rbind(
   data.frame(
-    day    = seq(1:(min(scc_deaths$day) - 1))
-  , date   = as.Date(seq(1:(min(scc_deaths$day) - 1)), origin = variable_params[i, ]$sim_start)
+    day    = seq(1:(min(county.data$day) - 1))
+  , date   = as.Date(seq(1:(min(county.data$day) - 1)), origin = variable_params[i, ]$sim_start)
   , deaths = 0
   )
-, scc_deaths
-)
+, county.data
+  )
 
 ## Create intervention covariate table for the full forecast
 intervention.forecast <- with(variable_params[i, ], {
@@ -163,11 +167,11 @@ intervention.forecast <- with(variable_params[i, ], {
       # Post intervention close
   , {
     if (!inf_iso) {
-    rep(0, sim_length - (int_start2 - sim_start) - int_length2)
+      rep(0, sim_length - (int_start2 - sim_start) - int_length2)
     } else {
-    rep(1, sim_length - (int_start2 - sim_start) - int_length2)  
+      rep(1, sim_length - (int_start2 - sim_start) - int_length2)  
     }
-  }
+    }
   ) 
   
 , isolation = { 
@@ -225,7 +229,7 @@ if (!inf_iso) {
 
 })
 
-covid.fitting <- scc_deaths %>%
+covid.fitting <- county.data %>%
   pomp(
     time       = "day"
   , t0         = 1
@@ -259,34 +263,16 @@ mifs_local <- covid.fitting %>%
         )
 })
 
-##### !!
-## Not currently used, but want to fit pmcmc with uncertainty in beta0 following the likelihood profile for beta0
-##### !!
-
-## super ugly way of retreiving likelihood plot, come back to this when adding pmcmc
-ggout <- mifs_local %>%
-  traces() %>%
-  melt() %>%
-  ggplot(aes(x = iteration, y = value)) +
-  geom_line() +
-  guides(color = FALSE) +
-  facet_wrap(~variable, scales = "free_y") +
-  theme_bw()
-
-mif.l  <- ggout$data %>% filter(variable == "loglik" | variable == "beta0") %>% droplevels()
-mif.l  <- pivot_wider(mif.l, names_from = variable, values_from = value)
-ggout2 <- ggplot(mif.l, aes(beta0, loglik)) + geom_point()
-
-variable_params[i, "beta0est"] <- coef(mifs_local)["beta0"]
+# source("for_pmcmc.R")
 
 }
 
+variable_params[i, "beta0est"] <- coef(mifs_local)["beta0"]
+
 ####
 ## Step 4: Simulate from the beginning and project forward with this beta0
-## !! See above note: would prefer pmcmc for uncertainty in beta0. Next step.
+## Would prefer pmcmc (see for_pmcmc) for uncertainty in beta0. Next step...
 ####
-
-nsim <- 200
 
 SEIR.sim <- do.call(
   pomp::simulate
@@ -319,32 +305,32 @@ SEIR.sim <- do.call(
 ## Maybe somewhat controversial [?] choice here to remove all sims that don't take off as we
  ## know that this didn't happen in reality (keeping these would really skew our summary values)
 SEIR.sim.s  <- SEIR.sim  %>% 
-  group_by(.id) %>% 
-  summarize(total_H = sum(H))
+  dplyr::group_by(.id) %>% 
+  dplyr::summarize(total_H = sum(H))
 
 SEIR.sim    <- left_join(SEIR.sim, SEIR.sim.s, by = ".id")
 
 SEIR.sim    <- SEIR.sim %>% 
-  filter(
+  dplyr::filter(
     total_H > 10
   ) %>% droplevels()
 
 ## Calc the summary statistics
 SEIR.sim.ss <- SEIR.sim %>% 
-  filter(.id != "median") %>%
-  mutate(week   = day %/% 7) %>%
-  group_by(week, .id) %>%
-  summarize(
+  dplyr::filter(.id != "median") %>%
+  dplyr::mutate(week   = day %/% 7) %>%
+  dplyr::group_by(week, .id) %>%
+  dplyr::summarize(
     ## Mean in hospitalizations by week
     sum_H = sum(H_new)
     ) %>%
-  group_by(.id) %>%  
-  mutate(
+  dplyr::group_by(.id) %>%  
+  dplyr::mutate(
     ## Difference in hospitalizations at the level of the week
     diff_H = c(0, diff(sum_H))
     ) %>%
-  group_by(.id) %>% 
-  summarize(
+  dplyr::group_by(.id) %>% 
+  dplyr::summarize(
     ## Maximum hospitalizations reached, summarized at the level of the week
     when_max_H = week[which.max(sum_H)]
     ## How many hospitalizations are reached in that week
@@ -355,8 +341,8 @@ SEIR.sim.ss <- SEIR.sim %>%
   
 SEIR.sim.ss2 <- SEIR.sim %>%
   filter(.id != "median") %>%
-  group_by(.id) %>% 
-  summarize(
+  dplyr::group_by(.id) %>% 
+  dplyr::summarize(
     total_D = max(D)
   , total_R = max(R)
       )
@@ -366,13 +352,13 @@ SEIR.sim.ss.t    <- left_join(SEIR.sim.ss, SEIR.sim.ss2, by = ".id")
 ## Get their CI
 SEIR.sim.ss.t.s <- SEIR.sim.ss.t %>%
   pivot_longer(cols = -.id) %>%
-  group_by(name) %>%
-  summarize(
+  dplyr::group_by(name) %>%
+  dplyr::summarize(
     lwr = quantile(value, c(0.025))
   , est = quantile(value, c(0.500))
   , upr = quantile(value, c(0.975))
   ) %>% 
-  mutate(paramset = i)
+  dplyr::mutate(paramset = variable_params[i, ]$paramset)
 
 SEIR.sim.ss.t.s <- rbind(SEIR.sim.ss.t.s
   , data.frame(
@@ -380,11 +366,15 @@ SEIR.sim.ss.t.s <- rbind(SEIR.sim.ss.t.s
     , lwr  = nsim - nrow(SEIR.sim.ss.t)
     , est  = nsim - nrow(SEIR.sim.ss.t)
     , upr  = nsim - nrow(SEIR.sim.ss.t)
-    , paramset = i))
+    , paramset = variable_params[i, ]$paramset))
 
 SEIR.sim.ss.t.ci <- rbind(SEIR.sim.ss.t.ci, SEIR.sim.ss.t.s)
 
 print(i)
 
 }
+
+source("scc_summary.R")
+source("scc_plotting.R")
+
 
