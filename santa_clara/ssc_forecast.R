@@ -57,7 +57,7 @@ deaths     <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/mas
 deaths     <- deaths %>% mutate(date = as.Date(date)) %>% filter(county == focal.county)
 
 ####
-## Step 1: Establish a reasonable parameter set
+## Step 2: Establish a reasonable parameter set
 ####
 
 params <- read.csv("params.csv", stringsAsFactors = FALSE)
@@ -110,10 +110,8 @@ variable_params <- variable_params %>%
     iso_start = int_start2 + relax.sip.t
   ) 
 
-## !! not implemented yet, to come later: Also add infected isolation after X days?
-
 ####
-## Step 2: Build the pomp object from data and simulation parameters
+## Step 3: Build the pomp object from data and simulation parameters
 ####
 
 ## Run parameters
