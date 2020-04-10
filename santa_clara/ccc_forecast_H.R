@@ -1,9 +1,9 @@
-############################################################################
-## Use pomp to simulate dynamics up until time t and then project forward ##
-############################################################################
+###################################################
+## Code for forecasting ccc using H instead of D ##
+###################################################
 
-# for Sherlock
-# setwd("/scratch/users/kainm/covid")
+# Setting up the script for use on Sherlock
+setwd("/scratch/users/kainm/covid")
 
 ## Other scripts used:
  ## scc_pomp_objs.R -- pomp stuff and R0 function
@@ -15,9 +15,9 @@
  ## Fill in the "Parameters to adjust below" and then run from the top 
 
 ### Parameters to adjust for the given runs
-focal.county  <- "Santa Clara"
-county.N      <- 1.938e6
-nparams       <- 200            ## number of parameter samples (more = longer)
+focal.county  <- "Contra Costa"
+county.N      <- 1.147e6
+nparams       <- 300            ## number of parameter samples (more = longer)
 nsim          <- 200            ## number of simulations for each fitted beta0
 
 ## Search !! for next steps
@@ -30,20 +30,20 @@ needed_packages <- c(
   , "scales"
   , "lubridate"
   , "tidyr"
-  , "foreach"
-  , "doParallel"
+#  , "foreach"
+#  , "doParallel"
   , "data.table"
 )
 
 lapply(needed_packages, require, character.only = TRUE)
 
-source("../ggplot_theme.R")
+# source("../ggplot_theme.R")
 
 ## Be very careful here, adjust according to your machine
  ## Not acutally used in the script right now, but important for expanding pomp fits
-registerDoParallel(
-  cores = 2
-  )
+#registerDoParallel(
+#  cores = 2
+#  )
 
 ## Bring in pomp objects
 source("scc_pomp_objs.R")
@@ -55,8 +55,14 @@ inf_iso <- TRUE
 ## Step 1: Pull the data
 ####
 
-deaths     <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
-deaths     <- deaths %>% mutate(date = as.Date(date)) %>% filter(county == focal.county)
+## Think there may be problems with this on sherlock so just read in the previously downloaded data
+# deaths   <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
+hospit     <- read.csv("ccc_data.csv")
+hospit     <- hospit %>% 
+  mutate(date = as.Date(REPORT_DATE)) %>% 
+  filter(CURRENT_HOSPITALIZED != "NULL") %>% 
+  mutate(ch = as.numeric(as.character(CURRENT_HOSPITALIZED))) %>% 
+  dplyr::select(date, ch)
 
 ####
 ## Step 2: Establish a reasonable parameter set
@@ -73,22 +79,24 @@ fixed_params        <- c(fixed_params, N = county.N)
 set.seed(10001)
 
 ## Load a previously saved run
-# SEIR.sim.ss.t.ci <- readRDS("output/SEIR.sim.ss.t.ci.Rds")
-# variable_params  <- readRDS("output/variable_params.Rds")
+# SEIR.sim.ss.t.ci <- readRDS("output/SEIR.sim.ss.t.ci_ccc_H.Rds")
+# variable_params  <- readRDS("output/variable_params_ccc_H.Rds")
 
  ## parameters that will vary
 variable_params <- sobolDesign(
   lower = c(
     E0          = 1
-  , sim_start   = 14
+  , sim_start   = 28
   , int_start1  = 60
   , int_length2 = 60
-  , sd_m1       = 0.6
+## weaken the first social distancing strength a bit for this county relative to SCC
+  , sd_m1       = 0.60
+## Keep the same shelter in place estimated strength
   , sd_m2       = 0.05
   )
 , upper = c(
     E0          = 10
-  , sim_start   = 28
+  , sim_start   = 42
   , int_start1  = 69
   , int_length2 = 120
   , sd_m1       = 0.9
@@ -114,7 +122,6 @@ variable_params <- variable_params %>% mutate(
 
 variable_params <- variable_params %>% 
   mutate(
-    ## Previously had infected isolation starting after 60 days, changing this to when the SD gets lifted a bit
     iso_start = int_start2 + int_length2
   , log_lik   = 0
   ) 
@@ -140,20 +147,14 @@ SEIR.sim.ss.t.ci <- data.frame(
 for (i in 1:nrow(variable_params)) {
   
 ## Adjust the data for the current start date
-county.data <- deaths %>% 
-  mutate(day = as.numeric(date - variable_params[i, ]$sim_start)) %>% 
-  select(day, date, deaths) %>% 
-  mutate(deaths_cum = deaths) %>% 
-  mutate(deaths = deaths_cum - lag(deaths_cum)) %>% 
-  replace_na(list(deaths = 0)) %>%
-  select(-deaths_cum)
+county.data <- hospit %>% mutate(day = as.numeric(date - variable_params[i, ]$sim_start)) 
   
 ## Add days from the start of the sim to the first recorded day in the dataset
 county.data <- rbind(
   data.frame(
     day    = seq(1:(min(county.data$day) - 1))
   , date   = as.Date(seq(1:(min(county.data$day) - 1)), origin = variable_params[i, ]$sim_start)
-  , deaths = 0
+  , ch     = 0
   )
 , county.data
   )
@@ -235,6 +236,15 @@ if (!inf_iso) {
   )
 
 })
+
+## small adjustments to the pomp objects for fitting to H
+rmeas <- Csnippet("double tol = 1e-16;
+                   ch = rpois(H + tol);
+                  ")
+# define evaluation of model prob density function
+dmeas <- Csnippet("double tol = 1e-16;
+                   lik = dpois(ch, H + tol, give_log);
+                  ")
 
 covid.fitting <- county.data %>%
   pomp(
@@ -378,7 +388,10 @@ SEIR.sim.ss.t.s <- rbind(SEIR.sim.ss.t.s
 
 SEIR.sim.ss.t.ci <- rbind(SEIR.sim.ss.t.ci, SEIR.sim.ss.t.s)
 
-print(i)
+if (((i / 20) %% 1) == 0) {
+  saveRDS(variable_params, "output/variable_params_ccc.Rds")
+  saveRDS(SEIR.sim.ss.t.ci, "output/SEIR.sim.ss.t.ci_ccc.Rds")
+}
 
 }
 

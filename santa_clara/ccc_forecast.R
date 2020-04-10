@@ -76,6 +76,11 @@ names(fixed_params) <- params$Parameter
 fixed_params        <- c(fixed_params, N = county.N)
 
 set.seed(10001)
+
+## Load a previously saved run
+# SEIR.sim.ss.t.ci <- readRDS("output/SEIR.sim.ss.t.ci_ccc_d.Rds")
+# variable_params  <- readRDS("output/variable_params_ccc_d.Rds")
+
  ## parameters that will vary
 variable_params <- sobolDesign(
   lower = c(
@@ -84,7 +89,7 @@ variable_params <- sobolDesign(
   , int_start1  = 60
   , int_length2 = 60
 ## weaken the first social distancing strength a bit for this county relative to SCC
-  , sd_m1       = 0.75
+  , sd_m1       = 0.6
 ## Keep the same shelter in place estimated strength
   , sd_m2       = 0.05
   )
@@ -93,7 +98,7 @@ variable_params <- sobolDesign(
   , sim_start   = 42
   , int_start1  = 69
   , int_length2 = 120
-  , sd_m1       = 0.95
+  , sd_m1       = 0.9
   , sd_m2       = 0.3
 )
 , nseq  = nparams

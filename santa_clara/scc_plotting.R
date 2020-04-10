@@ -12,6 +12,18 @@ ggres1 <- ggplot(SEIR.out
     xlab("Parameter Values") +
     ylab("COVID Outcome Summary")
 
+## Plot with only runs where strength of social distancing is lowered
+gg1_only_red <- ggplot(SEIR.sim.ss.t.ci.gg.r[SEIR.sim.ss.t.ci.gg.r$name != "Week of First Decrease in Hospitalizations", ]
+  , aes(int_length2, est)) +
+  geom_point(aes(colour = sd_m2), lwd = 2) +
+#  geom_errorbar(aes(x = int_length2, ymin = lwr, ymax = upr), width = 0.1, alpha = 0.2) +
+  scale_color_gradient(low = "steelblue3", high = "firebrick3", name = "Proportion of 
+Contacts Remaining") +
+  facet_wrap(~name, scale = "free") +
+  xlab("Length of Social Distancing Intervention") +
+  ylab("COVID Summary Estimate") +
+  theme(strip.text.x = element_text(size = 12, colour = "black", face = "bold"))
+
 gg1 <- ggplot(SEIR.sim.ss.t.ci.gg.r.r[SEIR.sim.ss.t.ci.gg.r.r$name != "Week of First Decrease in Hospitalizations", ]
   , aes(int_length2, est)) +
   geom_point(aes(colour = sd_m2, shape = as.factor(iso_inf)), lwd = 2) +
