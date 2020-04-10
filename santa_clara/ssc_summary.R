@@ -29,14 +29,6 @@ SEIR.sim.ss.t.ci.gg.r   <- SEIR.sim.ss.t.ci.gg.r %>%
 #, SEIR.sim.ss.t.ci.gg.r.90
 #  )
 
-SEIR.sim.ss.t.ci.gg.r <- SEIR.sim.ss.t.ci.gg.r %>%
-  mutate(
-    Baseline      = beta0est * (1/3) * (2/3) * (7) + beta0est * (2/3) * (0.5 + 5.76) * (1 - 0.956) + beta0est * (2/3) * (0.5 + 7) * 0.956
-      ) %>%
-  mutate(
-    Intervention  = sd_m2 * beta0est * (1/3) * (2/3) * (7) + sd_m2 * beta0est * (2/3) * (0.5 + 5.76) * (1 - 0.956) + sd_m2 * beta0est * (2/3) * (0.5 + 7) * 0.956
-      )
-
 ## stupid dplyr error with custom function... :(
 SEIR.sim.ss.t.ci.gg.r <- SEIR.sim.ss.t.ci.gg.r %>%
   mutate(Baseline = 0, Intervention = 0)
