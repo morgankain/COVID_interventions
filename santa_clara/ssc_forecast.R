@@ -2,6 +2,9 @@
 ## Use pomp to simulate dynamics up until time t and then project forward ##
 ############################################################################
 
+# for Sherlock
+# setwd("/scratch/users/kainm/covid")
+
 ## Other scripts used:
  ## scc_pomp_objs.R -- pomp stuff and R0 function
  ## scc_summary.R   -- summarize simulated dynamics
@@ -14,8 +17,7 @@
 ### Parameters to adjust for the given runs
 focal.county  <- "Santa Clara"
 county.N      <- 1.938e6
-relax.sip.t   <- 60             ## days after the initial shelter in place order before relaxing a bit
-nparams       <- 5              ## number of parameter samples (more = longer)
+nparams       <- 200            ## number of parameter samples (more = longer)
 nsim          <- 200            ## number of simulations for each fitted beta0
 
 ## Search !! for next steps
@@ -83,7 +85,7 @@ variable_params <- sobolDesign(
     E0          = 10
   , sim_start   = 28
   , int_start1  = 69
-  , int_length2 = 200
+  , int_length2 = 120
   , sd_m1       = 0.9
   , sd_m2       = 0.3
 )
@@ -107,7 +109,8 @@ variable_params <- variable_params %>% mutate(
 
 variable_params <- variable_params %>% 
   mutate(
-    iso_start = int_start2 + relax.sip.t
+    ## Previously had infected isolation starting after 60 days, changing this to when the SD gets lifted a bit
+    iso_start = int_start2 + int_length2
   , log_lik   = 0
   ) 
 
