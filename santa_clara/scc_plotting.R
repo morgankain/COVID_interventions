@@ -49,5 +49,3 @@ gghist <- ggplot(R0_hist, aes(x = value)) +
 ggfilename <- paste("output/", paste("R0_hist", focal.county, max(deaths$date), sep = "_"), sep = "")
 
 ggsave(filename = paste(ggfilename, ".pdf", sep = ""), gghist, device = "pdf")
-
-

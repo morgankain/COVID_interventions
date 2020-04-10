@@ -2,6 +2,9 @@
 ## Use pomp to simulate dynamics up until time t and then project forward ##
 ############################################################################
 
+# for Sherlock
+# setwd("/scratch/users/kainm/covid")
+
 ## Other scripts used:
  ## scc_pomp_objs.R -- pomp stuff and R0 function
  ## scc_summary.R   -- summarize simulated dynamics
@@ -15,7 +18,7 @@
 focal.county  <- "Santa Clara"
 county.N      <- 1.938e6
 relax.sip.t   <- 60             ## days after the initial shelter in place order before relaxing a bit
-nparams       <- 5              ## number of parameter samples (more = longer)
+nparams       <- 1000           ## number of parameter samples (more = longer)
 nsim          <- 200            ## number of simulations for each fitted beta0
 
 ## Search !! for next steps
@@ -53,7 +56,9 @@ inf_iso <- TRUE
 ## Step 1: Pull the data
 ####
 
-deaths     <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
+## Think there may be problems with this on sherlock so just read in the previously downloaded data
+# deaths   <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
+deaths     <- read.csv("us-counties.txt")
 deaths     <- deaths %>% mutate(date = as.Date(date)) %>% filter(county == focal.county)
 
 ####
@@ -68,6 +73,10 @@ names(fixed_params) <- params$Parameter
 
 fixed_params        <- c(fixed_params, N = county.N)
 
+## Drop the extra parameters that we want to vary over 
+ ## Ca, alpha, lambda_a, lambda_s, lambda_m
+fixed_params        <- fixed_params[-c(1, 5, 7, 8, 9)]
+
 set.seed(10001)
  ## parameters that will vary
 variable_params <- sobolDesign(
@@ -78,6 +87,11 @@ variable_params <- sobolDesign(
   , int_length2 = 60
   , sd_m1       = 0.6
   , sd_m2       = 0.05
+  , Ca          = 0.1
+  , alpha       = 1/3
+  , lambda_a    = 1/7
+  , lambda_s    = 1/7
+  , lambda_m    = 1/7
   )
 , upper = c(
     E0          = 10
@@ -86,6 +100,11 @@ variable_params <- sobolDesign(
   , int_length2 = 200
   , sd_m1       = 0.9
   , sd_m2       = 0.3
+  , Ca          = 2/3
+  , alpha       = 2/3
+  , lambda_a    = 3/5
+  , lambda_s    = 3/5
+  , lambda_m    = 3/5
 )
 , nseq  = nparams
 ) %>% mutate(
@@ -254,7 +273,16 @@ timeoneparam <- system.time({
 mifs_local <- covid.fitting %>%
   mif2(
     t0     = 1
-  , params = c(fixed_params, c(beta0 = 2.5/7, E0 = variable_params[i, ]$E0))
+  , params = c(fixed_params
+    , c(beta0 = 2.5/7
+ ## E0, Ca, alpha, lambda_a, lambda_s, lambda_m
+      , E0       = variable_params[i, ]$E0
+      , Ca       = variable_params[i, ]$Ca
+      , alpha    = variable_params[i, ]$alpha
+      , lambda_a = variable_params[i, ]$lambda_a
+      , lambda_s = variable_params[i, ]$lambda_s
+      , lambda_m = variable_params[i, ]$lambda_m 
+      ))
   , Np     = 3000
   , Nmif   = 50
   , cooling.fraction.50 = 0.5
@@ -279,7 +307,16 @@ SEIR.sim <- do.call(
   , list(
     object         = covid.fitting
     , times        = intervention.forecast@times
-    , params       = c(fixed_params, c(beta0 = variable_params[i, "beta0est"], E0 = variable_params[i, ]$E0))
+  , params = c(fixed_params
+    , c(beta0    = variable_params[i, "beta0est"]
+ ## E0, Ca, alpha, lambda_a, lambda_s, lambda_m
+      , E0       = variable_params[i, ]$E0
+      , Ca       = variable_params[i, ]$Ca
+      , alpha    = variable_params[i, ]$alpha
+      , lambda_a = variable_params[i, ]$lambda_a
+      , lambda_s = variable_params[i, ]$lambda_s
+      , lambda_m = variable_params[i, ]$lambda_m 
+      ))
     , nsim         = nsim
     , format       = "d"
     , include.data = F
@@ -370,7 +407,10 @@ SEIR.sim.ss.t.s <- rbind(SEIR.sim.ss.t.s
 
 SEIR.sim.ss.t.ci <- rbind(SEIR.sim.ss.t.ci, SEIR.sim.ss.t.s)
 
-print(i)
+if (((i / 20) %% 1) == 0) {
+  saveRDS(variable_params, "output/variable_params.Rds")
+  saveRDS(SEIR.sim.ss.t.ci, "output/SEIR.sim.ss.t.ci.Rds")
+}
 
 }
 
