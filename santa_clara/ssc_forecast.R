@@ -3,7 +3,7 @@
 ############################################################################
 
 # for Sherlock
-# setwd("/scratch/users/kainm/covid")
+setwd("/scratch/users/kainm/covid")
 
 ## Other scripts used:
  ## scc_pomp_objs.R -- pomp stuff and R0 function
@@ -17,7 +17,7 @@
 ### Parameters to adjust for the given runs
 focal.county  <- "Santa Clara"
 county.N      <- 1.938e6
-nparams       <- 200            ## number of parameter samples (more = longer)
+nparams       <- 300            ## number of parameter samples (more = longer)
 nsim          <- 200            ## number of simulations for each fitted beta0
 
 ## Search !! for next steps
@@ -30,20 +30,20 @@ needed_packages <- c(
   , "scales"
   , "lubridate"
   , "tidyr"
-  , "foreach"
-  , "doParallel"
+#  , "foreach"
+#  , "doParallel"
   , "data.table"
 )
 
 lapply(needed_packages, require, character.only = TRUE)
 
-source("../ggplot_theme.R")
+# source("../ggplot_theme.R")
 
 ## Be very careful here, adjust according to your machine
  ## Not acutally used in the script right now, but important for expanding pomp fits
-registerDoParallel(
-  cores = 2
-  )
+# registerDoParallel(
+#  cores = 2
+#  )
 
 ## Bring in pomp objects
 source("scc_pomp_objs.R")
@@ -55,7 +55,8 @@ inf_iso <- TRUE
 ## Step 1: Pull the data
 ####
 
-deaths     <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
+# deaths   <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
+deaths     <- read.csv("us-counties.txt")
 deaths     <- deaths %>% mutate(date = as.Date(date)) %>% filter(county == focal.county)
 
 ####
@@ -378,10 +379,13 @@ SEIR.sim.ss.t.s <- rbind(SEIR.sim.ss.t.s
 
 SEIR.sim.ss.t.ci <- rbind(SEIR.sim.ss.t.ci, SEIR.sim.ss.t.s)
 
-print(i)
+if (((i / 20) %% 1) == 0) {
+  saveRDS(variable_params, "output/variable_params_scc.Rds")
+  saveRDS(SEIR.sim.ss.t.ci, "output/SEIR.sim.ss.t.ci_scc.Rds")
+}
 
 }
 
-source("scc_summary.R")
-source("scc_plotting.R")
+#source("scc_summary.R")
+#source("scc_plotting.R")
 

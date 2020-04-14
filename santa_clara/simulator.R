@@ -12,28 +12,32 @@
 scenario <- c("F60", "F120", "T60", "T90")
 
   ## Do we ever reduce shelter in place?
-inf_iso      <- FALSE
+inf_iso      <- TRUE
  ## time shelter in place changes to a reduced form with infected isolation
-red_shelt_t  <- 60
+red_shelt.t  <- 90
  ## strength of this new contact amount after red_shelt_t
-red_shelt_s  <- 0.5
+red_shelt.s  <- 0.50
  ## nsims for each run
 nsim         <- 100
 
 ## Load the data
-SEIR.sim.ss.t.ci <- readRDS("output/SEIR.sim.ss.t.ci_ccc_d.Rds")
-variable_params  <- readRDS("output/variable_params_ccc_d.Rds")
+SEIR.sim.ss.t.ci <- readRDS("output/SEIR.sim.ss.t.ci_ccc.Rds")
+variable_params  <- readRDS("output/variable_params_ccc_H.Rds")
+
+####
+## Run ccc_forecast.R up to the variable params section
+####
 
 ## Keep only the "best" fits
 variable_params <- variable_params %>% 
   filter(
-    log_lik > (max(log_lik) - 5)
+    log_lik > (max(log_lik) - 20)
   )
 
 ## Adjust variable params for the scenario
 variable_params <- variable_params %>% 
   mutate(
-    int_length2 = red_shelt
+    int_length2 = red_shelt.t
   ) %>% 
   mutate(
     iso_start   = int_start2 + red_shelt.t
@@ -121,7 +125,7 @@ if (!inf_iso) {
      ## slightly odd way to do this, but should work
 , rep(sd_m2, iso_start - int_start2)
      ## if infected isolation is going on, increase the background contact rate
-, rep(red_shelt_s, sim_length - (iso_start - sim_start))
+, rep(red_shelt.s, sim_length - (iso_start - sim_start))
   )
   
 }}
@@ -174,6 +178,9 @@ SEIR.sim <- do.call(
                     mutate(.id = "median"))
     } 
 
+SEIR.sim <- SEIR.sim %>% filter(.id != "median")
+SEIR.sim <- SEIR.sim %>% mutate(date = as.Date(day, origin = variable_params[i, ]$sim_start))
+
 SEIR.sim <- SEIR.sim %>% 
   mutate(
     paramset = variable_params[i, ]$paramset
@@ -194,13 +201,27 @@ print(i)
 }
 
 SEIR.sim.f.s <- SEIR.sim.f %>% 
-  group_by(day) %>%
-  summarize(
+  dplyr::group_by(date) %>%
+  dplyr::summarize(
     lwr = quantile(H, c(0.025))
   , est = quantile(H, c(0.50))
-  , upr = quantile(H, c(0.975))
-  )
+  , upr = quantile(H, c(0.975)))
 
-ggplot(SEIR.sim.f.s, aes(day, est)) + 
-  geom_ribbon(aes(x = day, ymin = lwr, ymax = upr), alpha = 0.3) +
-  geom_line()
+# SEIR.sim.f.s.f240 <- SEIR.sim.f.s
+# SEIR.sim.f.s.f120 <- SEIR.sim.f.s
+# SEIR.sim.f.s.f90  <- SEIR.sim.f.s
+
+# SEIR.sim.f.s.t120.35 <- SEIR.sim.f.s
+# SEIR.sim.f.s.t90.35  <- SEIR.sim.f.s
+# SEIR.sim.f.s.t60.35  <- SEIR.sim.f.s
+
+# SEIR.sim.f.s.t120.50 <- SEIR.sim.f.s
+# SEIR.sim.f.s.t90.50  <- SEIR.sim.f.s
+# SEIR.sim.f.s.t60.50  <- SEIR.sim.f.s
+
+# SEIR.sim.f.s.t120.65 <- SEIR.sim.f.s
+# SEIR.sim.f.s.t90.65  <- SEIR.sim.f.s
+# SEIR.sim.f.s.t60.65  <- SEIR.sim.f.s
+
+
+
