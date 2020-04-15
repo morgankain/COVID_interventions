@@ -12,7 +12,7 @@ lapply(needed_packages, require, character.only = TRUE)
 ## Note:
   ## There are 373 stored parameter sets with a fitted beta0 with loglikelihood within 3 units of the max
   ## Using all 373 will be quite slow, so can specify if you want a random subset (set nparams < 373)
-nparams       <- 373
+nparams       <- 50
 
 focal.county  <- "Contra Costa"
 county.N      <- 1.147e6
@@ -30,7 +30,7 @@ nsim          <- 100
 sim_length    <- 500
  ## State variable for plotting (Hospit, Death, or Cases)
    ## if H, D, or C plot H, D or C from the data on the plot
-state.plot    <- "C"
+state.plot    <- "D"
  ## log10 scale or not
 plot.log10    <- TRUE
 
@@ -74,8 +74,10 @@ fixed_params        <- c(fixed_params, N = county.N)
 ## Previous fits
 ####
 
-## Load the previous fits
-variable_params  <- read.csv("variable_params.csv"); variable_params <- variable_params %>% dplyr::select(-X)
+## Load the previous fits 
+ ## Stupid date problems with csv
+# variable_params <- read.csv("variable_params.csv"); variable_params <- variable_params %>% dplyr::select(-X)
+variable_params <- readRDS("output/variable_params_ccc.extended.Rds")
 
 ## notes on this data frame:
  ## E0 = starting infecteds (unlikely to be higher than 1-4, but stochasticity is too high if 1). 
