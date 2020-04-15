@@ -12,9 +12,9 @@
 scenario <- c("F60", "F120", "T60", "T90")
 
   ## Do we ever reduce shelter in place?
-inf_iso      <- TRUE
+inf_iso      <- FALSE
  ## time shelter in place changes to a reduced form with infected isolation
-red_shelt.t  <- 90
+red_shelt.t  <- 120
  ## strength of this new contact amount after red_shelt_t
 red_shelt.s  <- 0.50
  ## nsims for each run
@@ -22,7 +22,7 @@ nsim         <- 100
 
 ## Load the data
 SEIR.sim.ss.t.ci <- readRDS("output/SEIR.sim.ss.t.ci_ccc.Rds")
-variable_params  <- readRDS("output/variable_params_ccc_H.Rds")
+variable_params  <- readRDS("output/variable_params_ccc.Rds")
 
 ####
 ## Run ccc_forecast.R up to the variable params section
@@ -31,7 +31,7 @@ variable_params  <- readRDS("output/variable_params_ccc_H.Rds")
 ## Keep only the "best" fits
 variable_params <- variable_params %>% 
   filter(
-    log_lik > (max(log_lik) - 20)
+    log_lik > (max(log_lik) - 5)
   )
 
 ## Adjust variable params for the scenario
@@ -207,7 +207,7 @@ SEIR.sim.f.s <- SEIR.sim.f %>%
   , est = quantile(H, c(0.50))
   , upr = quantile(H, c(0.975)))
 
-# SEIR.sim.f.s.f240 <- SEIR.sim.f.s
+# SEIR.sim.f.s.f420 <- SEIR.sim.f.s
 # SEIR.sim.f.s.f120 <- SEIR.sim.f.s
 # SEIR.sim.f.s.f90  <- SEIR.sim.f.s
 
@@ -217,11 +217,17 @@ SEIR.sim.f.s <- SEIR.sim.f %>%
 
 # SEIR.sim.f.s.t120.50 <- SEIR.sim.f.s
 # SEIR.sim.f.s.t90.50  <- SEIR.sim.f.s
-# SEIR.sim.f.s.t60.50  <- SEIR.sim.f.s
+ SEIR.sim.f.s.t60.50  <- SEIR.sim.f.s
 
 # SEIR.sim.f.s.t120.65 <- SEIR.sim.f.s
 # SEIR.sim.f.s.t90.65  <- SEIR.sim.f.s
 # SEIR.sim.f.s.t60.65  <- SEIR.sim.f.s
 
-
+variable_params1$R0_base <- 0
+variable_params1$R0_int <- 0
+for (i in 1:nrow(variable_params1)) {
+variable_params1$R0_base[i] <- with(variable_params1[i, ], covid_R0(beta0est, fixed_params, 1))
+variable_params1$R0_int[i] <- with(variable_params1[i, ], covid_R0(beta0est, fixed_params, sd_m2))
+}
+  
 

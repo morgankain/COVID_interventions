@@ -33,8 +33,8 @@ needed_packages <- c(
   , "scales"
   , "lubridate"
   , "tidyr"
-#  , "foreach"
-#  , "doParallel"
+# , "foreach"
+# , "doParallel"
   , "data.table"
 )
 
