@@ -12,7 +12,7 @@ lapply(needed_packages, require, character.only = TRUE)
 ## Note:
   ## There are 373 stored parameter sets with a fitted beta0 with loglikelihood within 3 units of the max
   ## Using all 373 will be quite slow, so can specify if you want a random subset (set nparams < 373)
-nparams       <- 50
+nparams       <- 373
 
 focal.county  <- "Contra Costa"
 county.N      <- 1.147e6
