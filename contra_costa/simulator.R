@@ -7,7 +7,7 @@ lapply(needed_packages, require, character.only = TRUE)
 
 ####
 ## Parameters
-####
+###################################
 
 ## Note:
   ## There are 373 stored parameter sets with a fitted beta0 with loglikelihood within 3 units of the max
@@ -33,6 +33,8 @@ sim_length    <- 500
 state.plot    <- "C"
  ## log10 scale or not
 plot.log10    <- TRUE
+
+###################################
 
 ## Load the current Contra Costa H for plotting purposes 
  ## !! Update with new data. Data only through April 10 here currently
