@@ -18,10 +18,10 @@ focal.county  <- "Contra Costa"
 county.N      <- 1.147e6
 
   ## Do we ever reduce from shelter in place to some form of strong/moderate social distancing?
-inf_iso       <- FALSE
+inf_iso       <- TRUE
  ## time shelter in place changes to a reduced form with infected isolation
   ## ignored if inf_iso = FALSE
-red_shelt.t   <- 120
+red_shelt.t   <- 60
  ## strength of the new contact amount after red_shelt.t time elapsed since the start of shelter in place (proportion of baseline)
 red_shelt.s   <- 0.50
  ## number of epidemic simulations for each parameter set
@@ -269,6 +269,10 @@ if (((i / 20) %% 1) == 0) {
 }
 
 }
+
+## because of the staggered start dates there is some oddity at the end of the simulation
+SEIR.sim.f <- SEIR.sim.f %>% filter(date < min(variable_params$sim_start + sim_length))
+
   }
 
 ####
