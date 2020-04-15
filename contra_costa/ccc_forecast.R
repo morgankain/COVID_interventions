@@ -6,7 +6,7 @@
 ############################################################################
 
 # Setting up the script for use on Sherlock
-setwd("/scratch/users/kainm/covid")
+# setwd("/scratch/users/kainm/covid")
 
 ## Other scripts used:
  ## scc_pomp_objs.R -- pomp stuff and R0 function

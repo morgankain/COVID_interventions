@@ -1,37 +1,97 @@
-### Simulate for all of the fits 
+##############################
+### Simulate from the fits ###
+##############################
 
-### My vision is to have 4 scenarios:
- ## 1) Lift shelter in place early
-   ## -- FALSE, 60
- ## 2) Never lift shelter in palce
-   ## -- FALSE, 120
- ## 3) Reduce shelter in place after 60 days
-   ## -- TRUE, 60
- ## 4) Reduce shelter in place after 90 days
-   ## -- TRUE, 90
-scenario <- c("F60", "F120", "T60", "T90")
+needed_packages <- c("pomp", "plyr", "dplyr", "ggplot2", "magrittr", "scales", "lubridate", "tidyr", "data.table")
+lapply(needed_packages, require, character.only = TRUE)
 
-  ## Do we ever reduce shelter in place?
-inf_iso      <- FALSE
+####
+## Parameters
+####
+
+## Note:
+  ## There are 373 stored parameter sets with a fitted beta0 with loglikelihood within 3 units of the max
+  ## Using all 373 will be quite slow, so can specify if you want a random subset (set nparams < 373)
+nparams       <- 373
+
+focal.county  <- "Contra Costa"
+county.N      <- 1.147e6
+
+  ## Do we ever reduce from shelter in place to some form of strong/moderate social distancing?
+inf_iso       <- FALSE
  ## time shelter in place changes to a reduced form with infected isolation
-red_shelt.t  <- 120
- ## strength of this new contact amount after red_shelt_t
-red_shelt.s  <- 0.50
- ## nsims for each run
-nsim         <- 100
+  ## ignored if inf_iso = FALSE
+red_shelt.t   <- 120
+ ## strength of the new contact amount after red_shelt.t time elapsed since the start of shelter in place (proportion of baseline)
+red_shelt.s   <- 0.50
+ ## number of epidemic simulations for each parameter set
+nsim          <- 100
+ ## how many days to run the simulation
+sim_length    <- 500
+ ## State variable for plotting (Hospit, Death, or Cases)
+   ## if H, D, or C plot H, D or C from the data on the plot
+state.plot    <- "C"
+ ## log10 scale or not
+plot.log10    <- TRUE
 
-## Load the data
-SEIR.sim.ss.t.ci <- readRDS("output/SEIR.sim.ss.t.ci_ccc.Rds")
-variable_params  <- readRDS("output/variable_params_ccc.Rds")
+## Load the current Contra Costa H for plotting purposes 
+ ## !! Update with new data. Data only through April 10 here currently
+hospit     <- read.csv("ccc_data.csv")
+hospit     <- hospit %>% 
+  mutate(date = as.Date(REPORT_DATE)) %>% 
+  filter(CURRENT_HOSPITALIZED != "NULL") %>% 
+  mutate(ch = as.numeric(as.character(CURRENT_HOSPITALIZED))) %>% 
+  dplyr::select(date, ch)
+
+### Collapsable for convenience
+{
+####
+## Setup stuff
+####
+
+source("../ggplot_theme.R")
+
+## Bring in pomp objects
+source("../santa_clara/scc_pomp_objs.R")
+
+## Garb new death data from online or load the data in the github
+#deaths   <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
+deaths    <- read.csv("us-counties.txt")
+deaths    <- deaths %>% mutate(date = as.Date(date)) %>% filter(county == focal.county)
+
+## Load the current parameter set
+params <- read.csv("params.csv", stringsAsFactors = FALSE)
+params <- params %>% mutate(Value = sapply(Value, function(x) eval(parse(text = x))))
+
+fixed_params        <- params$Value
+names(fixed_params) <- params$Parameter
+
+fixed_params        <- c(fixed_params, N = county.N)
 
 ####
-## Run ccc_forecast.R up to the variable params section
+## Previous fits
 ####
+
+## Load the previous fits
+variable_params  <- read.csv("variable_params.csv"); variable_params <- variable_params %>% dplyr::select(-X)
+
+## notes on this data frame:
+ ## E0 = starting infecteds (unlikely to be higher than 1-4, but stochasticity is too high if 1). 
+   ## Higher number will require a bit of a later start, but should be fine
+ ## sim_start = first case
+ ## int_stat1 = first suggested "work from home" in the bay area
+ ## int_length2 = length of shelter in place. Overwritten by your parameter choices shortly
+ ## sd_m1     = social distancing strength for the "work from home" suggestion
+ ## sd_m2     = social distancing strength for shelter in place
+ ## int_start2 = start date of shelter in place
+ ## int_length1 = length of the "work from home" prior to shelter in place
+ ## beta0est    = estimated beta0
+ ## iso_start   = start of infected isolation. Overwritten shortly. Ignored if inf_iso = FALSE
 
 ## Keep only the "best" fits
 variable_params <- variable_params %>% 
   filter(
-    log_lik > (max(log_lik) - 5)
+    log_lik > (max(log_lik) - 3)
   )
 
 ## Adjust variable params for the scenario
@@ -43,13 +103,17 @@ variable_params <- variable_params %>%
     iso_start   = int_start2 + red_shelt.t
   ) 
 
-sim_start  <- variable_params$sim_start
-sim_length <- 500
-sim_end    <- sim_start + sim_length
+if (nparams < 373) {
+  variable_params <- variable_params[sample(1:373, nparams), ]
+}
+
+####
+## Simulations
+####
 
 for (i in 1:nrow(variable_params)) {
   
-## Adjust the data for the current start date
+## Adjust death data by the start date for this specific parameter set. Not used for fitting here in any way
 county.data <- deaths %>% 
   mutate(day = as.numeric(date - variable_params[i, ]$sim_start)) %>% 
   select(day, date, deaths) %>% 
@@ -184,7 +248,7 @@ SEIR.sim <- SEIR.sim %>% mutate(date = as.Date(day, origin = variable_params[i, 
 SEIR.sim <- SEIR.sim %>% 
   mutate(
     paramset = variable_params[i, ]$paramset
-  , scenario = scenario[2])
+  )
 
 if (i == 1) {
   
@@ -196,38 +260,60 @@ SEIR.sim.f <- rbind(SEIR.sim.f, SEIR.sim)
   
 }
 
-print(i)
-  
+if (((i / 20) %% 1) == 0) {
+  print(paste(round(i / nrow(variable_params), 2)*100, "% Complete", sep = ""))
 }
+
+}
+  }
+
+####
+## Summary and plotting
+####
+
+## summary of observable cases to plot against case data in the county
+SEIR.sim.f <- SEIR.sim.f %>% mutate(C = Is + Im + H)
 
 SEIR.sim.f.s <- SEIR.sim.f %>% 
   dplyr::group_by(date) %>%
   dplyr::summarize(
-    lwr = quantile(H, c(0.025))
-  , est = quantile(H, c(0.50))
-  , upr = quantile(H, c(0.975)))
+    lwr = quantile(get(state.plot), c(0.025))
+  , est = quantile(get(state.plot), c(0.50))
+  , upr = quantile(get(state.plot), c(0.975)))
 
-# SEIR.sim.f.s.f420 <- SEIR.sim.f.s
-# SEIR.sim.f.s.f120 <- SEIR.sim.f.s
-# SEIR.sim.f.s.f90  <- SEIR.sim.f.s
+data.frame(
+  R0  = c("base", "under shelter in place")
+, lwr = c(quantile(variable_params$R0_base, c(0.025)), quantile(variable_params$R0_int, c(0.025)))
+, est = c(quantile(variable_params$R0_base, c(0.500)), quantile(variable_params$R0_int, c(0.500)))
+, upr = c(quantile(variable_params$R0_base, c(0.975)), quantile(variable_params$R0_int, c(0.975)))
+)
 
-# SEIR.sim.f.s.t120.35 <- SEIR.sim.f.s
-# SEIR.sim.f.s.t90.35  <- SEIR.sim.f.s
-# SEIR.sim.f.s.t60.35  <- SEIR.sim.f.s
-
-# SEIR.sim.f.s.t120.50 <- SEIR.sim.f.s
-# SEIR.sim.f.s.t90.50  <- SEIR.sim.f.s
- SEIR.sim.f.s.t60.50  <- SEIR.sim.f.s
-
-# SEIR.sim.f.s.t120.65 <- SEIR.sim.f.s
-# SEIR.sim.f.s.t90.65  <- SEIR.sim.f.s
-# SEIR.sim.f.s.t60.65  <- SEIR.sim.f.s
-
-variable_params1$R0_base <- 0
-variable_params1$R0_int <- 0
-for (i in 1:nrow(variable_params1)) {
-variable_params1$R0_base[i] <- with(variable_params1[i, ], covid_R0(beta0est, fixed_params, 1))
-variable_params1$R0_int[i] <- with(variable_params1[i, ], covid_R0(beta0est, fixed_params, sd_m2))
+if (inf_iso) {
+  plot.title <- paste("Relax shelter in place to", red_shelt.s, "of baseline contacts on day", red_shelt.t, sep = " ")
+} else {
+  plot.title <- paste("Lift shelter in place on day", red_shelt.t, sep = " ")
 }
-  
 
+gg.1 <- ggplot(SEIR.sim.f.s) + 
+  geom_line(aes(x = date, y = est), colour = "dodgerblue4") + 
+  geom_ribbon(aes(x = date, ymin = lwr, ymax = upr), colour = NA, fill = "dodgerblue4", alpha = 0.4) +
+  scale_x_date(labels = date_format("%Y-%b"), date_breaks = "1 month") +
+  xlab("Date") + 
+  ylab(state.plot) +
+  guides(color = FALSE) +
+  guides(fill = FALSE) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)
+  , legend.title = element_text(size = 12)) +
+  ggtitle(plot.title) 
+
+if (plot.log10) {
+gg.1 <- gg.1 + scale_y_log10()
+}
+
+if (state.plot == "H") {
+  (gg.1 <- gg.1 + geom_point(data = hospit , aes(date, ch)))
+} else if (state.plot == "D") {
+  (gg.1 <- gg.1 + geom_point(data = deaths, aes(date, deaths)))
+} else if (state.plot == "C") {
+  (gg.1 <- gg.1 + geom_point(data = deaths, aes(date, cases)))
+}
