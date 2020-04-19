@@ -12,7 +12,7 @@ lapply(needed_packages, require, character.only = TRUE)
 ## Note:
   ## There are 373 stored parameter sets with a fitted beta0 with loglikelihood within 3 units of the max
   ## Using all 373 will be quite slow, so can specify if you want a random subset (set nparams < 373)
-nparams       <- 373
+nparams       <- 50
 
 focal.county  <- "Contra Costa"
 county.N      <- 1.147e6
@@ -30,7 +30,7 @@ nsim          <- 100
 sim_length    <- 500
  ## State variable for plotting (Hospit, Death, or Cases)
    ## if H, D, or C plot H, D or C from the data on the plot
-state.plot    <- "D"
+state.plot    <- "H"
  ## log10 scale or not
 plot.log10    <- TRUE
 
@@ -246,7 +246,6 @@ SEIR.sim <- do.call(
                     mutate(.id = "median"))
     } 
 
-SEIR.sim <- SEIR.sim %>% filter(.id != "median")
 SEIR.sim <- SEIR.sim %>% mutate(date = as.Date(day, origin = variable_params[i, ]$sim_start))
 
 SEIR.sim <- SEIR.sim %>% 
@@ -273,16 +272,23 @@ if (((i / 20) %% 1) == 0) {
 ## because of the staggered start dates there is some oddity at the end of the simulation
 SEIR.sim.f <- SEIR.sim.f %>% filter(date < min(variable_params$sim_start + sim_length))
 
+## summary of observable cases to plot against case data in the county
+SEIR.sim.f <- SEIR.sim.f %>% mutate(C = Is + Im + H)
+
   }
 
 ####
 ## Summary and plotting
 ####
 
-## summary of observable cases to plot against case data in the county
-SEIR.sim.f <- SEIR.sim.f %>% mutate(C = Is + Im + H)
+state.plot    <- "H"
+
+SEIR.sim.f.m <- SEIR.sim.f %>% 
+  dplyr::filter(.id == "median") %>% 
+  dplyr::select(state.plot, date, paramset)
 
 SEIR.sim.f.s <- SEIR.sim.f %>% 
+  dplyr::filter(.id != "median") %>%
   dplyr::group_by(date) %>%
   dplyr::summarize(
     lwr = quantile(get(state.plot), c(0.025))
@@ -305,6 +311,7 @@ if (inf_iso) {
 gg.1 <- ggplot(SEIR.sim.f.s) + 
   geom_line(aes(x = date, y = est), colour = "dodgerblue4") + 
   geom_ribbon(aes(x = date, ymin = lwr, ymax = upr), colour = NA, fill = "dodgerblue4", alpha = 0.4) +
+  geom_line(data = SEIR.sim.f.m, aes(x = date, y = get(state.plot), group = paramset), colour = "grey50", alpha = 0.4) +
   scale_x_date(labels = date_format("%Y-%b"), date_breaks = "1 month") +
   xlab("Date") + 
   ylab(state.plot) +
@@ -325,3 +332,4 @@ if (state.plot == "H") {
 } else if (state.plot == "C") {
   (gg.1 <- gg.1 + geom_point(data = deaths, aes(date, cases)))
 }
+
