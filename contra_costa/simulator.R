@@ -246,7 +246,7 @@ SEIR.sim <- do.call(
                     mutate(.id = "median"))
     } 
 
-SEIR.sim <- SEIR.sim %>% mutate(date = as.Date(day, origin = variable_params[i, ]$sim_start))
+SEIR.sim <- SEIR.sim %>% mutate(date = round(as.Date(day, origin = variable_params[i, ]$sim_start)))
 
 SEIR.sim <- SEIR.sim %>% 
   mutate(
