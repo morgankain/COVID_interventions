@@ -17,10 +17,10 @@ SCC = read.csv("./SantaClara_CumCases_20200317.csv", stringsAsFactors = F) %>%
 ##' @param lambda_a     1/time for asympomatic to recover
 ##' @param lambda_s     1/time for severely symptomatic to go to the hospital
 ##' @param lambda_m     1/time for minorly sympomatic to recover
-##' @param lambda_h     1/time  to leaving hospital  
+##' @param lambda_p     1/time  in pre-symptomatic  
 ##' @param delta        fraction of hospitalized cases that are fatal
 ##' @param mu           fraction of cases that are minor
-##' @param rho          1/time in pre-symptomatic 
+##' @param rho          1/time  to leaving hospital  
 ##' @param N            Population size
 ##' @param E0           initially exposed
 ##' @param intervention       1 is for social distancing, 2 is for threshhold based, currently thresh_H is based on

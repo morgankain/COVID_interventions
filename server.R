@@ -59,7 +59,7 @@ sir_step <- Csnippet("
                      }
                     
                      // calculate transition numbers
-                     double dSE = rbinom(S, 1-exp(-betat*(Ca*Ia/N + Cp*Ip/N + iso_m*Cm*Im/N + iso_s*Cs*Is/N)*dt)); 
+                     double dSE = rbinom(S, 1-exp(-betat*(iso_t*Ca*Ia/N + iso_t*Cp*Ip/N + iso_m*Cm*Im/N + iso_s*Cs*Is/N)*dt)); 
                      double rateE[2];
                      double dE_all[2];
                      rateE[0] = alpha*gamma; // going to asymtomatic
@@ -87,7 +87,7 @@ sir_step <- Csnippet("
                      
                      // update the compartments
                      S  -= dSE; // susceptible 
-                     E  += dSE - dEIa - dEIp; // exposed
+                     E  += dSE - dEIa - dEIp + dEi; // exposed, DEi:the number of imported "Exposed" cases daily
                      Ia += dEIa - dIaR; // infectious and asymptomatic
                      Ip += dEIp - dIpIs - dIpIm; // infectious and pre-symptomatic
                      Is += dIpIs - dIsH; // infectious and severe symptoms (that will be hospitalized)
