@@ -96,7 +96,7 @@ dmeas_hosp <- Csnippet("double tol = 1e-16;
 
 # parameters to transform
 par_trans = parameter_trans(log = c("beta0", "E_init"),
-                            logit = c("soc_dist_eff"))
+                            logit = c("soc_dist_level"))
 
 # variables that should be zeroed after each obs
 accum_names = c("D_new", "H_new")
