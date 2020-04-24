@@ -16,6 +16,14 @@ sir_step <- Csnippet("
                         iso_m = iso_mild_level;
                         iso_s = iso_severe_level;
                      }
+                     // if import rate is above zero, draw importations, assuming they are perfectly balanced with departures of susceptible individuals
+                     double import = 0;
+                     if(import_rate > 0){
+                      import = fmin(rpois(import_rate*dt), S);
+                     }
+                     // tracking of total imported, removing them them from susceptibles
+                     import_total += import;
+                     S -= import;
                     
                      // calculate transition numbers
                      double dSE = rbinom(S, 1-exp(-betat*(Ca*Ia/N + Cp*Ip/N + iso_m*Cm*Im/N + iso_s*Cs*Is/N)*dt)); 
@@ -29,52 +37,64 @@ sir_step <- Csnippet("
                      double dIaR = rbinom(Ia, 1 - exp(-lambda_a*dt));
                      double rateIp[2];
                      double dIp_all[2];
-                     rateIp[0] = mu*lambda_p; // going to minor symptomatic
-                     rateIp[1] = (1-mu)*lambda_p; // going to sever symptomatic
+                     rateIp[0] = mu*lambda_p; // going to mild symptomatic
+                     rateIp[1] = (1-mu)*lambda_p; // going to severe symptomatic
                      reulermultinom(2, Ip, rateIp, dt, &dIp_all);
                      double dIpIm = dIp_all[0];
                      double dIpIs = dIp_all[1];
-                     double dIsH = rbinom(Is, 1 - exp(-lambda_s*dt));
                      double dImR = rbinom(Im, 1 - exp(-lambda_m*dt));
-                     double rateH[2];
-                     double dH_all[2];
-                     rateH[0] = delta*rho;
-                     rateH[1] = (1-delta)*rho;
-                     reulermultinom(2, H, rateH, dt, &dH_all);
-                     double dHD = dH_all[0];
-                     double dHR = dH_all[1];
+                     
+                     
+                     double rateIs[2];
+                     double dIs_all[2];
+                     rateIs[0] = delta*lambda_s; // hospitalized ultimately going to death
+                     rateIs[1] = (1-delta)*lambda_s; // hospitalized ultimately going to recovered
+                     reulermultinom(2, Is, rateIs, dt, &dIs_all);
+                     double dIsHd = dIs_all[0];
+                     double dIsHr = dIs_all[1];
+                     double dHdD = rbinom(Hd, 1 - exp(-rho_d*dt));
+                     double dHrR = rbinom(Hr, 1 - exp(-rho_r*dt));
                      
                      // update the compartments
                      S  -= dSE; // susceptible 
-                     E  += dSE - dEIa - dEIp; // exposed
+                     E  += dSE - dEIa - dEIp + import; // exposed
                      Ia += dEIa - dIaR; // infectious and asymptomatic
                      Ip += dEIp - dIpIs - dIpIm; // infectious and pre-symptomatic
-                     Is += dIpIs - dIsH; // infectious and severe symptoms (that will be hospitalized)
+                     Is += dIpIs - dIsHd - dIsHr; // infectious and severe symptoms (that will be hospitalized)
                      Im += dIpIm - dImR; // infectious and minor symptoms
-                     H  += dIsH - dHD - dHR; // hospitalized
-                     R  += dHR + dImR + dIaR; // recovered
-                     D  += dHD; // fatalities
-                     D_new += dHD; // daily fatalities
-                     H_new += dIsH; // daily new hospitalizations
+                     I   = Ia + Ip + Im + Is; // total number of infected
+                     I_new_sympt += dIpIs + dIpIm; // total number of newly symptomatic
+                     Hr += dIsHr - dHrR; // hospitalized that will recover
+                     Hd += dIsHd - dHdD; // hospitalizations that will die
+                     H   = Hr + Hd; // total hospitalizations
+                     R  += dHrR + dImR + dIaR; // recovered
+                     D  += dHdD; // fatalities
+                     D_new += dHdD; // daily fatalities
+                     H_new += dIsHr + dIsHd; // daily new hospitalizations
                      if(intervention == 2 & H >= thresh_H_start) thresh_crossed = 1;
                      else if(intervention == 2 & thresh_crossed == 1 & H < thresh_H_end) thresh_crossed = 0;
                      ")
 
 # define the initial set up, currently, every is susceptible except the exposed people
 sir_init <- Csnippet("
-                     double E0 = rpois(E_init);    
+                     // double E0 = rpois(E_init);    
                      S = N-E0;
                      E = E0;
                      Ia = 0;
                      Ip = 0;
                      Is = 0;
                      Im = 0;
-                     H = 0;
+                     I = 0;
+                     I_new_sympt = 0;
+                     Hr = 0;
+                     Hd = 0;
+                     H = Hd + Hr;
                      R = 0;
                      D = 0;
                      D_new = 0;
                      H_new = 0;
                      thresh_crossed = 0;
+                     import_total = 0;
                      ")
 
 # define random simulator of measurement
@@ -95,19 +115,22 @@ dmeas_hosp <- Csnippet("double tol = 1e-16;
                   ")
 
 # parameters to transform
-par_trans = parameter_trans(log = c("beta0", "E_init"),
+par_trans = parameter_trans(log = c("beta0", "import_rate"), #, "E_init" for fitting initial number of cases
                             logit = c("soc_dist_level"))
 
 # variables that should be zeroed after each obs
-accum_names = c("D_new", "H_new")
+accum_names = c("D_new", "H_new", "I_new_sympt")
 
 # state variables
 state_names = c(
     "S" , "E" , "Ia"
   , "Ip", "Is", "Im"
-  , "R" , "H" ,"D" 
+  , "I" , "I_new_sympt"
+  , "H" , "Hr", "Hd"
+  , "R" , "D" 
   , "D_new", "H_new" 
   , "thresh_crossed"
+  , "import_total"
 )
 # parameter names
 param_names = c(
@@ -118,10 +141,11 @@ param_names = c(
   , "delta"
   , "gamma"
   , "lambda_a", "lambda_s", "lambda_m", "lambda_p"
-  , "rho"
+  , "rho_d", "rho_r"
   , "N"
-  , "E_init"
+  , "E0" #, "E_init"
   , "soc_dist_level"
+  , "import_rate"
 )
 
 ## R0 here just based on the simple transmission rate / recovery rate (weighted by the probability of going into different classes)
