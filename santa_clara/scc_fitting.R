@@ -127,11 +127,13 @@ library(foreach)
 library(doParallel)
 registerDoParallel(cores = 2)
 
+timecheck <- system.time({
+
 bake(file="local_search.rds",{
   foreach(i=1:2,.combine=c) %dopar%  
     {
-      library(pomp)
-      library(tidyverse)
+       library(pomp)
+       library(tidyverse)
       
       covid %>%
         mif2(
@@ -144,6 +146,8 @@ bake(file="local_search.rds",{
         )
     }
 }) -> mifs_local
+  
+})
 
 mifs_local %>%
   traces() %>%

@@ -2,10 +2,13 @@
 sir_step <- Csnippet("
                      // adjust betat for social distancing interventions
                      double betat;
-                     if(intervention == 2 & thresh_crossed == 1){ // 2 is for threshhold intervention
-                       betat =  beta0*thresh_int_level; 
-                     }
-                     else if(intervention == 1) betat = beta0*soc_dist_level; // 1 is for social distancing
+                     if (intervention == 2 & thresh_crossed == 1) { // 2 is for threshhold intervention
+                       betat = beta0*thresh_int_level; 
+                     } 
+    //                 else if (intervention == 2 & thresh_crossed == 0) {
+    //                   betat = beta0*back_int_level;
+    //                 } 
+                     else if (intervention == 1) betat = beta0*soc_dist_level; // 1 is for social distancing
                      else betat = beta0; // everything else is no intervention
                      
                      // adjust contact rates if isolation of symptomatic cases is in place
@@ -113,9 +116,9 @@ param_names = c(
 )
 
 ## R0 here just based on the simple transmission rate / recovery rate (weighted by the probability of going into different classes)
-covid_R0 <- function (beta0est, fixed_params, sd_strength) {
+covid_R0 <- function (beta0est, fixed_params, sd_strength, prop_S) {
 ## transmission rate
-    beta0est * sd_strength * 
+    beta0est * prop_S * sd_strength * 
     (                
 ## proportion * time in asymptomatic
       fixed_params["alpha"] * fixed_params["Ca"] * (1/fixed_params["lambda_a"]) +                  
