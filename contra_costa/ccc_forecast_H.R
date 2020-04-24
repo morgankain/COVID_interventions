@@ -46,7 +46,7 @@ lapply(needed_packages, require, character.only = TRUE)
 #  )
 
 ## Bring in pomp objects
-source("scc_pomp_objs.R")
+source("pomp_objs.R")
 
 ## Add in infected isolation? (contact tracing?)
 inf_iso <- TRUE
@@ -236,15 +236,6 @@ if (!inf_iso) {
   )
 
 })
-
-## small adjustments to the pomp objects for fitting to H
-rmeas <- Csnippet("double tol = 1e-16;
-                   ch = rpois(H + tol);
-                  ")
-# define evaluation of model prob density function
-dmeas <- Csnippet("double tol = 1e-16;
-                   lik = dpois(ch, H + tol, give_log);
-                  ")
 
 covid.fitting <- county.data %>%
   pomp(

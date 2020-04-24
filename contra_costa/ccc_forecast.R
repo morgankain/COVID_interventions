@@ -49,7 +49,7 @@ lapply(needed_packages, require, character.only = TRUE)
 #  )
 
 ## Bring in pomp objects
-source("scc_pomp_objs.R")
+source("../santa_clara/scc_pomp_objs.R")
 
 ## Add in infected isolation? (contact tracing?)
 inf_iso <- TRUE
@@ -60,8 +60,8 @@ inf_iso <- TRUE
 
 ## Think there may be problems with this on sherlock so just read in the previously downloaded data
 #deaths   <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
-deaths     <- read.csv("us-counties.txt")
-deaths     <- deaths %>% mutate(date = as.Date(date)) %>% filter(county == focal.county)
+deaths    <- read.csv("us-counties.txt")
+deaths    <- deaths %>% mutate(date = as.Date(date)) %>% filter(county == focal.county)
 
 ####
 ## Step 2: Establish a reasonable parameter set
