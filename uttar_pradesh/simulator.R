@@ -151,7 +151,7 @@ intervention.forecast <- with(variable_params[i, ], {
     } else if (inf_iso & !light) {
       rep(1, sim_length - (int_start2 - sim_start) - int_length2 + 1)  
     } else if (!inf_iso & light) {
-      rep(1, sim_length - (int_start2 - sim_start) - int_length2 + 1)        
+      rep(2, sim_length - (int_start2 - sim_start) - int_length2 + 1)        
     }
     }
   ) 
