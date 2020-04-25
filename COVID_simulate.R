@@ -6,10 +6,10 @@ set.seed(10001)
 fitting        <- FALSE  ## Small change in pomp objects if fitting or simulating
 nsim           <- 100    ## Number of epidemic simulations for each parameter set
 #### ONLY ONE AT A TIME ALLOWED RIGHT NOW
-inf_iso        <- FALSE  ## Do we ever reduce from shelter in place to some form of strong/moderate social distancing?
-light          <- TRUE   ## Lightswitch method
+inf_iso        <- TRUE   ## Do we ever reduce from shelter in place to some form of strong/moderate social distancing?
+light          <- FALSE  ## Lightswitch method
 red_shelt.t    <- 60     ## time shelter in place changes to a reduced form (inf_iso or light)
-red_shelt.s    <- 1      ## new social dist strength after time red_shelt.t
+red_shelt.s    <- 0.5    ## new social dist strength after time red_shelt.t
 thresh_H.start <- 15     ## Threshold when lightswtich turns on (when we get higher than this)
 thresh_H.end   <- 5      ## Threshold when lightswtich turns off (when we drop from above to this value)
 sim_length     <- 500    ## how many days to run the simulation
@@ -20,6 +20,7 @@ county.N       <- 1.938e6
 loglik.thresh  <- 2      ## Keep runs within top X loglik units
 params.all     <- TRUE   ## Keep all fitted parameters above loglik thresh?...
 nparams        <- 50     ## ...if FALSE, pick a random subset for speed
+state.plot     <- "D"    ## 
 
 ## Load the previously saved fits
 # variable_params  <- readRDS("output/time_series/variable_params_scc_21.Rds")
@@ -244,7 +245,7 @@ SEIR.sim.f <- SEIR.sim.f %>% mutate(C = Is + Im + H)
 ## Summary and plotting
 ####
 
-state.plot    <- "H"
+# state.plot    <- "H"
 
 SEIR.sim.f.m <- SEIR.sim.f %>% 
   dplyr::filter(.id == "median") %>% 

@@ -9,14 +9,14 @@ more.params.uncer <- FALSE    ## Fit with more (FALSE) or fewer (TRUE) point est
 usable.cores      <- 2        ## Number of cores to use to fit
 fit.with          <- "D"      ## Fit with D (deaths) or H (hospitalizations) (** H poorly supported right now)
 fit_to_sip        <- TRUE     ## Fit beta0 and shelter in place simultaneously?
-import_cases      <- TRUE     ## Use importation of cases?
+import_cases      <- FALSE    ## Use importation of cases?
 n.mif_runs        <- 2        ## mif2 fitting parameters
-n.mif_length      <- 40
+n.mif_length      <- 20
 n.mif_particles   <- 3000
 n.mif_rw.sd       <- 0.02
 focal.county      <- "Santa Clara"  ## County to fit to
 county.N          <- 1.938e6        ## County population size
-nparams           <- 400            ## number of parameter sobol samples (more = longer)
+nparams           <- 2              ## number of parameter sobol samples (more = longer)
 nsim              <- 200            ## number of simulations for each fitted beta0 for dynamics
 
 needed_packages <- c(
@@ -35,15 +35,13 @@ needed_packages <- c(
 lapply(needed_packages, require, character.only = TRUE)
 
 ## Be very careful here, adjust according to your machine
- ## Not acutally used in the script right now, but important for expanding pomp fits
- registerDoParallel(
-  cores = usable.cores
-  )
+registerDoParallel(cores = usable.cores)
 
 ## Bring in pomp objects
 source("COVID_pomp.R")
  
 if (fit.with == "D") {
+# deaths   <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
 deaths     <- read.csv("us-counties.txt")
 deaths     <- deaths %>% mutate(date = as.Date(date)) %>% filter(county == focal.county)
 deaths     <- deaths %>% dplyr::filter(date < max(date) - fit.minus)
@@ -79,14 +77,27 @@ sim_start  <- variable_params$sim_start
 sim_length <- 500
 sim_end    <- sim_start + sim_length
 
-## container for results
+## containers for results
 SEIR.sim.ss.t.ci <- data.frame(
   name     = character(0)
 , lwr      = numeric(0)
 , est      = numeric(0)
 , upr      = numeric(0)
-, paramset = numeric(0)
-)
+, paramset = numeric(0))
+
+if (fit_to_sip) {
+## beta0, soc_dist_level_sip, loglik
+param_array <- array(
+  data = 0
+, dim = c(nparams, n.mif_runs, 3))
+dimnames(param_array)[[3]] <- c("beta0", "soc_dist_level_sip", "loglik")
+} else {
+## beta0, loglik
+param_array <- array(
+  data = 0
+, dim = c(nparams, n.mif_runs, 2))  
+dimnames(param_array)[[3]] <- c("beta0", "loglik")
+}
 
 for (i in 1:nrow(variable_params)) {
 
@@ -250,7 +261,10 @@ library(dplyr)
 
 })
 
-variable_params[i, "soc_dist_level_sip"] <- mean(coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "soc_dist_level_sip"), ])
+if (fit_to_sip) {
+ variable_params[i, "soc_dist_level_sip"] <- mean(coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "soc_dist_level_sip"), ])
+ param_array[i,,"soc_dist_level_sip"]     <- coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "soc_dist_level_sip"), ]
+ }
 
 } else {
   
@@ -310,14 +324,16 @@ gg.fit <- mifs_local %>%
   theme_bw()
 
 ## !! Still not using uncertainty in beta which should be corrected soon
-variable_params[i, "beta0est"]           <- mean(coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "beta0"), ])
- 
+variable_params[i, "beta0est"] <- mean(coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "beta0"), ])
+param_array[i,,"beta0"]        <- coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "beta0"), ] 
+
 loglik.out    <- numeric(length(mifs_local))
 for (k in seq_along(loglik.out)) {
 loglik.out[k] <- mifs_local[[k]]@loglik
 }
 
 variable_params[i, "log_lik"]  <- mean(loglik.out)
+param_array[i,,"loglik"]       <- loglik.out
 
 SEIR.sim <- do.call(
   pomp::simulate
@@ -447,16 +463,30 @@ variable_params[i, ]$R0 <- with(variable_params[i, ], covid_R0(
   , sd_strength = 1, prop_S = 1))
 
 if (((i / 20) %% 1) == 0) {
- saveRDS(variable_params, paste(paste("output/variable_params_scc_Apr24_temp_", fit.minus, sep = ""), "Rds", sep = "."))
- saveRDS(SEIR.sim.ss.t.ci, paste(paste("output/SEIR.sim.ss.t.ci_scc_Apr24_temp_", fit.minus, sep = ""), "Rds", sep = "."))
+ saveRDS(
+   list(
+    variable_params  = variable_params
+  , fixed_params     = fixed_params
+  , dynamics_summary = SEIR.sim.ss.t.ci
+  , param_array      = param_array
+   ), paste(
+     paste("output/"
+       , paste(focal.county, fit_to_sip, more.params.uncer, fit.minus, Sys.Date(), "temp", sep = "_")
+         , sep = "")
+     , "Rds", sep = "."))
 }
 
-#saveRDS(checktime8, "checktime8.Rds")
-#saveRDS(gg.fit, "gg.fit.Rds")
-#saveRDS(SEIR.sim.ss.t.ci, "SEIR.sim.ss.t.ci.Rds")
-
 }
 
-saveRDS(variable_params, paste(paste("output/variable_params_scc_Apr24_final_", fit.minus, sep = ""), "Rds", sep = "."))
-saveRDS(SEIR.sim.ss.t.ci, paste(paste("output/SEIR.sim.ss.t.ci_scc_Apr24_final_", fit.minus, sep = ""), "Rds", sep = "."))
+ saveRDS(
+   list(
+    variable_params  = variable_params
+  , fixed_params     = fixed_params
+  , dynamics_summary = SEIR.sim.ss.t.ci
+  , param_array      = param_array
+   ), paste(
+     paste("output/"
+       , paste(focal.county, fit_to_sip, more.params.uncer, fit.minus, Sys.Date(), "final", sep = "_")
+         , sep = "")
+     , "Rds", sep = "."))
  
