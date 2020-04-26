@@ -5,6 +5,29 @@
 ## Note: No fits here, just using parameter ranges and simulations
 
 ####
+## Adjustable parameters
+###################################
+
+county.N      <- 232882078     ## pop size
+lockdown.eff  <- c(0.05, 0.30) ## expected efficiency range of lockdown. Proportion of baseline contacts
+                               ## Interventions. Only one at a time, TRUE + TRUE will break
+epidemic_start <- c(40, 50)    ## Days since Jan 1 when we expect the epidemic to have started
+
+inf_iso       <- TRUE          ## Reduce from shelter in place to some form of strong/moderate social distancing?
+light         <- FALSE         ## Reduce from shelter in place to lightswitch
+red_shelt.t   <- as.Date("2020/05/03") ## Day inf_iso or light begin
+red_shelt.s   <- 0.65          ## strength of the new contact amount after red_shelt.t time elapsed since the start of shelter in place (proportion of baseline)
+len.on        <- 21            ## length the intervention stays on for the lightswitch method
+len.off       <- 21            ## length the intervention turns off during lightswitch
+nsim          <- 100           ## number of epidemic simulations for each parameter set
+sim_length    <- 500           ## how many days to run the simulation
+state.plot    <- "D"           ## State variable for plotting (Hospit [H], Death [D], or Cases [C])
+plot.log10    <- TRUE          ## log10 scale or not
+nparams       <- 50            ## number of parameter combinations
+
+###################################
+
+####
 ## Setup stuff
 ####
 
@@ -15,42 +38,6 @@ source("../ggplot_theme.R")
 
 ## Bring in pomp objects
 source("pomp_objs.R")
-
-####
-## Parameters
-###################################
-
- ## pop size
-county.N      <- 232882078
- ## expected efficiency range of lockdown
-lockdown.eff  <- c(0.05, 0.30)
-  ## Do we ever reduce from shelter in place to some form of strong/moderate social distancing?
-inf_iso       <- TRUE
- ## time shelter in place changes to a reduced form with infected isolation
-  ## ignored if inf_iso = FALSE & light = FALSE
-red_shelt.t   <- as.Date("2020/05/03")
- ## strength of the new contact amount after red_shelt.t time elapsed since the start of shelter in place (proportion of baseline)
-red_shelt.s   <- 0.65
- ## Only one at a time of inf_iso and light allowed for now but could combine
-light         <- FALSE
- ## length the intervention stays on for the lightswitch method
-len.on        <- 21
- ## length the intervention turns off during lightswitch
-len.off       <- 21
- ## number of epidemic simulations for each parameter set
-nsim          <- 100
- ## how many days to run the simulation
-sim_length    <- 500
-  ## !! Don't use H for UP, no H data available
- ## State variable for plotting (Hospit, Death, or Cases)
-   ## if H, D, or C plot H, D or C from the data on the plot
-state.plot    <- "D"
- ## log10 scale or not
-plot.log10    <- TRUE
- ## number of parameter combinations
-nparams       <- 50
-
-###################################
 
 ## Load the current Contra Costa H for plotting purposes 
 confirmed <- read.csv("confirmed.csv") %>% dplyr::select(UP, date)
@@ -85,13 +72,13 @@ variable_params.fit <- variable_params.fit %>%
 variable_params <- sobolDesign(
   lower = c(
     E0          = 3
-  , sim_start   = 40
+  , sim_start   = epidemic_start[1]
   , sd_m2       = lockdown.eff[1]
   , beta0est    = mean(variable_params.fit$beta0) - sd(variable_params.fit$beta0) 
   )
 , upper = c(
     E0          = 3
-  , sim_start   = 50
+  , sim_start   = epidemic_start[2]
   , sd_m2       = lockdown.eff[2]
   , beta0est    = mean(variable_params.fit$beta0) + sd(variable_params.fit$beta0) 
 )
@@ -120,8 +107,7 @@ variable_params <- variable_params %>%
 
 for (i in 1:nrow(variable_params)) {
   
-county.data <- dead %>% 
-  mutate(day = round(as.numeric(date - variable_params[i, ]$sim_start)))
+county.data <- dead %>% mutate(day = round(as.numeric(date - variable_params[i, ]$sim_start)))
   
 county.data <- rbind(
   data.frame(
@@ -208,8 +194,8 @@ if (!inf_iso & !light) {
   
   }
   
-, thresh_H_start   = rep(thresh.H.start, sim_length)  
-, thresh_H_end     = rep(thresh.H.end, sim_length)
+, thresh_H_start   = rep(NA, sim_length)  
+, thresh_H_end     = rep(NA, sim_length)
    
 # level of social distancing implemented with the threshhold intervention
 , thresh_int_level = rep(sd_m2, sim_length)
@@ -255,10 +241,7 @@ SEIR.sim <- do.call(
 
 SEIR.sim <- SEIR.sim %>% mutate(date = round(as.Date(day, origin = variable_params[i, ]$sim_start)))
 
-SEIR.sim <- SEIR.sim %>% 
-  mutate(
-    paramset = variable_params[i, ]$paramset
-  )
+SEIR.sim <- SEIR.sim %>% mutate(paramset = variable_params[i, ]$paramset)
 
 if (i == 1) {
   
@@ -277,12 +260,10 @@ if (((i / 20) %% 1) == 0) {
 }
 
 ## because of the staggered start dates there is some oddity at the end of the simulation
-SEIR.sim.f <- SEIR.sim.f %>% 
-  filter(date < min(variable_params$sim_start + sim_length))
+SEIR.sim.f <- SEIR.sim.f %>% filter(date < min(variable_params$sim_start + sim_length))
 
 ## summary of observable cases to plot against case data in the county
-SEIR.sim.f <- SEIR.sim.f %>% 
-  mutate(C = Is + Im + H)
+SEIR.sim.f <- SEIR.sim.f %>% mutate(C = Is + Im + H)
 
 ####
 ## Summary and plotting
@@ -298,9 +279,9 @@ SEIR.sim.f.s <- SEIR.sim.f %>%
   dplyr::filter(.id != "median") %>%
   dplyr::group_by(date) %>%
   dplyr::summarize(
-    lwr = quantile(get(state.plot), c(0.025))
+    lwr = quantile(get(state.plot), c(0.050))
   , est = quantile(get(state.plot), c(0.50))
-  , upr = quantile(get(state.plot), c(0.975)))
+  , upr = quantile(get(state.plot), c(0.95)))
 
 if (inf_iso & !light) {
   plot.title <- paste("Relax shelter in place to", red_shelt.s, "of baseline contacts on", red_shelt.t, sep = " ")

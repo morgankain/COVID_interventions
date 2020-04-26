@@ -126,7 +126,8 @@ county.data <- rbind(
   
 ## Adjust the data for the current start date
 county.data <- hospit %>% mutate(day = as.numeric(date - variable_params[i, ]$sim_start)) 
-  
+names(county.data)[2] <- "hosp"  
+
 }
 
 ## Create intervention covariate table for the full forecast

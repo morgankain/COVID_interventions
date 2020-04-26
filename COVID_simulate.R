@@ -6,7 +6,7 @@ set.seed(10001)
 fitting        <- FALSE  ## Small change in pomp objects if fitting or simulating
 nsim           <- 100    ## Number of epidemic simulations for each parameter set
 #### ONLY ONE AT A TIME ALLOWED RIGHT NOW
-inf_iso        <- TRUE   ## Do we ever reduce from shelter in place to some form of strong/moderate social distancing?
+inf_iso        <- TRUE  ## Do we ever reduce from shelter in place to some form of strong/moderate social distancing?
 light          <- FALSE  ## Lightswitch method
 red_shelt.t    <- 60     ## time shelter in place changes to a reduced form (inf_iso or light)
 red_shelt.s    <- 0.5    ## new social dist strength after time red_shelt.t
@@ -14,16 +14,20 @@ thresh_H.start <- 15     ## Threshold when lightswtich turns on (when we get hig
 thresh_H.end   <- 5      ## Threshold when lightswtich turns off (when we drop from above to this value)
 sim_length     <- 500    ## how many days to run the simulation
 state.plot     <- "H"    ## State variable for plotting (Hospit [H], Death [D], or Cases [C])
-plot.log10     <- TRUE   ## log10 scale or not
-focal.county   <- "Santa Clara"
-county.N       <- 1.938e6
+focal.county   <- "Contra Costa"
+# county.N     <- 1.938e6
+county.N       <- 1.147e6        ## County population size
 loglik.thresh  <- 2      ## Keep runs within top X loglik units
 params.all     <- TRUE   ## Keep all fitted parameters above loglik thresh?...
-nparams        <- 50     ## ...if FALSE, pick a random subset for speed
-state.plot     <- "D"    ## 
+nparams        <- 200    ## ...if FALSE, pick a random subset for speed
+state.plot     <- "H"    ## 
+plot.log10     <- FALSE  ## log10 scale or not
+fit.with       <- "H"
+fit.minus      <- 0        ## Use data until X days prior to the present
 
 ## Load the previously saved fits
-# variable_params  <- readRDS("output/time_series/variable_params_scc_21.Rds")
+# prev.fit         <- readRDS("output/Santa Clara_TRUE_FALSE_0_2020-04-25_final.rds")
+# variable_params  <- prev.fit[["variable_params"]]
 
 ## Search !! for next steps
 needed_packages <- c(
@@ -44,8 +48,25 @@ source("ggplot_theme.R")
 source("COVID_pomp.R")
 
 #deaths <- read.csv("us-counties.txt")
-#deaths  <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
-#deaths  <- deaths %>% mutate(date = as.Date(date)) %>% filter(county == focal.county)
+#deaths <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
+#deaths <- deaths %>% mutate(date = as.Date(date)) %>% filter(county == focal.county)
+
+if (fit.with == "D") {
+# deaths   <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
+deaths     <- read.csv("us-counties.txt")
+deaths     <- deaths %>% mutate(date = as.Date(date)) %>% filter(county == focal.county)
+deaths     <- deaths %>% dplyr::filter(date < max(date) - fit.minus)
+} else if (fit.with == "H") {
+## !! Not supported right now for SCC, but placing here for completeness
+   ## !! Right now only usable for CCC
+hospit     <- read.csv("contra_costa/ccc_data.csv")
+hospit     <- hospit %>% 
+  mutate(date = as.Date(REPORT_DATE)) %>% 
+  filter(CURRENT_HOSPITALIZED != "NULL") %>% 
+  mutate(ch = as.numeric(as.character(CURRENT_HOSPITALIZED))) %>% 
+  dplyr::select(date, ch)
+hospit    <- hospit %>% dplyr::filter(date < max(date) - fit.minus)  
+}
 
 params <- read.csv("params.csv", stringsAsFactors = FALSE)
 params <- params %>% mutate(Value = sapply(est, function(x) eval(parse(text = x))))
@@ -83,6 +104,8 @@ SEIR.sim.ss.t.ci <- data.frame(
 
 for (i in 1:nrow(variable_params)) {
   
+if (fit.with == "D") {
+  
 ## Adjust the data for the current start date
 county.data <- deaths %>% 
   mutate(day = as.numeric(date - variable_params[i, ]$sim_start)) %>% 
@@ -101,6 +124,14 @@ county.data <- rbind(
   )
 , county.data
   )
+
+} else {
+  
+## Adjust the data for the current start date
+county.data <- hospit %>% mutate(day = as.numeric(date - variable_params[i, ]$sim_start))   
+names(county.data)[2] <- "hosp"  
+
+}
 
 ## Create intervention covariate table for the full forecast
 intervention.forecast <- with(variable_params[i, ], {
@@ -169,8 +200,12 @@ covid.fitting <- county.data %>%
   , t0         = 1
   , covar      = intervention.forecast
   , rprocess   = euler(sir_step, delta.t = 1/6)
-  , rmeasure   = rmeas_deaths 
-  , dmeasure   = dmeas_deaths
+  , rmeasure   = { 
+   if (fit.with == "D") { rmeas_deaths } else if (fit.with == "H") { rmeas_hosp }
+  }
+  , dmeasure   = {
+   if (fit.with == "D") { dmeas_deaths } else if (fit.with == "H") { dmeas_hosp }
+  }
   , rinit      = sir_init
   , partrans   = par_trans
   , accumvars  = accum_names
@@ -245,7 +280,7 @@ SEIR.sim.f <- SEIR.sim.f %>% mutate(C = Is + Im + H)
 ## Summary and plotting
 ####
 
-# state.plot    <- "H"
+state.plot    <- "H"
 
 SEIR.sim.f.m <- SEIR.sim.f %>% 
   dplyr::filter(.id == "median") %>% 
@@ -258,9 +293,9 @@ SEIR.sim.f.s <- SEIR.sim.f %>%
 #    lwr = quantile(get(state.plot), c(0.025))
 #  , est = quantile(get(state.plot), c(0.50))
 #  , upr = quantile(get(state.plot), c(0.975))
-    lwr = quantile(get(state.plot), c(0.10))
+    lwr = quantile(get(state.plot), c(0.05))
   , est = quantile(get(state.plot), c(0.50))
-  , upr = quantile(get(state.plot), c(0.90))
+  , upr = quantile(get(state.plot), c(0.95))
   )
 
 if (inf_iso & !light) {
@@ -273,10 +308,10 @@ if (inf_iso & !light) {
 }
 
 gg.1 <- ggplot(SEIR.sim.f.s) + 
-  geom_line(aes(x = date, y = est), colour = "dodgerblue4", lwd = 1.5) + 
   geom_ribbon(aes(x = date, ymin = lwr, ymax = upr), colour = NA, fill = "dodgerblue4", alpha = 0.25) +
   geom_line(data = SEIR.sim.f.m, aes(x = date, y = get(state.plot), group = paramset), colour = "grey50", alpha = 0.35) +
   scale_x_date(labels = date_format("%Y-%b"), date_breaks = "1 month") +
+  geom_line(aes(x = date, y = est), colour = "dodgerblue4", lwd = 1.5) + 
   xlab("Date") + 
   ylab(state.plot) +
   guides(color = FALSE) +
@@ -293,7 +328,7 @@ gg.1 <- gg.1 + scale_y_log10()
 
 ## No hospit data 
 if (state.plot == "H") {
-#  (gg.1 <- gg.1 + geom_point(data = hospit , aes(date, ch)))
+  (gg.1 <- gg.1 + geom_point(data = county.data, aes(date, hosp)))
   gg.1
 } else if (state.plot == "D") {
   (gg.1 <- gg.1 + geom_point(data = deaths, aes(date, deaths)))

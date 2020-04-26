@@ -1,6 +1,6 @@
 fixed_params        <- fixed_params[-c(1, 5, 11, 12)]
 
- ## parameters that will vary
+## parameters that will vary
 variable_params <- sobolDesign(
   lower = c(
     E0          = 3
@@ -20,7 +20,7 @@ variable_params <- sobolDesign(
   , int_start1  = 69
   , int_length2 = 120
   , soc_dist_level_wfh       = 0.9
-  , soc_dist_level_sip = ifelse(!fit_to_sip, 0.30, NA)
+  , soc_dist_level_sip = ifelse(!fit_to_sip, 0.40, NA)
   , Ca          = params[params$Parameter == "Ca", ]$upr
   , alpha       = params[params$Parameter == "alpha", ]$upr
   , delta       = params[params$Parameter == "delta", ]$upr
