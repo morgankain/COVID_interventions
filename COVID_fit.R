@@ -218,6 +218,8 @@ covid.fitting <- county.data %>%
   , paramnames = param_names
   , statenames = state_names) 
 
+if (variable_params[i, ]$beta0est == 0) {
+
 if (!more.params.uncer) {
 
 checktime <- system.time({
@@ -313,7 +315,7 @@ library(dplyr)
 })  
   
 }
-
+  
 gg.fit <- mifs_local %>%
   traces() %>%
   melt() %>%
@@ -335,6 +337,8 @@ loglik.out[k] <- mifs_local[[k]]@loglik
 
 variable_params[i, "log_lik"]  <- mean(loglik.out)
 param_array[i,,"loglik"]       <- loglik.out
+
+}
 
 SEIR.sim <- do.call(
   pomp::simulate
