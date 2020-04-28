@@ -4,9 +4,11 @@
 
 set.seed(10001)
 fitting        <- FALSE  ## Small change in pomp objects if fitting or simulating
+use.rds        <- TRUE
+rds.name       <- "output/Contra Costa_TRUE_FALSE_0_2020-04-27_temp.Rds"
 nsim           <- 100    ## Number of epidemic simulations for each parameter set
 #### ONLY ONE AT A TIME ALLOWED RIGHT NOW
-inf_iso        <- TRUE  ## Do we ever reduce from shelter in place to some form of strong/moderate social distancing?
+inf_iso        <- TRUE   ## Do we ever reduce from shelter in place to some form of strong/moderate social distancing?
 light          <- FALSE  ## Lightswitch method
 red_shelt.t    <- 60     ## time shelter in place changes to a reduced form (inf_iso or light)
 red_shelt.s    <- 0.5    ## new social dist strength after time red_shelt.t
@@ -24,10 +26,6 @@ state.plot     <- "H"    ##
 plot.log10     <- FALSE  ## log10 scale or not
 fit.with       <- "H"
 fit.minus      <- 0        ## Use data until X days prior to the present
-
-## Load the previously saved fits
-# prev.fit         <- readRDS("output/Santa Clara_TRUE_FALSE_0_2020-04-25_final.rds")
-# variable_params  <- prev.fit[["variable_params"]]
 
 ## Search !! for next steps
 needed_packages <- c(
@@ -68,13 +66,23 @@ hospit     <- hospit %>%
 hospit    <- hospit %>% dplyr::filter(date < max(date) - fit.minus)  
 }
 
-params <- read.csv("params.csv", stringsAsFactors = FALSE)
-params <- params %>% mutate(Value = sapply(est, function(x) eval(parse(text = x))))
+## Load the previously saved fits
+if (use.rds) {
+prev.fit         <- readRDS(rds.name)
+variable_params  <- prev.fit[["variable_params"]]
+fixed_params     <- prev.fit[["fixed_params"]]
+} else {
+## use fits that were just run with COVID_fit.R. and do nothing here
 
-fixed_params        <- params$Value
-names(fixed_params) <- params$Parameter
+#params <- read.csv("params.csv", stringsAsFactors = FALSE)
+#params <- params %>% mutate(Value = sapply(est, function(x) eval(parse(text = x))))
 
-fixed_params        <- c(fixed_params, N = county.N)
+#fixed_params        <- params$Value
+#names(fixed_params) <- params$Parameter
+
+#fixed_params        <- c(fixed_params, N = county.N) 
+  
+}
 
 ## drop the rows that have 0s for likelihood (didnt' run) and keep only the "best" fits
 variable_params <- variable_params %>% 
@@ -92,15 +100,6 @@ variable_params <- variable_params %>%
 if (!params.all) {
   variable_params <- variable_params[sample(1:nrow(variable_params), nparams), ]
 }
-
-## container for results
-SEIR.sim.ss.t.ci <- data.frame(
-  name     = character(0)
-, lwr      = numeric(0)
-, est      = numeric(0)
-, upr      = numeric(0)
-, paramset = numeric(0)
-)
 
 for (i in 1:nrow(variable_params)) {
   
@@ -231,6 +230,8 @@ SEIR.sim <- do.call(
     , alpha              = variable_params[i, ]$alpha
     , delta              = variable_params[i, ]$delta
     , mu                 = variable_params[i, ]$mu
+#    , rho_d              = variable_params[i, ]$rho_d
+#    , rho_r              = variable_params[i, ]$rho_r
       ))
     , nsim         = nsim
     , format       = "d"
@@ -329,9 +330,9 @@ gg.1 <- gg.1 + scale_y_log10()
 ## No hospit data 
 if (state.plot == "H") {
   (gg.1 <- gg.1 + geom_point(data = county.data, aes(date, hosp)))
-  gg.1
 } else if (state.plot == "D") {
   (gg.1 <- gg.1 + geom_point(data = deaths, aes(date, deaths)))
 } else if (state.plot == "C") {
-#  (gg.1 <- gg.1 + geom_point(data = confirmed, aes(date, cases)))
+# (gg.1 <- gg.1 + geom_point(data = confirmed, aes(date, cases)))
+  gg.1
 }
