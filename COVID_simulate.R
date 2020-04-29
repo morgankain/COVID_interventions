@@ -3,31 +3,32 @@
 ##################################################################
 
 set.seed(10001)
-fitting        <- FALSE  ## Small change in pomp objects if fitting or simulating
+fitting        <- FALSE   ## Small change in pomp objects if fitting or simulating
 use.rds        <- TRUE
 rds.name       <- "output/Contra Costa_TRUE_FALSE_0_2020-04-27_temp.Rds"
-nsim           <- 100    ## Number of epidemic simulations for each parameter set
+nsim           <- 300     ## Number of epidemic simulations for each parameter set
 #### ONLY ONE AT A TIME ALLOWED RIGHT NOW
-inf_iso        <- TRUE   ## Do we ever reduce from shelter in place to some form of strong/moderate social distancing?
-light          <- FALSE  ## Lightswitch method
-red_shelt.t    <- 60     ## time shelter in place changes to a reduced form (inf_iso or light)
-red_shelt.s    <- 0.5    ## new social dist strength after time red_shelt.t
-thresh_H.start <- 15     ## Threshold when lightswtich turns on (when we get higher than this)
-thresh_H.end   <- 5      ## Threshold when lightswtich turns off (when we drop from above to this value)
-sim_length     <- 500    ## how many days to run the simulation
-state.plot     <- "H"    ## State variable for plotting (Hospit [H], Death [D], or Cases [C])
+inf_iso        <- FALSE   ## Do we ever reduce from shelter in place to some form of strong/moderate social distancing?
+light          <- TRUE    ## Lightswitch method
+red_shelt.t    <- 76      ## time shelter in place changes to a reduced form (inf_iso or light) -- Now June 1
+red_shelt.s    <- 0.5     ## new social dist strength after time red_shelt.t
+thresh_H.start <- 15      ## Threshold when lightswtich turns on (when we get higher than this)
+thresh_H.end   <- 5       ## Threshold when lightswtich turns off (when we drop from above to this value)
+sim_length     <- 500     ## how many days to run the simulation
+state.plot     <- "H"     ## State variable for plotting (Hospit [H], Death [D], or Cases [C])
 focal.county   <- "Contra Costa"
-# county.N     <- 1.938e6
-county.N       <- 1.147e6        ## County population size
-loglik.thresh  <- 2      ## Keep runs within top X loglik units
-params.all     <- TRUE   ## Keep all fitted parameters above loglik thresh?...
-nparams        <- 200    ## ...if FALSE, pick a random subset for speed
-state.plot     <- "H"    ## 
-plot.log10     <- FALSE  ## log10 scale or not
+#county.N       <- 1.938e6
+county.N      <- 1.147e6 ## County population size
+loglik.thresh  <- 2       ## Keep runs within top X loglik units
+params.all     <- TRUE    ## Keep all fitted parameters above loglik thresh?...
+nparams        <- 100     ## ...if FALSE, pick a random subset for speed
+plot.log10     <- FALSE   ## log10 scale or not
 fit.with       <- "H"
-fit.minus      <- 0        ## Use data until X days prior to the present
+fit.minus      <- 0       ## Use data until X days prior to the present
 
-## Search !! for next steps
+test_and_isolate_s <- 0.1 ## Additional proportional reduction of severe cases under test and isolate
+test_and_isolate_m <- 0.15 ## Additional proportional reduction of mild cases under test and isolate
+  
 needed_packages <- c(
     "pomp"
   , "plyr"
@@ -37,8 +38,7 @@ needed_packages <- c(
   , "scales"
   , "lubridate"
   , "tidyr"
-  , "data.table"
-)
+  , "data.table")
 
 lapply(needed_packages, require, character.only = TRUE)
 
@@ -87,7 +87,11 @@ fixed_params     <- prev.fit[["fixed_params"]]
 ## drop the rows that have 0s for likelihood (didnt' run) and keep only the "best" fits
 variable_params <- variable_params %>% 
   filter(log_lik != 0) %>% 
+# filter(log_lik == max(log_lik))
   filter(log_lik > (max(log_lik) - loglik.thresh))
+
+## for preprint plot counterfactual
+# variable_params <- variable_params %>% mutate(int_start2 = int_start2 + 7) 
 
 ## Adjust variable params for the simulation scenario
 variable_params <- variable_params %>% 
@@ -100,6 +104,9 @@ variable_params <- variable_params %>%
 if (!params.all) {
   variable_params <- variable_params[sample(1:nrow(variable_params), nparams), ]
 }
+
+## debug
+# variable_params$soc_dist_level_sip <- 0.2
 
 for (i in 1:nrow(variable_params)) {
   
@@ -171,8 +178,8 @@ if (!inf_iso) {
   )
   
 }}
-, iso_severe_level = rep(0, sim_length)      # % of contats that severe cases maintain
-, iso_mild_level   = rep(0.05, sim_length)   # % of contats that mild cases maintain
+, iso_severe_level = rep(test_and_isolate_s, sim_length)      # % of contats that severe cases maintain
+, iso_mild_level   = rep(test_and_isolate_m, sim_length)   # % of contats that mild cases maintain
 , soc_dist_level_wfh = rep(soc_dist_level_wfh, sim_length) 
 , soc_dist_level_sip = {
 if (!inf_iso) {
@@ -230,8 +237,8 @@ SEIR.sim <- do.call(
     , alpha              = variable_params[i, ]$alpha
     , delta              = variable_params[i, ]$delta
     , mu                 = variable_params[i, ]$mu
-#    , rho_d              = variable_params[i, ]$rho_d
-#    , rho_r              = variable_params[i, ]$rho_r
+   , rho_d              = variable_params[i, ]$rho_d
+   , rho_r              = variable_params[i, ]$rho_r
       ))
     , nsim         = nsim
     , format       = "d"
@@ -275,7 +282,6 @@ SEIR.sim.f <- SEIR.sim.f %>% filter(date < min(variable_params$sim_start + sim_l
 
 ## summary of observable cases to plot against case data in the county
 SEIR.sim.f <- SEIR.sim.f %>% mutate(C = Is + Im + H)
-
 
 ####
 ## Summary and plotting
@@ -321,7 +327,6 @@ gg.1 <- ggplot(SEIR.sim.f.s) +
   , legend.title = element_text(size = 12)
   , plot.title = element_text(size = 12)) +
   ggtitle(plot.title) 
-
 
 if (plot.log10) {
 gg.1 <- gg.1 + scale_y_log10()
