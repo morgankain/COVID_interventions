@@ -4,30 +4,31 @@
 
 set.seed(10001)
 fitting        <- FALSE   ## Small change in pomp objects if fitting or simulating
-use.rds        <- TRUE
-rds.name       <- "output/Contra Costa_TRUE_FALSE_0_2020-04-27_temp.Rds"
+use.rds        <- TRUE    ## TRUE if COVID_fit previously run,
+                          ## FALSE if COVID_fit just run and all still in environment
+rds.name       <- "output/Santa Clara_TRUE_FALSE_0_2020-04-25_final.Rds"
 nsim           <- 300     ## Number of epidemic simulations for each parameter set
 #### ONLY ONE AT A TIME ALLOWED RIGHT NOW
-inf_iso        <- FALSE   ## Do we ever reduce from shelter in place to some form of strong/moderate social distancing?
-light          <- TRUE    ## Lightswitch method
+inf_iso        <- TRUE    ## Do we ever reduce from shelter in place to some form of strong/moderate social distancing?
+light          <- FALSE   ## Lightswitch method
 red_shelt.t    <- 76      ## time shelter in place changes to a reduced form (inf_iso or light) -- Now June 1
-red_shelt.s    <- 0.5     ## new social dist strength after time red_shelt.t
+red_shelt.s    <- 0.4     ## new social dist strength after time red_shelt.t
 thresh_H.start <- 15      ## Threshold when lightswtich turns on (when we get higher than this)
 thresh_H.end   <- 5       ## Threshold when lightswtich turns off (when we drop from above to this value)
 sim_length     <- 500     ## how many days to run the simulation
-state.plot     <- "H"     ## State variable for plotting (Hospit [H], Death [D], or Cases [C])
-focal.county   <- "Contra Costa"
+state.plot     <- "D"     ## State variable for plotting (Hospit [H], Death [D], or Cases [C])
+focal.county   <- "New York City"
+## !!! Now contained within location_params.csv
 #county.N       <- 1.938e6
-county.N      <- 1.147e6 ## County population size
 loglik.thresh  <- 2       ## Keep runs within top X loglik units
 params.all     <- TRUE    ## Keep all fitted parameters above loglik thresh?...
-nparams        <- 100     ## ...if FALSE, pick a random subset for speed
+nparams        <- 50      ## ...if FALSE, pick a random subset for speed
 plot.log10     <- FALSE   ## log10 scale or not
-fit.with       <- "H"
+fit.with       <- "D"
 fit.minus      <- 0       ## Use data until X days prior to the present
 
-test_and_isolate_s <- 0.1 ## Additional proportional reduction of severe cases under test and isolate
-test_and_isolate_m <- 0.15 ## Additional proportional reduction of mild cases under test and isolate
+test_and_isolate_s <- 0.2 ## Additional proportional reduction of severe cases under test and isolate
+test_and_isolate_m <- 0.2 ## Additional proportional reduction of mild cases under test and isolate
   
 needed_packages <- c(
     "pomp"
@@ -38,16 +39,13 @@ needed_packages <- c(
   , "scales"
   , "lubridate"
   , "tidyr"
-  , "data.table")
+  , "data.table"
+  )
 
 lapply(needed_packages, require, character.only = TRUE)
 
 source("ggplot_theme.R")
 source("COVID_pomp.R")
-
-#deaths <- read.csv("us-counties.txt")
-#deaths <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
-#deaths <- deaths %>% mutate(date = as.Date(date)) %>% filter(county == focal.county)
 
 if (fit.with == "D") {
 # deaths   <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
@@ -90,8 +88,11 @@ variable_params <- variable_params %>%
 # filter(log_lik == max(log_lik))
   filter(log_lik > (max(log_lik) - loglik.thresh))
 
-## for preprint plot counterfactual
+## for preprint counterfactuals and other scenarios
+# 1) Start later
 # variable_params <- variable_params %>% mutate(int_start2 = int_start2 + 7) 
+# 2) adjustment to social distancing strength
+# variable_params <- variable_params %>% mutate(soc_dist_level_sip = 0.2)
 
 ## Adjust variable params for the simulation scenario
 variable_params <- variable_params %>% 
@@ -101,12 +102,12 @@ variable_params <- variable_params %>%
   , soc_dist_level_red = red_shelt.s
   ) 
 
+## Debugging stuff for preprint
+# variable_params <- variable_params %>% mutate(int_length2 = as.numeric((sim_start + 500) - int_start2 - 1))
+
 if (!params.all) {
   variable_params <- variable_params[sample(1:nrow(variable_params), nparams), ]
 }
-
-## debug
-# variable_params$soc_dist_level_sip <- 0.2
 
 for (i in 1:nrow(variable_params)) {
   
@@ -115,11 +116,11 @@ if (fit.with == "D") {
 ## Adjust the data for the current start date
 county.data <- deaths %>% 
   mutate(day = as.numeric(date - variable_params[i, ]$sim_start)) %>% 
-  select(day, date, deaths) %>% 
+  dplyr::select(day, date, deaths) %>% 
   mutate(deaths_cum = deaths) %>% 
   mutate(deaths = deaths_cum - lag(deaths_cum)) %>% 
   replace_na(list(deaths = 0)) %>%
-  select(-deaths_cum)
+  dplyr::select(-deaths_cum)
   
 ## Add days from the start of the sim to the first recorded day in the dataset
 county.data <- rbind(
@@ -237,8 +238,8 @@ SEIR.sim <- do.call(
     , alpha              = variable_params[i, ]$alpha
     , delta              = variable_params[i, ]$delta
     , mu                 = variable_params[i, ]$mu
-   , rho_d              = variable_params[i, ]$rho_d
-   , rho_r              = variable_params[i, ]$rho_r
+ #  , rho_d               = variable_params[i, ]$rho_d
+ #  , rho_r               = variable_params[i, ]$rho_r
       ))
     , nsim         = nsim
     , format       = "d"
@@ -246,7 +247,7 @@ SEIR.sim <- do.call(
     , seed         = 1001)) %>% {
       rbind(.,
          group_by(., day) %>%
-           select(-.id) %>%
+           dplyr::select(-.id) %>%
            summarise_all(median) %>%
                     mutate(.id = "median"))
     } 
@@ -287,7 +288,7 @@ SEIR.sim.f <- SEIR.sim.f %>% mutate(C = Is + Im + H)
 ## Summary and plotting
 ####
 
-state.plot    <- "H"
+state.plot    <- "D"
 
 SEIR.sim.f.m <- SEIR.sim.f %>% 
   dplyr::filter(.id == "median") %>% 
@@ -297,9 +298,9 @@ SEIR.sim.f.s <- SEIR.sim.f %>%
   dplyr::filter(.id != "median") %>%
   dplyr::group_by(date) %>%
   dplyr::summarize(
-#    lwr = quantile(get(state.plot), c(0.025))
-#  , est = quantile(get(state.plot), c(0.50))
-#  , upr = quantile(get(state.plot), c(0.975))
+#   lwr = quantile(get(state.plot), c(0.025))
+# , est = quantile(get(state.plot), c(0.50))
+# , upr = quantile(get(state.plot), c(0.975))
     lwr = quantile(get(state.plot), c(0.05))
   , est = quantile(get(state.plot), c(0.50))
   , upr = quantile(get(state.plot), c(0.95))

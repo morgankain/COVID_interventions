@@ -2,7 +2,7 @@
 
 SEIR.sim <- SEIR.sim %>%
   dplyr::mutate(
-      date    = sim_start + day - 1
+      date    = variable_params[i, ]$sim_start + day - 1
     , total_I = Is + Im + Ia + Ip
     )
 

@@ -6,18 +6,24 @@ set.seed(10001)
 fitting           <- TRUE     ## Small change in pomp objects if fitting or simulating
 fit.minus         <- 0        ## Use data until X days prior to the present
 more.params.uncer <- FALSE    ## Fit with more (FALSE) or fewer (TRUE) point estimates for a number of parameters
+## more.params.uncer = FALSE is more supported, uses parameter ranges with more research and reacts to choice of focal.county if possible
+## !!!!! For FALSE update parameters in location_params.csv
+## more.params.uncer = TRUE  is less suppored, raw parameter values that can be adjusted manually
 usable.cores      <- 2        ## Number of cores to use to fit
-fit.with          <- "D"      ## Fit with D (deaths) or H (hospitalizations) (** H poorly supported right now)
+fit.with          <- "D"      ## Fit with D (deaths) or H (hospitalizations) 
 fit_to_sip        <- TRUE     ## Fit beta0 and shelter in place simultaneously?
 import_cases      <- FALSE    ## Use importation of cases?
 n.mif_runs        <- 2        ## mif2 fitting parameters
 n.mif_length      <- 20
 n.mif_particles   <- 3000
 n.mif_rw.sd       <- 0.02
-focal.county      <- "Santa Clara"  ## County to fit to
-county.N          <- 1.938e6        ## County population size
-nparams           <- 2              ## number of parameter sobol samples (more = longer)
-nsim              <- 200            ## number of simulations for each fitted beta0 for dynamics
+focal.county      <- "New York City" ## County to fit to
+## !!! Curently parameters exist for Santa Clara, Miami-Dade, New York City, King, Los Angeles
+## !!! But only Santa Clara explored
+# county.N        <- 1.938e6         ## County population size
+## !!! Now contained within location_params.csv
+nparams           <- 4               ## number of parameter sobol samples (more = longer)
+nsim              <- 200             ## number of simulations for each fitted beta0 for dynamics
 
 needed_packages <- c(
     "pomp"
@@ -41,10 +47,10 @@ registerDoParallel(cores = usable.cores)
 source("COVID_pomp.R")
  
 if (fit.with == "D") {
-# deaths   <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
-deaths     <- read.csv("us-counties.txt")
-deaths     <- deaths %>% mutate(date = as.Date(date)) %>% filter(county == focal.county)
-deaths     <- deaths %>% dplyr::filter(date < max(date) - fit.minus)
+deaths     <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
+#deaths     <- read.csv("us-counties.txt")
+ deaths     <- deaths %>% mutate(date = as.Date(date)) %>% filter(county == focal.county)
+ deaths     <- deaths %>% dplyr::filter(date < max(date) - fit.minus)
 } else if (fit.with == "H") {
 ## !! Not supported right now for SCC, but placing here for completeness
    ## !! Right now only usable for CCC
@@ -64,7 +70,11 @@ fixed_params        <- params$Value
 names(fixed_params) <- params$Parameter
 if (!import_cases) {fixed_params["import_rate"] <- 0}
 
-fixed_params        <- c(fixed_params, N = county.N)
+location_params     <- read.csv("location_params.csv", stringsAsFactors = FALSE)
+location_params     <- location_params %>% filter(location == focal.county)
+
+fixed_params        <- c(fixed_params
+  , N = location_params[location_params$Parameter == "N", ]$est)
 
 if (more.params.uncer) {
 source("variable_params_more.R")
@@ -89,13 +99,13 @@ if (fit_to_sip) {
 ## beta0, soc_dist_level_sip, loglik
 param_array <- array(
   data = 0
-, dim = c(nparams, n.mif_runs, 3))
+, dim  = c(nparams, n.mif_runs, 3))
 dimnames(param_array)[[3]] <- c("beta0", "soc_dist_level_sip", "loglik")
 } else {
 ## beta0, loglik
 param_array <- array(
   data = 0
-, dim = c(nparams, n.mif_runs, 2))  
+, dim  = c(nparams, n.mif_runs, 2))  
 dimnames(param_array)[[3]] <- c("beta0", "loglik")
 }
 
@@ -106,11 +116,11 @@ if (fit.with == "D") {
   ## Adjust the data for the current start date
 county.data <- deaths %>% 
   mutate(day = as.numeric(date - variable_params[i, ]$sim_start)) %>% 
-  select(day, date, deaths) %>% 
+  dplyr::select(day, date, deaths) %>% 
   mutate(deaths_cum = deaths) %>% 
   mutate(deaths = deaths_cum - lag(deaths_cum)) %>% 
   replace_na(list(deaths = 0)) %>%
-  select(-deaths_cum)
+  dplyr::select(-deaths_cum)
   
 ## Add days from the start of the sim to the first recorded day in the dataset
 county.data <- rbind(
@@ -132,7 +142,7 @@ names(county.data)[2] <- "hosp"
 
 ## Create intervention covariate table for the full forecast
 if (fit_to_sip) {
-intervention.forecast <- with(variable_params[i, ], {
+  intervention.forecast <- with(variable_params[i, ], {
 
  covariate_table(
   day              = 1:sim_length
@@ -165,7 +175,7 @@ intervention.forecast <- with(variable_params[i, ], {
 
 })
 } else {
-intervention.forecast <- with(variable_params[i, ], {
+  intervention.forecast <- with(variable_params[i, ], {
 
  covariate_table(
   day              = 1:sim_length
@@ -267,7 +277,7 @@ library(dplyr)
 if (fit_to_sip) {
  variable_params[i, "soc_dist_level_sip"] <- mean(coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "soc_dist_level_sip"), ])
  param_array[i,,"soc_dist_level_sip"]     <- coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "soc_dist_level_sip"), ]
- }
+}
 
 } else {
   
@@ -348,7 +358,7 @@ SEIR.sim <- do.call(
     , params = {
     if (!more.params.uncer) {
       c(fixed_params, c(
-      beta0    = variable_params[i, "beta0est"]
+      beta0 = variable_params[i, "beta0est"]
     , soc_dist_level_sip = variable_params[i, "soc_dist_level_sip"]
     , E0    = variable_params[i, ]$E0
     , Ca    = variable_params[i, ]$Ca
@@ -374,7 +384,7 @@ SEIR.sim <- do.call(
     , seed         = 1001)) %>% {
       rbind(.,
          group_by(., day) %>%
-           select(-.id) %>%
+           dplyr::select(-.id) %>%
            summarise_all(median) %>%
                     mutate(.id = "median"))
     }
@@ -433,7 +443,7 @@ SEIR.sim.ss.3 <- SEIR.sim %>%
   , total_R = max(R)
       )
 
-SEIR.sim.ss.t    <- left_join(SEIR.sim.ss.f, SEIR.sim.ss.3, by = ".id")
+SEIR.sim.ss.t   <- left_join(SEIR.sim.ss.f, SEIR.sim.ss.3, by = ".id")
 
 ## Get their CI
 SEIR.sim.ss.t.s <- SEIR.sim.ss.t %>%
@@ -461,7 +471,8 @@ variable_params[i, ]$Reff <- with(variable_params[i, ], covid_R0(
   beta0est = beta0est, fixed_params = c(fixed_params, unlist(variable_params[i, ]))
   , sd_strength = soc_dist_level_sip
 , prop_S = unlist(SEIR.sim.ss.t.s[SEIR.sim.ss.t.s$name == "S_now", 3]) / 
-    (county.N - SEIR.sim.ss.t.s[SEIR.sim.ss.t.s$name == "total_D", 3])))
+    (location_params[location_params$Parameter == "N", ]$est - 
+        SEIR.sim.ss.t.s[SEIR.sim.ss.t.s$name == "total_D", 3])))
 
 variable_params[i, ]$R0 <- with(variable_params[i, ], covid_R0(
   beta0est = beta0est, fixed_params = c(fixed_params, unlist(variable_params[i, ]))
@@ -483,7 +494,7 @@ if (((i / 20) %% 1) == 0) {
 
 }
 
- saveRDS(
+saveRDS(
    list(
     variable_params  = variable_params
   , fixed_params     = fixed_params

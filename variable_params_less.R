@@ -3,24 +3,30 @@ fixed_params        <- fixed_params[-c(1, 5, 11, 12)]
 ## parameters that will vary
 variable_params <- sobolDesign(
   lower = c(
-    E0          = 3
-  , sim_start   = 14
-  , int_start1  = 60
-  , int_length2 = 60
-  , soc_dist_level_wfh       = 0.7
-  , soc_dist_level_sip = ifelse(!fit_to_sip, 0.10, NA)
+    E0          = location_params[location_params$Parameter == "E0", ]$lwr
+  , sim_start   = location_params[location_params$Parameter == "sim_start", ]$lwr
+  , int_start1  = location_params[location_params$Parameter == "int_start1", ]$lwr
+### For Santa Clara county. !!!! Model will need to be updated when we exit this reality
+  , int_length2 = 76
+  , soc_dist_level_wfh = location_params[location_params$Parameter == "soc_dist_level_wfh", ]$lwr
+  , soc_dist_level_sip = ifelse(!fit_to_sip
+    , location_params[location_params$Parameter == "soc_dist_level_sip", ]$lwr
+    , NA)
   , Ca          = params[params$Parameter == "Ca", ]$lwr
   , alpha       = params[params$Parameter == "alpha", ]$lwr
   , delta       = params[params$Parameter == "delta", ]$lwr
   , mu          = params[params$Parameter == "mu", ]$lwr
   )
 , upper = c(
-    E0          = 6
-  , sim_start   = 28
-  , int_start1  = 69
-  , int_length2 = 120
-  , soc_dist_level_wfh       = 0.9
-  , soc_dist_level_sip = ifelse(!fit_to_sip, 0.40, NA)
+    E0          = location_params[location_params$Parameter == "E0", ]$upr
+  , sim_start   = location_params[location_params$Parameter == "sim_start", ]$upr
+  , int_start1  = location_params[location_params$Parameter == "int_start1", ]$upr
+### For Santa Clara county. !!!! Model will need to be updated when we exit this reality
+  , int_length2 = 76
+  , soc_dist_level_wfh = location_params[location_params$Parameter == "soc_dist_level_wfh", ]$upr
+  , soc_dist_level_sip = ifelse(!fit_to_sip
+    , location_params[location_params$Parameter == "soc_dist_level_sip", ]$upr
+    , NA)
   , Ca          = params[params$Parameter == "Ca", ]$upr
   , alpha       = params[params$Parameter == "alpha", ]$upr
   , delta       = params[params$Parameter == "delta", ]$upr

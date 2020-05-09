@@ -198,7 +198,7 @@ state_names = c(
 ## R0 here just based on the simple transmission rate / recovery rate (weighted by the probability of going into different classes)
 covid_R0 <- function (beta0est, fixed_params, sd_strength, prop_S) {
 ## transmission rate
- R <-   beta0est * prop_S * sd_strength * 
+ R <- beta0est * prop_S * sd_strength * 
     (                
 ## proportion * time in asymptomatic
       fixed_params["alpha"] * fixed_params["Ca"] * (1/fixed_params["lambda_a"]) +                  
@@ -206,7 +206,7 @@ covid_R0 <- function (beta0est, fixed_params, sd_strength, prop_S) {
       (1 - fixed_params["alpha"]) * fixed_params["mu"] * ((1/fixed_params["lambda_p"]) + (1/fixed_params["lambda_m"])) +    
 ## proportion * time in severely symptomatic
       (1 - fixed_params["alpha"]) * (1 - fixed_params["mu"]) * ((1/fixed_params["lambda_p"]) + (1/fixed_params["lambda_s"]))      
-      )
+  )
  
  unlist(R)
 }
