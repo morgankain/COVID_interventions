@@ -123,14 +123,14 @@ county.data <- deaths %>%
   dplyr::select(-deaths_cum)
   
 ## Add days from the start of the sim to the first recorded day in the dataset
-county.data <- rbind(
-  data.frame(
-    day    = seq(1:(min(county.data$day) - 1))
-  , date   = as.Date(seq(1:(min(county.data$day) - 1)), origin = variable_params[i, ]$sim_start)
-  , deaths = 0
-  )
-, county.data
-  )
+#county.data <- rbind(
+#  data.frame(
+#    day    = seq(1:(min(county.data$day) - 1))
+#  , date   = as.Date(seq(1:(min(county.data$day) - 1)), origin = variable_params[i, ]$sim_start)
+#  , deaths = 0
+#  )
+#, county.data
+#  )
 
 } else if (fit.with == "H") {
   
