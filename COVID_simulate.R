@@ -3,6 +3,8 @@
 ##################################################################
 
 set.seed(10001)
+focal.county   <- "New York City"
+## !!! Now contained within location_params.csv
 fitting        <- FALSE   ## Small change in pomp objects if fitting or simulating
 use.rds        <- TRUE    ## TRUE if COVID_fit previously run,
                           ## FALSE if COVID_fit just run and all still in environment
@@ -17,8 +19,6 @@ thresh_H.start <- 15      ## Threshold when lightswtich turns on (when we get hi
 thresh_H.end   <- 5       ## Threshold when lightswtich turns off (when we drop from above to this value)
 sim_length     <- 500     ## how many days to run the simulation
 state.plot     <- "D"     ## State variable for plotting (Hospit [H], Death [D], or Cases [C])
-focal.county   <- "New York City"
-## !!! Now contained within location_params.csv
 #county.N       <- 1.938e6
 loglik.thresh  <- 2       ## Keep runs within top X loglik units
 params.all     <- TRUE    ## Keep all fitted parameters above loglik thresh?...
@@ -48,8 +48,8 @@ source("ggplot_theme.R")
 source("COVID_pomp.R")
 
 if (fit.with == "D") {
-# deaths   <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
-deaths     <- read.csv("us-counties.txt")
+deaths   <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
+# deaths     <- read.csv("us-counties.txt")
 deaths     <- deaths %>% mutate(date = as.Date(date)) %>% filter(county == focal.county)
 deaths     <- deaths %>% dplyr::filter(date < max(date) - fit.minus)
 } else if (fit.with == "H") {
@@ -123,14 +123,14 @@ county.data <- deaths %>%
   dplyr::select(-deaths_cum)
   
 ## Add days from the start of the sim to the first recorded day in the dataset
-county.data <- rbind(
-  data.frame(
-    day    = seq(1:(min(county.data$day) - 1))
-  , date   = as.Date(seq(1:(min(county.data$day) - 1)), origin = variable_params[i, ]$sim_start)
-  , deaths = 0
-  )
-, county.data
-  )
+#county.data <- rbind(
+#  data.frame(
+#    day    = seq(1:(min(county.data$day) - 1))
+#  , date   = as.Date(seq(1:(min(county.data$day) - 1)), origin = variable_params[i, ]$sim_start)
+#  , deaths = 0
+#  )
+#, county.data
+#  )
 
 } else {
   
@@ -342,3 +342,4 @@ if (state.plot == "H") {
 # (gg.1 <- gg.1 + geom_point(data = confirmed, aes(date, cases)))
   gg.1
 }
+

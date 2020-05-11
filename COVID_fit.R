@@ -17,12 +17,12 @@ n.mif_runs        <- 2        ## mif2 fitting parameters
 n.mif_length      <- 20
 n.mif_particles   <- 3000
 n.mif_rw.sd       <- 0.02
-focal.county      <- "Miami-Dade" ## County to fit to
+focal.county      <- "New York City" ## County to fit to
 ## !!! Curently parameters exist for Santa Clara, Miami-Dade, New York City, King, Los Angeles
 ## !!! But only Santa Clara explored
 # county.N        <- 1.938e6         ## County population size
 ## !!! Now contained within location_params.csv
-nparams           <- 4               ## number of parameter sobol samples (more = longer)
+nparams           <- 20               ## number of parameter sobol samples (more = longer)
 nsim              <- 200             ## number of simulations for each fitted beta0 for dynamics
 
 needed_packages <- c(
@@ -123,14 +123,14 @@ county.data <- deaths %>%
   dplyr::select(-deaths_cum)
   
 ## Add days from the start of the sim to the first recorded day in the dataset
-county.data <- rbind(
-  data.frame(
-    day    = seq(1:(min(county.data$day) - 1))
-  , date   = as.Date(seq(1:(min(county.data$day) - 1)), origin = variable_params[i, ]$sim_start)
-  , deaths = 0
-  )
-, county.data
-  )
+#county.data <- rbind(
+#  data.frame(
+#    day    = seq(1:(min(county.data$day) - 1))
+#  , date   = as.Date(seq(1:(min(county.data$day) - 1)), origin = variable_params[i, ]$sim_start)
+#  , deaths = 0
+#  )
+#, county.data
+#  )
 
 } else if (fit.with == "H") {
   
