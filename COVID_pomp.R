@@ -80,6 +80,31 @@ sir_step <- Csnippet("
                      ")
 
 # define the initial set up, currently, every is susceptible except the exposed people
+if (fit.E0) {
+  
+sir_init <- Csnippet("
+                     double E0 = rpois(E_init) + 1; 
+                     S = N-E0;
+                     E = E0;
+                     Ia = 0;
+                     Ip = 0;
+                     Is = 0;
+                     Im = 0;
+                     I = 0;
+                     I_new_sympt = 0;
+                     Hr = 0;
+                     Hd = 0;
+                     H = Hd + Hr;
+                     R = 0;
+                     D = 0;
+                     D_new = 0;
+                     H_new = 0;
+                     thresh_crossed = 0;
+                     import_total = 0;
+                     ")  
+  
+} else {
+  
 sir_init <- Csnippet("
                      S = N-E0;
                      E = E0;
@@ -98,7 +123,9 @@ sir_init <- Csnippet("
                      H_new = 0;
                      thresh_crossed = 0;
                      import_total = 0;
-                     ")
+                     ")  
+
+}
 
 # define random simulator of measurement
 rmeas_deaths <- Csnippet("double tol = 1e-16;
@@ -120,9 +147,29 @@ dmeas_hosp <- Csnippet("double tol = 1e-16;
 # parameters to transform
 if (fitting) {
   if (fit_to_sip) {
-par_trans <- parameter_trans(log = c("beta0", "import_rate"),
-                            logit = c("soc_dist_level_sip"))
+    
+if (fit.E0) {
+par_trans   <- parameter_trans(log = c("beta0", "import_rate", "E_init"),
+                             logit = c("soc_dist_level_sip")) 
+param_names <- c(
+   "beta0"
+  , "Ca", "Cp", "Cs", "Cm"
+  , "alpha"
+  , "mu"
+  , "delta"
+  , "gamma"
+  , "lambda_a", "lambda_s", "lambda_m", "lambda_p"
+  , "rho_r"
+  , "rho_d"
+  , "N"
+  , "E_init"
+  , "soc_dist_level_sip"
+  , "import_rate"
+)
 
+} else {
+par_trans   <- parameter_trans(log = c("beta0", "import_rate"),
+                            logit = c("soc_dist_level_sip"))  
 param_names <- c(
    "beta0"
   , "Ca", "Cp", "Cs", "Cm"
@@ -138,10 +185,30 @@ param_names <- c(
   , "soc_dist_level_sip"
   , "import_rate"
 )
+
+}
+
   } else {
 
-par_trans <- parameter_trans(log = c("beta0", "import_rate"))
+if (fit.E0) {
+par_trans   <- parameter_trans(log = c("beta0", "import_rate", "E_init"))
+param_names <- c(
+   "beta0"
+  , "Ca", "Cp", "Cs", "Cm"
+  , "alpha"
+  , "mu"
+  , "delta"
+  , "gamma"
+  , "lambda_a", "lambda_s", "lambda_m", "lambda_p"
+  , "rho_r"
+  , "rho_d"
+  , "N"
+  , "E_init"
+  , "import_rate"
+)
 
+} else {
+par_trans   <- parameter_trans(log = c("beta0", "import_rate"))  
 param_names <- c(
    "beta0"
   , "Ca", "Cp", "Cs", "Cm"
@@ -156,12 +223,32 @@ param_names <- c(
   , "E0"
   , "import_rate"
 )
-      
+
+}
+
 }
 
 } else {
-par_trans <- parameter_trans(log = c("beta0"))  
+  
+if (fit.E0) {
+par_trans   <- parameter_trans(log = c("beta0", "E_init"))
+param_names <- c(
+   "beta0"
+  , "Ca", "Cp", "Cs", "Cm"
+  , "alpha"
+  , "mu"
+  , "delta"
+  , "gamma"
+  , "lambda_a", "lambda_s", "lambda_m", "lambda_p"
+  , "rho_r"
+  , "rho_d"
+  , "N"
+  , "E_init"
+  , "import_rate"
+)
 
+} else {
+par_trans   <- parameter_trans(log = c("beta0")) 
 param_names <- c(
    "beta0"
   , "Ca", "Cp", "Cs", "Cm"
@@ -176,14 +263,16 @@ param_names <- c(
   , "E0"
   , "import_rate"
 )
+
+}
 
 }
 
 # variables that should be zeroed after each obs
-accum_names = c("D_new", "H_new", "I_new_sympt")
+accum_names <- c("D_new", "H_new", "I_new_sympt")
 
 # state variables
-state_names = c(
+state_names <- c(
     "S" , "E" , "Ia"
   , "Ip", "Is", "Im"
   , "I" , "I_new_sympt"

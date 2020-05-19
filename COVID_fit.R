@@ -5,7 +5,8 @@
 set.seed(10001)
 fitting           <- TRUE     ## Small change in pomp objects if fitting or simulating
 fit.minus         <- 0        ## Use data until X days prior to the present
-more.params.uncer <- FALSE    ## Fit with more (FALSE) or fewer (TRUE) point estimates for a number of parameters
+more.params.uncer <- TRUE    ## Fit with more (FALSE) or fewer (TRUE) point estimates for a number of parameters
+fit.E0            <- TRUE     ## Also fit initial # that starts the epidemic?
 ## more.params.uncer = FALSE is more supported, uses parameter ranges with more research and reacts to choice of focal.county if possible
 ## !!!!! For FALSE update parameters in location_params.csv
 ## more.params.uncer = TRUE  is less suppored, raw parameter values that can be adjusted manually
@@ -17,12 +18,12 @@ n.mif_runs        <- 2        ## mif2 fitting parameters
 n.mif_length      <- 20
 n.mif_particles   <- 3000
 n.mif_rw.sd       <- 0.02
-focal.county      <- "New York City" ## County to fit to
+focal.county      <- "Miami-Dade" ## County to fit to
 ## !!! Curently parameters exist for Santa Clara, Miami-Dade, New York City, King, Los Angeles
 ## !!! But only Santa Clara explored
 # county.N        <- 1.938e6         ## County population size
 ## !!! Now contained within location_params.csv
-nparams           <- 20               ## number of parameter sobol samples (more = longer)
+nparams           <- 5               ## number of parameter sobol samples (more = longer)
 nsim              <- 200             ## number of simulations for each fitted beta0 for dynamics
 
 needed_packages <- c(
@@ -47,10 +48,10 @@ registerDoParallel(cores = usable.cores)
 source("COVID_pomp.R")
  
 if (fit.with == "D") {
-deaths     <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
-#deaths     <- read.csv("us-counties.txt")
- deaths     <- deaths %>% mutate(date = as.Date(date)) %>% filter(county == focal.county)
- deaths     <- deaths %>% dplyr::filter(date < max(date) - fit.minus)
+#deaths <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
+deaths  <- read.csv("us-counties.txt")
+deaths  <- deaths %>% mutate(date = as.Date(date)) %>% filter(county == focal.county)
+deaths  <- deaths %>% dplyr::filter(date < max(date) - fit.minus)
 } else if (fit.with == "H") {
 ## !! Not supported right now for SCC, but placing here for completeness
    ## !! Right now only usable for CCC
@@ -63,7 +64,11 @@ hospit     <- hospit %>%
 hospit    <- hospit %>% dplyr::filter(date < max(date) - fit.minus)  
 }
 
+if (!more.params.uncer) {
 params <- read.csv("params.csv", stringsAsFactors = FALSE)
+} else {
+params <- read.csv("params_wide.csv", stringsAsFactors = FALSE) 
+}
 params <- params %>% mutate(Value = sapply(est, function(x) eval(parse(text = x))))
 
 fixed_params        <- params$Value
@@ -72,6 +77,10 @@ if (!import_cases) {fixed_params["import_rate"] <- 0}
 
 location_params     <- read.csv("location_params.csv", stringsAsFactors = FALSE)
 location_params     <- location_params %>% filter(location == focal.county)
+
+## debug
+#location_params[location_params$Parameter == "sim_start", ]$lwr <- 38
+#location_params[location_params$Parameter == "sim_start", ]$upr <- 53
 
 fixed_params        <- c(fixed_params
   , N = location_params[location_params$Parameter == "N", ]$est)
@@ -97,16 +106,30 @@ SEIR.sim.ss.t.ci <- data.frame(
 
 if (fit_to_sip) {
 ## beta0, soc_dist_level_sip, loglik
+if (fit.E0) {
+param_array <- array(
+  data = 0
+, dim  = c(nparams, n.mif_runs, 4))
+dimnames(param_array)[[3]] <- c("beta0", "soc_dist_level_sip", "loglik", "E_init")  
+} else {
 param_array <- array(
   data = 0
 , dim  = c(nparams, n.mif_runs, 3))
-dimnames(param_array)[[3]] <- c("beta0", "soc_dist_level_sip", "loglik")
+dimnames(param_array)[[3]] <- c("beta0", "soc_dist_level_sip", "loglik")  
+}
 } else {
 ## beta0, loglik
+if (fit.E0) {
+param_array <- array(
+  data = 0
+, dim  = c(nparams, n.mif_runs, 3))  
+dimnames(param_array)[[3]] <- c("beta0", "loglik", "E_init")  
+} else {
 param_array <- array(
   data = 0
 , dim  = c(nparams, n.mif_runs, 2))  
-dimnames(param_array)[[3]] <- c("beta0", "loglik")
+dimnames(param_array)[[3]] <- c("beta0", "loglik")  
+}
 }
 
 for (i in 1:nrow(variable_params)) {
@@ -116,6 +139,7 @@ if (fit.with == "D") {
   ## Adjust the data for the current start date
 county.data <- deaths %>% 
   mutate(day = as.numeric(date - variable_params[i, ]$sim_start)) %>% 
+  filter(day > 0) %>%
   dplyr::select(day, date, deaths) %>% 
   mutate(deaths_cum = deaths) %>% 
   mutate(deaths = deaths_cum - lag(deaths_cum)) %>% 
@@ -240,10 +264,9 @@ library(dplyr)
 
   covid.fitting %>%
   mif2(
-    t0     = 1
-  , params = c(
+    t0      = 1
+  , params  = c(
     c(fixed_params
-    , E0    = variable_params[i, ]$E0
     , Ca    = variable_params[i, ]$Ca
     , alpha = variable_params[i, ]$alpha
     , delta = variable_params[i, ]$delta
@@ -251,10 +274,23 @@ library(dplyr)
       )
   , {
     if (fit_to_sip) {
+      if (fit.E0) {
     c(beta0              = rlnorm(1, log(0.7), 0.17)
-    , soc_dist_level_sip = rlnorm(1, log(0.2), 0.2))
+    , soc_dist_level_sip = rlnorm(1, log(0.2), 0.2)
+    , E_init             = 2)
+      } else {
+    c(beta0              = rlnorm(1, log(0.7), 0.17)
+    , soc_dist_level_sip = rlnorm(1, log(0.2), 0.2)
+    , E0                 = variable_params[i, ]$E0)        
+      }
     } else {
-    c(beta0              = rlnorm(1, log(0.7), 0.17))      
+      if (fit.E0) {
+    c(beta0              = rlnorm(1, log(0.7), 0.17)
+    , E_init             = 2)
+      } else {
+    c(beta0              = rlnorm(1, log(0.7), 0.17)
+    , E0                 = variable_params[i, ]$E0)        
+      }
     }
   }
   )
@@ -263,9 +299,17 @@ library(dplyr)
   , cooling.fraction.50 = 0.5
   , rw.sd  = {
     if (fit_to_sip) {
-    rw.sd(beta0 = n.mif_rw.sd, soc_dist_level_sip = n.mif_rw.sd)
+      if (fit.E0) {
+    rw.sd(beta0 = n.mif_rw.sd, soc_dist_level_sip = n.mif_rw.sd, E_init = n.mif_rw.sd)        
+      } else {
+    rw.sd(beta0 = n.mif_rw.sd, soc_dist_level_sip = n.mif_rw.sd)        
+      }
     } else {
-    rw.sd(beta0 = n.mif_rw.sd)      
+      if (fit.E0) {
+    rw.sd(beta0 = n.mif_rw.sd, E_init = n.mif_rw.sd)        
+      } else {
+    rw.sd(beta0 = n.mif_rw.sd)        
+      }
     }
   }
         )
@@ -278,10 +322,14 @@ if (fit_to_sip) {
  variable_params[i, "soc_dist_level_sip"] <- mean(coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "soc_dist_level_sip"), ])
  param_array[i,,"soc_dist_level_sip"]     <- coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "soc_dist_level_sip"), ]
 }
+if (fit.E0) {
+variable_params[i, "E_init"] <- mean(coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "E_init"), ])
+param_array[i,,"E_init"]     <- coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "E_init"), ]  
+}
 
 } else {
   
-checktime <- system.time({
+checktime  <- system.time({
 mifs_local <- foreach(j = 1:n.mif_runs, .combine = c) %dopar%  {
     
 library(pomp)
@@ -292,19 +340,33 @@ library(dplyr)
     t0     = 1
   , params = c(
     c(fixed_params
-      , E0       = variable_params[i, ]$E0
       , Ca       = variable_params[i, ]$Ca
       , alpha    = variable_params[i, ]$alpha
+      , delta    = variable_params[i, ]$delta
+      , mu       = variable_params[i, ]$mu
       , lambda_a = variable_params[i, ]$lambda_a
       , lambda_s = variable_params[i, ]$lambda_s
       , lambda_m = variable_params[i, ]$lambda_m  
       )
-    , {
+  , {
     if (fit_to_sip) {
-    c(beta0              = rlnorm(1, log(0.6), 0.17)
-    , soc_dist_level_sip = rlnorm(1, log(0.2), 0.2))
+      if (fit.E0) {
+    c(beta0              = rlnorm(1, log(0.7), 0.17)
+    , soc_dist_level_sip = rlnorm(1, log(0.2), 0.2)
+    , E_init             = rpois(1, 2))
+      } else {
+    c(beta0              = rlnorm(1, log(0.7), 0.17)
+    , soc_dist_level_sip = rlnorm(1, log(0.2), 0.2)
+    , E0                 = variable_params[i, ]$E0)        
+      }
     } else {
-    c(beta0              = rlnorm(1, log(0.6), 0.17))      
+      if (fit.E0) {
+    c(beta0              = rlnorm(1, log(0.7), 0.17)
+    , E_init             = rpois(1, 2))
+      } else {
+    c(beta0              = rlnorm(1, log(0.7), 0.17)
+    , E0                 = variable_params[i, ]$E0)        
+      }
     }
   }
   )
@@ -313,9 +375,17 @@ library(dplyr)
   , cooling.fraction.50 = 0.5
   , rw.sd  = {
     if (fit_to_sip) {
-    rw.sd(beta0 = n.mif_rw.sd, soc_dist_level_sip = n.mif_rw.sd)
+      if (fit.E0) {
+    rw.sd(beta0 = n.mif_rw.sd, soc_dist_level_sip = n.mif_rw.sd, E_init = n.mif_rw.sd)        
+      } else {
+    rw.sd(beta0 = n.mif_rw.sd, soc_dist_level_sip = n.mif_rw.sd)        
+      }
     } else {
-    rw.sd(beta0 = n.mif_rw.sd)      
+      if (fit.E0) {
+    rw.sd(beta0 = n.mif_rw.sd, E_init = n.mif_rw.sd)        
+      } else {
+    rw.sd(beta0 = n.mif_rw.sd)        
+      }
     }
   }
         )
@@ -329,7 +399,11 @@ library(dplyr)
 gg.fit <- mifs_local %>%
   traces() %>%
   melt() %>%
-  filter(variable == "loglik" | variable == "beta0" | variable == "soc_dist_level_sip") %>% 
+  filter(
+    variable == "loglik" | 
+    variable == "beta0" | 
+    variable == "soc_dist_level_sip" |
+    variable == "E_init") %>% 
   ggplot(aes(x = iteration, y = value, group = L1, colour = factor(L1)))+
   geom_line() +
   guides(color = FALSE) +
@@ -360,23 +434,33 @@ SEIR.sim <- do.call(
       c(fixed_params, c(
       beta0 = variable_params[i, "beta0est"]
     , soc_dist_level_sip = variable_params[i, "soc_dist_level_sip"]
-    , E0    = variable_params[i, ]$E0
     , Ca    = variable_params[i, ]$Ca
     , alpha = variable_params[i, ]$alpha
     , delta = variable_params[i, ]$delta
     , mu    = variable_params[i, ]$mu
-      ))
+      )
+      , if (fit.E0) { 
+          c(E_init = variable_params[i, ]$E_init)
+        } else {
+          c(E0     = variable_params[i, ]$E0)     
+        }
+        )
       } else {
       c(fixed_params, c(
       beta0    = variable_params[i, "beta0est"]
     , soc_dist_level_sip = variable_params[i, "soc_dist_level_sip"]
-      , E0       = variable_params[i, ]$E0
       , Ca       = variable_params[i, ]$Ca
       , alpha    = variable_params[i, ]$alpha
       , lambda_a = variable_params[i, ]$lambda_a
       , lambda_s = variable_params[i, ]$lambda_s
       , lambda_m = variable_params[i, ]$lambda_m 
-      )) 
+      )
+      , if (fit.E0) { 
+          c(E_init = variable_params[i, ]$E_init)
+        } else {
+          c(E0     = variable_params[i, ]$E0)     
+        }
+        ) 
       }}
     , nsim         = nsim
     , format       = "d"
@@ -389,6 +473,8 @@ SEIR.sim <- do.call(
                     mutate(.id = "median"))
     }
 
+## summarize epidemic
+{
 SEIR.sim.s  <- SEIR.sim  %>% 
   dplyr::group_by(.id) %>% 
   dplyr::summarize(total_H = sum(H))
@@ -465,6 +551,7 @@ SEIR.sim.ss.t.s <- rbind(SEIR.sim.ss.t.s
     , paramset = variable_params[i, ]$paramset))
 
 SEIR.sim.ss.t.ci <- rbind(SEIR.sim.ss.t.ci, SEIR.sim.ss.t.s)
+}
 
 ## Update variable params with R0 estimate
 variable_params[i, ]$Reff <- with(variable_params[i, ], covid_R0(

@@ -3,7 +3,9 @@ fixed_params        <- fixed_params[-c(1, 5, 11, 12)]
 ## parameters that will vary
 variable_params <- sobolDesign(
   lower = c(
-    E0          = location_params[location_params$Parameter == "E0", ]$lwr
+    E0          = ifelse(!fit.E0
+    , location_params[location_params$Parameter == "E0", ]$lwr
+    , NA)
   , sim_start   = location_params[location_params$Parameter == "sim_start", ]$lwr
   , int_start1  = location_params[location_params$Parameter == "int_start1", ]$lwr
 ### For Santa Clara county. !!!! Model will need to be updated when we exit this reality
@@ -18,7 +20,9 @@ variable_params <- sobolDesign(
   , mu          = params[params$Parameter == "mu", ]$lwr
   )
 , upper = c(
-    E0          = location_params[location_params$Parameter == "E0", ]$upr
+    E0          = ifelse(!fit.E0
+    , location_params[location_params$Parameter == "E0", ]$upr
+    , NA)
   , sim_start   = location_params[location_params$Parameter == "sim_start", ]$upr
   , int_start1  = location_params[location_params$Parameter == "int_start1", ]$upr
 ### For Santa Clara county. !!!! Model will need to be updated when we exit this reality
@@ -40,13 +44,17 @@ variable_params <- sobolDesign(
 , E0 = round(E0))
 
 if (fit_to_sip) {
- variable_params <- variable_params %>% dplyr::select(-soc_dist_level_sip) 
+variable_params <- variable_params %>% dplyr::select(-soc_dist_level_sip)
+}
+if (fit.E0) {
+variable_params <- variable_params %>% dplyr::select(-E0)
 }
 
 variable_params <- variable_params %>% mutate(
     sim_start  = as.Date(sim_start, origin = as.Date("2020-01-01"))
   , int_start1 = as.Date(round(int_start1), origin = as.Date("2020-01-01"))
-  , int_start2 = as.Date("2020-03-17")
+  , int_start2 = as.Date(round(location_params[location_params$Parameter == "int_start2", ]$est)
+    , origin = as.Date("2020-01-01")) 
  ) %>% mutate(
     int_length1  = round(int_start2 - int_start1)
   ## Column for estimated beta0 (!! see lower down for desire to store likelyhood profile to define pmcmc runs)
@@ -62,3 +70,10 @@ variable_params <- variable_params %>%
   , R0        = 0
   , Reff      = 0
   ) 
+
+if (fit_to_sip) {
+variable_params <- variable_params %>% mutate(E_init = 0)
+}
+if (fit.E0) {
+variable_params <- variable_params %>% mutate(soc_dist_level_sip = 0)
+}
