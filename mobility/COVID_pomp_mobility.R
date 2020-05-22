@@ -114,20 +114,32 @@ dmeas_hosp <- Csnippet("double tol = 1e-16;
 
 # define random simulator of measurement
 rmeas_multi <- Csnippet("double tol = 1e-16;
-                   deaths = rpois(D_new + tol);
-                   cases = rpois(detect*I_new_sympt + tol);
-                   //hosp = rpois(H + tol);
+                   double detect;
+                   if (t < detect_t0) detect = 0;
+                   else if (t >= detect_t0 & t <= detect_t1) {
+                    detect = detect_max/detect_t1*(t - detect_t0);
+                   } 
+                   else  detect = detect_max; 
+                   deaths = rnbinom_mu(theta_d, D_new + tol);
+                   cases = rnbinom_mu(theta_c, detect*I_new_sympt + tol);
                   ")
 # define evaluation of model prob density function
 dmeas_multi <- Csnippet("double tol = 1e-16;
-                   lik = dpois(deaths, D_new + tol, 1) + dpois(cases, detect*I_new_sympt + tol, 1);
-                   //dpois(hosp, H + tol, 1);
+                   double detect;
+                   if (t < detect_t0) detect = 0;
+                   else if(t >= detect_t0 & t <= (detect_t0 + detect_t1)){
+                    detect = detect_max/detect_t1*(t - detect_t0);
+                   } 
+                   else detect = detect_max; 
+                   lik = dnbinom_mu(deaths, theta_d, D_new + tol, 1) + dnbinom_mu(cases, theta_c, detect*I_new_sympt + tol, 1);
                    lik = (give_log) ? lik : exp(lik);
                   ")
 
 # parameters to transform
-par_trans <- parameter_trans(log = c("beta0", "import_rate", "E_init", "theta"),
-                            logit = c("beta_min"))
+par_trans <- parameter_trans(log = c("beta0", "import_rate", "E_init", 
+                                     "theta_d", "theta_c",
+                                     "detect_t0", "detect_t1"),
+                            logit = c("beta_min", "detect_max"))
 
 param_names <- c(
    "beta0"
@@ -144,9 +156,12 @@ param_names <- c(
   , "E_init"
   # , "soc_dist_level_sip"
   , "import_rate"
-  , "theta"
+  , "theta_d"
+  , "theta_c"
   , "beta_min"
-  # , "detect"
+  , "detect_t0"
+  , "detect_t1"
+  , "detect_max"
 )
 
 # variables that should be zeroed after each obs
