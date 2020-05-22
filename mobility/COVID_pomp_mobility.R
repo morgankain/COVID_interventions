@@ -131,7 +131,13 @@ dmeas_multi <- Csnippet("double tol = 1e-16;
                     detect = detect_max/detect_t1*(t - detect_t0);
                    } 
                    else detect = detect_max; 
-                   lik = dnbinom_mu(deaths, theta_d, D_new + tol, 1) + dnbinom_mu(cases, theta_c, detect*I_new_sympt + tol, 1);
+                   
+                   if (ISNA(deaths)) {
+                    lik = 0 + dnbinom_mu(cases, theta_c, detect*I_new_sympt + tol, 1);
+                    //lik = (give_log) ? 0 : 1;
+                   } else {
+                    lik = dnbinom_mu(deaths, theta_d, D_new + tol, 1) + dnbinom_mu(cases, theta_c, detect*I_new_sympt + tol, 1);
+                   }
                    lik = (give_log) ? lik : exp(lik);
                   ")
 
