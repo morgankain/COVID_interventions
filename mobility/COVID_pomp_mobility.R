@@ -3,8 +3,12 @@
 sir_step_mobility <- Csnippet("
                      // adjust betat for social distancing interventions
                      double betat;
-                     betat = beta0*exp(log(beta_min)*sip_prop);
-                     //(mobility*(1 - beta_min) + beta_min);
+                     if(beta0_sigma > 0 & I > 0){
+                       betat = rgammawn(beta0_sigma/sqrt(I), beta0) * exp(log(beta_min)*sip_prop);
+                     } 
+                     else {
+                      betat = beta0*exp(log(beta_min)*sip_prop);
+                     } 
 
                      // if import rate is above zero, draw importations, assuming they are perfectly balanced with departures of susceptible individuals
                      double import = 0;
@@ -134,22 +138,21 @@ dmeas_multi <- Csnippet("double tol = 1e-16;
                    
                    if (ISNA(deaths)) {
                     lik = 0 + dnbinom_mu(cases, theta_c, detect*I_new_sympt + tol, 1);
-                    //lik = (give_log) ? 0 : 1;
                    } else {
                     lik = dnbinom_mu(deaths, theta_d, D_new + tol, 1) + dnbinom_mu(cases, theta_c, detect*I_new_sympt + tol, 1);
                    }
+
                    lik = (give_log) ? lik : exp(lik);
                   ")
 
 # parameters to transform
-par_trans <- parameter_trans(log = c("beta0", "import_rate", "E_init", 
+par_trans <- parameter_trans(log = c("beta0", "beta0_sigma", "import_rate", "E_init", 
                                      "theta_d", "theta_c",
                                      "detect_t0", "detect_t1"),
                             logit = c("beta_min", "detect_max"))
 
 param_names <- c(
-   "beta0"
-  , "Ca", "Cp", "Cs", "Cm"
+  "Ca", "Cp", "Cs", "Cm"
   , "alpha"
   , "mu"
   , "delta"
@@ -164,6 +167,8 @@ param_names <- c(
   , "import_rate"
   , "theta_d"
   , "theta_c"
+  , "beta0"
+  , "beta0_sigma"
   , "beta_min"
   , "detect_t0"
   , "detect_t1"

@@ -2,3 +2,4 @@ scratch
 .DS_Store
 output
 figures
+mobility/unfolded_daily_clean.rds
