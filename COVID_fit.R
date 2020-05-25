@@ -2,30 +2,36 @@
 ## Fit COVID epidemic with pomp ##
 ##################################
 
-set.seed(10001)
+####
+## Parameters
+####
+set.seed(10001)               ## Set seed to recreate fits
 fitting           <- TRUE     ## Small change in pomp objects if fitting or simulating
 fit.minus         <- 0        ## Use data until X days prior to the present
-more.params.uncer <- TRUE    ## Fit with more (FALSE) or fewer (TRUE) point estimates for a number of parameters
-fit.E0            <- TRUE     ## Also fit initial # that starts the epidemic?
-## more.params.uncer = FALSE is more supported, uses parameter ranges with more research and reacts to choice of focal.county if possible
-## !!!!! For FALSE update parameters in location_params.csv
-## more.params.uncer = TRUE  is less suppored, raw parameter values that can be adjusted manually
+more.params.uncer <- FALSE    ## Fit with more (FALSE) or fewer (TRUE) point estimates for a number of parameters
+fit.E0            <- FALSE    ## Also fit initial number of infected individuals that starts the epidemic?
 usable.cores      <- 2        ## Number of cores to use to fit
-fit.with          <- "D"      ## Fit with D (deaths) or H (hospitalizations) 
-fit_to_sip        <- TRUE     ## Fit beta0 and shelter in place simultaneously?
+fit.with          <- "D"      ## Fit with D (deaths) or H (hospitalizations)? Need your own data for H
+                              ## Working to get D and C working "D_C"
+fit_to_sip        <- TRUE     ## Fit beta0 and shelter in place strength simultaneously?
+meas.nb           <- TRUE     ## Negative binomial measurement process?
 import_cases      <- FALSE    ## Use importation of cases?
-n.mif_runs        <- 2        ## mif2 fitting parameters
-n.mif_length      <- 20
-n.mif_particles   <- 3000
-n.mif_rw.sd       <- 0.02
-focal.county      <- "Miami-Dade" ## County to fit to
-## !!! Curently parameters exist for Santa Clara, Miami-Dade, New York City, King, Los Angeles
-## !!! But only Santa Clara explored
-# county.N        <- 1.938e6         ## County population size
-## !!! Now contained within location_params.csv
-nparams           <- 5               ## number of parameter sobol samples (more = longer)
-nsim              <- 200             ## number of simulations for each fitted beta0 for dynamics
+## mif2 fitting parameters. 
+n.mif_runs        <- 2        ## number of repeated fits (6 used in manuscript, 2 suggested to debug/check code)
+n.mif_length      <- 20       ## number of steps (100 used in manuscript, 20 suggested to debug/check code)
+n.mif_particles   <- 3000     ## number of particles (3000 used in manuscript, 3000 suggested to debug/check code)
+n.mif_rw.sd       <- 0.02     ## particle perturbation (0.02 used in manuscript, 0.02 suggested to debug/check code)
+nparams           <- 5        ## number of parameter sobol samples (200 used in manuscript, 5 suggested to debug/check code)
+nsim              <- 150      ## number of stochastic epidemic simulations for each fitted beta0 for dynamics (300 used in manuscript, 150 suggested to debug/check code)
+## County to fit to. Curently parameters exist for Santa Clara, Miami-Dade, New York City, King, Los Angeles
+## but only Santa Clara explored in detail. Working on the other locations now.
+focal.county      <- "Santa Clara" 
 
+####
+## Fitting setup: loading packages, data, and pomp objects
+####
+
+## Required packages to run this code
 needed_packages <- c(
     "pomp"
   , "plyr"
@@ -39,22 +45,24 @@ needed_packages <- c(
   , "doParallel"
   , "data.table")
 
+## load packages. Install all packages that return "FALSE"
 lapply(needed_packages, require, character.only = TRUE)
 
-## Be very careful here, adjust according to your machine
+## Be very careful here, adjust according to your machine's capabilities
 registerDoParallel(cores = usable.cores)
 
 ## Bring in pomp objects
 source("COVID_pomp.R")
  
 if (fit.with == "D") {
+## Scrape death data from the NYT github repo to stay up to date or load a previously saved dataset
 #deaths <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
 deaths  <- read.csv("us-counties.txt")
 deaths  <- deaths %>% mutate(date = as.Date(date)) %>% filter(county == focal.county)
 deaths  <- deaths %>% dplyr::filter(date < max(date) - fit.minus)
 } else if (fit.with == "H") {
-## !! Not supported right now for SCC, but placing here for completeness
-   ## !! Right now only usable for CCC
+## Not supported right now for SCC, ony currently have data for Contra Costa County.
+ ## To use H, supply your own data and change the path
 hospit     <- read.csv("contra_costa/ccc_data.csv")
 hospit     <- hospit %>% 
   mutate(date = as.Date(REPORT_DATE)) %>% 
@@ -64,6 +72,7 @@ hospit     <- hospit %>%
 hospit    <- hospit %>% dplyr::filter(date < max(date) - fit.minus)  
 }
 
+## Bring in parameters. Two sets used here depending on the desired level of uncertainty and number of parameters to sample over
 if (!more.params.uncer) {
 params <- read.csv("params.csv", stringsAsFactors = FALSE)
 } else {
@@ -75,28 +84,31 @@ fixed_params        <- params$Value
 names(fixed_params) <- params$Parameter
 if (!import_cases) {fixed_params["import_rate"] <- 0}
 
+## Location-specific parameters
 location_params     <- read.csv("location_params.csv", stringsAsFactors = FALSE)
 location_params     <- location_params %>% filter(location == focal.county)
 
-## debug
-#location_params[location_params$Parameter == "sim_start", ]$lwr <- 38
-#location_params[location_params$Parameter == "sim_start", ]$upr <- 53
-
+## Combine all parameters
 fixed_params        <- c(fixed_params
   , N = location_params[location_params$Parameter == "N", ]$est)
 
+## Remove parameters from fixed_params that will be sampled over and set up the data frame of 
+ ## sobol sequences over all parameters that are allowed to vary
 if (more.params.uncer) {
 source("variable_params_more.R")
 } else {
 source("variable_params_less.R")
 }
 
+## debug new
+fixed_params <- c(fixed_params, c(beta0_sigma = 1))
+
 ## Run parameters
 sim_start  <- variable_params$sim_start
 sim_length <- 500
 sim_end    <- sim_start + sim_length
 
-## containers for results
+## Containers for summary of dynamics from fitted model to calculate R_eff
 SEIR.sim.ss.t.ci <- data.frame(
   name     = character(0)
 , lwr      = numeric(0)
@@ -104,6 +116,7 @@ SEIR.sim.ss.t.ci <- data.frame(
 , upr      = numeric(0)
 , paramset = numeric(0))
 
+## Other containers set up to hold fitted parameters. Will change depending on parameter choices
 if (fit_to_sip) {
 ## beta0, soc_dist_level_sip, loglik
 if (fit.E0) {
@@ -132,8 +145,13 @@ dimnames(param_array)[[3]] <- c("beta0", "loglik")
 }
 }
 
+####
+## Fitting: loop over rows of variable_params
+####
+
 for (i in 1:nrow(variable_params)) {
 
+## Adjust data for parameter choices and the start date for the specific parameter set
 if (fit.with == "D") {
   
   ## Adjust the data for the current start date
@@ -145,16 +163,6 @@ county.data <- deaths %>%
   mutate(deaths = deaths_cum - lag(deaths_cum)) %>% 
   replace_na(list(deaths = 0)) %>%
   dplyr::select(-deaths_cum)
-  
-## Add days from the start of the sim to the first recorded day in the dataset
-#county.data <- rbind(
-#  data.frame(
-#    day    = seq(1:(min(county.data$day) - 1))
-#  , date   = as.Date(seq(1:(min(county.data$day) - 1)), origin = variable_params[i, ]$sim_start)
-#  , deaths = 0
-#  )
-#, county.data
-#  )
 
 } else if (fit.with == "H") {
   
@@ -163,8 +171,9 @@ county.data <- hospit %>% mutate(day = as.numeric(date - variable_params[i, ]$si
 names(county.data)[2] <- "hosp"  
 
 }
-
-## Create intervention covariate table for the full forecast
+  
+## Create intervention covariate table for the full forecast. A bit of a cumbersome chunk of code
+ ## to create the covariates that define how the model adjusts transmission rate based on interventions and dates
 if (fit_to_sip) {
   intervention.forecast <- with(variable_params[i, ], {
 
@@ -234,6 +243,7 @@ if (fit_to_sip) {
 })  
 }
 
+## Create the pomp fitting object
 covid.fitting <- county.data %>%
   pomp(
     time       = "day"
@@ -256,6 +266,7 @@ if (variable_params[i, ]$beta0est == 0) {
 
 if (!more.params.uncer) {
 
+## Fit runs in parallel based on number of cores
 checktime <- system.time({
 mifs_local <- foreach(j = 1:n.mif_runs, .combine = c) %dopar%  {
     
@@ -273,11 +284,12 @@ library(dplyr)
     , mu    = variable_params[i, ]$mu
       )
   , {
+## random start for each run
     if (fit_to_sip) {
       if (fit.E0) {
     c(beta0              = rlnorm(1, log(0.7), 0.17)
     , soc_dist_level_sip = rlnorm(1, log(0.2), 0.2)
-    , E_init             = 2)
+    , E_init             = rpois(1, 2) + 1)
       } else {
     c(beta0              = rlnorm(1, log(0.7), 0.17)
     , soc_dist_level_sip = rlnorm(1, log(0.2), 0.2)
@@ -286,7 +298,7 @@ library(dplyr)
     } else {
       if (fit.E0) {
     c(beta0              = rlnorm(1, log(0.7), 0.17)
-    , E_init             = 2)
+    , E_init             = rpois(1, 2) + 1)
       } else {
     c(beta0              = rlnorm(1, log(0.7), 0.17)
     , E0                 = variable_params[i, ]$E0)        
@@ -353,7 +365,7 @@ library(dplyr)
       if (fit.E0) {
     c(beta0              = rlnorm(1, log(0.7), 0.17)
     , soc_dist_level_sip = rlnorm(1, log(0.2), 0.2)
-    , E_init             = rpois(1, 2))
+    , E_init             = rpois(1, 2) + 1)
       } else {
     c(beta0              = rlnorm(1, log(0.7), 0.17)
     , soc_dist_level_sip = rlnorm(1, log(0.2), 0.2)
@@ -362,7 +374,7 @@ library(dplyr)
     } else {
       if (fit.E0) {
     c(beta0              = rlnorm(1, log(0.7), 0.17)
-    , E_init             = rpois(1, 2))
+    , E_init             = rpois(1, 2) + 1)
       } else {
     c(beta0              = rlnorm(1, log(0.7), 0.17)
     , E0                 = variable_params[i, ]$E0)        
@@ -396,7 +408,9 @@ library(dplyr)
   
 }
   
-gg.fit <- mifs_local %>%
+## Check mif2 plots of convergence. Adjust according to parameters
+gg.fit <- try(
+  mifs_local %>%
   traces() %>%
   melt() %>%
   filter(
@@ -409,8 +423,10 @@ gg.fit <- mifs_local %>%
   guides(color = FALSE) +
   facet_wrap(~variable, scales = "free_y") +
   theme_bw()
+, silent = TRUE
+)
 
-## !! Still not using uncertainty in beta which should be corrected soon
+## Store fits. Not using uncertainty in beta which could be added in the future
 variable_params[i, "beta0est"] <- mean(coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "beta0"), ])
 param_array[i,,"beta0"]        <- coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "beta0"), ] 
 
@@ -424,6 +440,7 @@ param_array[i,,"loglik"]       <- loglik.out
 
 }
 
+## Simulate from fits
 SEIR.sim <- do.call(
   pomp::simulate
   , list(
@@ -473,7 +490,7 @@ SEIR.sim <- do.call(
                     mutate(.id = "median"))
     }
 
-## summarize epidemic
+## Series of dplyr steps to summarize the epidemic
 {
 SEIR.sim.s  <- SEIR.sim  %>% 
   dplyr::group_by(.id) %>% 
@@ -553,7 +570,7 @@ SEIR.sim.ss.t.s <- rbind(SEIR.sim.ss.t.s
 SEIR.sim.ss.t.ci <- rbind(SEIR.sim.ss.t.ci, SEIR.sim.ss.t.s)
 }
 
-## Update variable params with R0 estimate
+## Update variable params with R0 and Reff estimates
 variable_params[i, ]$Reff <- with(variable_params[i, ], covid_R0(
   beta0est = beta0est, fixed_params = c(fixed_params, unlist(variable_params[i, ]))
   , sd_strength = soc_dist_level_sip
@@ -565,6 +582,7 @@ variable_params[i, ]$R0 <- with(variable_params[i, ], covid_R0(
   beta0est = beta0est, fixed_params = c(fixed_params, unlist(variable_params[i, ]))
   , sd_strength = 1, prop_S = 1))
 
+## Save an Rds periodically
 if (((i / 20) %% 1) == 0) {
  saveRDS(
    list(
@@ -581,6 +599,7 @@ if (((i / 20) %% 1) == 0) {
 
 }
 
+## Save a final Rds
 saveRDS(
    list(
     variable_params  = variable_params
