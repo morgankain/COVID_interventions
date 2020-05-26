@@ -9,22 +9,22 @@ fitting           <- TRUE     ## Small change in pomp objects if fitting or simu
 fit.minus         <- 0        ## Use data until X days prior to the present
 more.params.uncer <- FALSE    ## Fit with more (FALSE) or fewer (TRUE) point estimates for a number of parameters
 fit.E0            <- TRUE     ## Also fit initial number of infected individuals that starts the epidemic?
-usable.cores      <- 6        ## Number of cores to use to fit
+usable.cores      <- 2        ## Number of cores to use to fit
 fit.with          <- "D_C"    ## Fit with D (deaths) or H (hospitalizations) -- Need your own data for H -- or both deaths and cases (D_C).
 fit_to_sip        <- TRUE     ## Fit beta0 and shelter in place strength simultaneously?
 meas.nb           <- TRUE     ## Negative binomial measurement process?
 import_cases      <- FALSE    ## Use importation of cases?
 ## mif2 fitting parameters. 
 n.mif_runs        <- 2        ## number of repeated fits (6 used in manuscript, 2 suggested to debug/check code)
-n.mif_length      <- 20       ## number of steps (100 used in manuscript, 20 suggested to debug/check code)
+n.mif_length      <- 5        ## number of steps (100 used in manuscript, 20 suggested to debug/check code)
 n.mif_particles   <- 3000     ## number of particles (3000 used in manuscript, 3000 suggested to debug/check code)
 n.mif_rw.sd       <- 0.02     ## particle perturbation (0.02 used in manuscript, 0.02 suggested to debug/check code)
-nparams           <- 5        ## number of parameter sobol samples (200 used in manuscript, 5 suggested to debug/check code)
+nparams           <- 2        ## number of parameter sobol samples (200 used in manuscript, 5 suggested to debug/check code)
 nsim              <- 150      ## number of stochastic epidemic simulations for each fitted beta0 for dynamics (300 used in manuscript, 150 suggested to debug/check code)
 sim.length        <- 200 
 
-focal.county      <- "Miami-Dade" 
-focal.state_abbr  <- "FL"
+focal.county      <- "King" 
+focal.state_abbr  <- "WA"
 
 ## Required packages to run this code
 needed_packages <- c(
@@ -38,7 +38,8 @@ needed_packages <- c(
   , "tidyr"
   , "foreach"
   , "doParallel"
-  , "data.table")
+  , "data.table"
+  , "doRNG")
 
 ## load packages. Install all packages that return "FALSE"
 lapply(needed_packages, require, character.only = TRUE)
@@ -95,11 +96,9 @@ sim_end    <- sim_start + sim.length
 
 param_array <- array(
   data = 0
-, dim  = c(nparams, n.mif_runs, 10))
+, dim  = c(nparams, n.mif_runs, 8))
 dimnames(param_array)[[3]] <- c(
   "log_lik"
-, "R0"
-, "Reff"
 , "beta0est"
 , "E_init"
 , "detect_k"
@@ -108,6 +107,8 @@ dimnames(param_array)[[3]] <- c(
 , "theta2"
 , "beta_min"
   )  
+
+Reff <- matrix(data = 0, nrow = nrow(variable_params), ncol = sim.length)
 
 for (i in 1:nrow(variable_params)) {
   
@@ -177,7 +178,8 @@ mob.covtab <- covariate_table(
     sip_prop     = c(mobility$sip_prop, rep(mean(mobility$sip_prop[(length(mobility$sip_prop) - 10):length(mobility$sip_prop)]), sim.length - length(mobility$sip_prop))),
     order        = "constant",
     times        = seq(mobility$day[1], sim.length + mobility$day[1] - 1, by = 1),
-    intervention = c(rep(0, 115), rep(1, sim.length - 115))
+  # intervention = c(rep(0, 115), rep(1, sim.length - 115))
+    intervention = rep(0, sim.length)
     )
 
 covid_mobility <- pomp(
@@ -200,7 +202,7 @@ covid_mobility <- pomp(
  ## 2) fit with no intervention and then simulate later with an intervention
 fixed_params["beta0_sigma"] <- 1
 fixed_params["beta_catch"]  <- 1
-fixed_params["beta_red"]    <- 1 ## No intervention if 1
+fixed_params["beta_red"]    <- 1 
 
 if (variable_params[i, ]$beta0est == 0) {
 
@@ -208,6 +210,7 @@ if (variable_params[i, ]$beta0est == 0) {
 checktime <- system.time({
   
 ## Run mifs_local one time as a "burn-in" run (using MCMC terms...)
+registerDoRNG(610408798)
 mifs_local <- foreach(j = 1:n.mif_runs, .combine = c) %dopar%  {
     
 library(pomp)
@@ -226,13 +229,13 @@ mifs_temp <- covid_mobility %>%
   , {
 ## random start for each run
     c(
-      beta0       = rlnorm(1, log(0.7), 0.17)
+      beta0       = rlnorm(1, log(0.7), 0.3)
     , E_init      = rpois(1, 2) + 1
-    , detect_k    = rlnorm(1, log(0.02), 0.5)
-    , detect_mid  = rlnorm(1, log(200), .3)
-    , theta       = rlnorm(1, log(5), 0.2)
-    , theta2      = rlnorm(1, log(10), 0.3)
-    , beta_min    = rlnorm(1, log(0.01), 0.5)
+    , detect_k    = rlnorm(1, log(0.02), 0.8)
+    , detect_mid  = rlnorm(1, log(200), 0.5)
+    , theta       = rlnorm(1, log(5), 0.4)
+    , theta2      = rlnorm(1, log(10), 0.6)
+    , beta_min    = rlnorm(1, log(0.01), 0.8)
       )
   }
   )
@@ -248,55 +251,55 @@ mifs_temp <- covid_mobility %>%
     , theta2      = 0.01
     , beta_min    = 0.02
   )
-        )
-
-testt <- pfilter(mifs_temp)
-
-## Then run mifs_local again as the "sampling" period
-covid_mobility %>%
-  mif2(
-    t0      = 1
-  , params  = coef(mifs_temp)
-  , Np      = n.mif_particles
-  , Nmif    = n.mif_length
-  , cooling.fraction.50 = 0.5
-  , rw.sd   = rw.sd(
-      beta0       = 0.02
-    , E_init      = 0.05
-    , detect_k    = 0.02
-    , detect_mid  = 0.15
-    , theta       = 0.005
-    , theta2      = 0.01
-    , beta_min    = 0.02
-  )
-        )
+        ) %>%
+  mif2(Nmif = n.mif_length) %>%
+  mif2(Nmif = n.mif_length) %>%
+  mif2(Nmif = n.mif_length) %>%
+  mif2(Nmif = n.mif_length) %>%
+  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.3) %>%
+  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.3) %>%
+  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.3) %>%
+  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.1) %>%
+  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.1) %>%
+  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.1)
+  
+ll <- replicate(10, mifs_temp %>% pfilter(Np = 50000) %>% logLik())
+ll <- logmeanexp(ll, se = TRUE)
+return(list(mifs_temp, ll))
 
 }
 
 })
 
-variable_params[i, "beta0est"]       <- mean(coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "beta0"), ])
-variable_params[i, "E_init"]         <- mean(coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "E_init"), ])
-variable_params[i, "detect_k"]       <- mean(coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "detect_k"), ])
-variable_params[i, "detect_mid"]     <- mean(coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "detect_mid"), ])
-variable_params[i, "theta"]          <- mean(coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "theta"), ])
-variable_params[i, "theta2"]         <- mean(coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "theta2"), ])
-variable_params[i, "beta_min"]       <- mean(coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "beta_min"), ])
-variable_params[i, "beta0est_var"]   <- var(coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter  == "beta0"), ])
-variable_params[i, "E_init_var"]     <- var(coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter  == "E_init"), ])
-variable_params[i, "detect_k_var"]   <- var(coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter  == "detect_k"), ])
-variable_params[i, "detect_mid_var"] <- var(coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter  == "detect_mid"), ])
-variable_params[i, "theta_var"]      <- var(coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter  == "theta"), ])
-variable_params[i, "theta2_var"]     <- var(coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter  == "theta2"), ])
-variable_params[i, "beta_min_var"]   <- var(coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter  == "beta_min"), ])
+mifs.ll    <- mifs_local[seq(2, (n.mif_runs * 2), by = 2)]
 
-param_array[i, , "beta0est"]   <- coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "beta0"), ]
-param_array[i, , "E_init"]     <- coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "E_init"), ]
-param_array[i, , "detect_k"]   <- coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "detect_k"), ]
-param_array[i, , "detect_mid"] <- coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "detect_mid"), ]
-param_array[i, , "theta"]      <- coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "theta"), ]
-param_array[i, , "theta2"]     <- coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "theta2"), ]
-param_array[i, , "beta_min"]   <- coef(mifs_local)[which(dimnames(coef(mifs_local))$parameter == "beta_min"), ]
+loglik.est <- numeric(n.mif_runs)
+loglik.se  <- numeric(n.mif_runs)
+for (j in seq_along(loglik.est)) {
+loglik.est[j] <- mifs.ll[[j]][1]
+loglik.se[j] <- mifs.ll[[j]][2]
+}
+
+mifs_local <- mifs_local[seq(1, (n.mif_runs * 2), by = 2)]
+best.fit   <- which(loglik.est == max(loglik.est))
+
+variable_params[i, "beta0est"]       <- coef(mifs_local[[best.fit]])["beta0"]
+variable_params[i, "E_init"]         <- coef(mifs_local[[best.fit]])["E_init"]
+variable_params[i, "detect_k"]       <- coef(mifs_local[[best.fit]])["detect_k"]
+variable_params[i, "detect_mid"]     <- coef(mifs_local[[best.fit]])["detect_mid"]
+variable_params[i, "theta"]          <- coef(mifs_local[[best.fit]])["theta"]
+variable_params[i, "theta2"]         <- coef(mifs_local[[best.fit]])["theta2"]
+variable_params[i, "beta_min"]       <- coef(mifs_local[[best.fit]])["beta_min"]
+
+all.params <- sapply(mifs_local, coef, simplify = "array")
+
+param_array[i, , "beta0est"]   <- all.params[which(dimnames(all.params)[[1]] == "beta0"), ]
+param_array[i, , "E_init"]     <- all.params[which(dimnames(all.params)[[1]] == "E_init"), ]
+param_array[i, , "detect_k"]   <- all.params[which(dimnames(all.params)[[1]] == "detect_k"), ]
+param_array[i, , "detect_mid"] <- all.params[which(dimnames(all.params)[[1]] == "detect_mid"), ]
+param_array[i, , "theta"]      <- all.params[which(dimnames(all.params)[[1]] == "theta"), ]
+param_array[i, , "theta2"]     <- all.params[which(dimnames(all.params)[[1]] == "theta2"), ]
+param_array[i, , "beta_min"]   <- all.params[which(dimnames(all.params)[[1]] == "beta_min"), ]
 
 ## Check mif2 plots of convergence. Adjust according to parameters
 gg.fit <- try(
@@ -321,14 +324,9 @@ gg.fit <- try(
 , silent = TRUE
 )
 
-loglik.out    <- numeric(length(mifs_local))
-for (k in seq_along(loglik.out)) {
-loglik.out[k] <- pfilter(mifs_local[[k]], 10000)@loglik
-}
-
-variable_params[i, "log_lik"]      <- mean(loglik.out)
-variable_params[i, "log_lik_var"]  <- var(loglik.out)
-param_array[i, , "log_lik"]        <- loglik.out
+variable_params[i, "log_lik"]      <- loglik.est[best.fit]
+variable_params[i, "log_lik_se"]   <- loglik.se[best.fit]
+param_array[i, , "log_lik"]        <- loglik.se
 
 }
 
@@ -370,9 +368,8 @@ SEIR.sim.s <- SEIR.sim %>%
   group_by(day) %>%
   summarize(S = mean(S), D = mean(D))
 
-betat <- variable_params[i, "beta0est"] * exp(log(variable_params[i, "beta_min"]) * mob.covtab@table[1, ])
-
-Reff  <- with(variable_params[i, ], covid_R0(
+betat      <- variable_params[i, "beta0est"] * exp(log(variable_params[i, "beta_min"]) * mob.covtab@table[1, ])
+Reff[i, ]  <- with(variable_params[i, ], covid_R0(
    beta0est      = betat
  , fixed_params  = c(fixed_params, unlist(variable_params[i, ]))
  , sd_strength   = 1
@@ -381,8 +378,7 @@ Reff  <- with(variable_params[i, ], covid_R0(
   )
 
 ## Save an Rds periodically
-if (((i / 10) %% 1) == 0) {
- saveRDS(
+saveRDS(
    list(
     variable_params  = variable_params
   , fixed_params     = fixed_params
@@ -393,7 +389,6 @@ if (((i / 10) %% 1) == 0) {
        , paste(focal.county, fit_to_sip, more.params.uncer, fit.minus, Sys.Date(), "cont", "temp", sep = "_")
          , sep = "")
      , "Rds", sep = "."))
-}
 
 }
 

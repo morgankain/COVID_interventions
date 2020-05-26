@@ -38,6 +38,7 @@ variable_params <- variable_params %>% mutate(
 variable_params <- variable_params %>% 
   mutate(
     log_lik        = 0
+  , log_lik_se     = 0
   , beta0est       = 0
   , E_init         = 0
   , detect_k       = 0
@@ -45,11 +46,4 @@ variable_params <- variable_params %>%
   , theta          = 0
   , theta2         = 0
   , beta_min       = 0
-  , beta0est_var   = 0
-  , E_init_var     = 0
-  , detect_k_var   = 0
-  , detect_mid_var = 0
-  , theta_var      = 0
-  , theta2_var     = 0
-  , beta_min_var   = 0
   ) 
