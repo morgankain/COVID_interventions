@@ -16,7 +16,7 @@ meas.nb           <- TRUE     ## Negative binomial measurement process?
 import_cases      <- FALSE    ## Use importation of cases?
 ## mif2 fitting parameters. 
 n.mif_runs        <- 2        ## number of repeated fits (6 used in manuscript, 2 suggested to debug/check code)
-n.mif_length      <- 50       ## number of steps (100 used in manuscript, 20 suggested to debug/check code)
+n.mif_length      <- 20       ## number of steps (100 used in manuscript, 20 suggested to debug/check code)
 n.mif_particles   <- 300      ## number of particles (3000 used in manuscript, 3000 suggested to debug/check code)
 n.mif_rw.sd       <- 0.02     ## particle perturbation (0.02 used in manuscript, 0.02 suggested to debug/check code)
 nparams           <- 2        ## number of parameter sobol samples (200 used in manuscript, 5 suggested to debug/check code)

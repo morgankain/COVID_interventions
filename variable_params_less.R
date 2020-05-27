@@ -72,8 +72,8 @@ variable_params <- variable_params %>%
   ) 
 
 if (fit_to_sip) {
-variable_params <- variable_params %>% mutate(soc_dist_level_sip = 0) 
+variable_params <- variable_params %>% mutate(E_init = 0)
 }
 if (fit.E0) {
-variable_params <- variable_params %>% mutate(E_init = 0)
+variable_params <- variable_params %>% mutate(soc_dist_level_sip = 0)
 }
