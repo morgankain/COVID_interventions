@@ -16,15 +16,15 @@ meas.nb           <- TRUE     ## Negative binomial measurement process?
 import_cases      <- FALSE    ## Use importation of cases?
 ## mif2 fitting parameters. 
 n.mif_runs        <- 2        ## number of repeated fits (6 used in manuscript, 2 suggested to debug/check code)
-n.mif_length      <- 5        ## number of steps (100 used in manuscript, 20 suggested to debug/check code)
-n.mif_particles   <- 3000     ## number of particles (3000 used in manuscript, 3000 suggested to debug/check code)
+n.mif_length      <- 50       ## number of steps (100 used in manuscript, 20 suggested to debug/check code)
+n.mif_particles   <- 300      ## number of particles (3000 used in manuscript, 3000 suggested to debug/check code)
 n.mif_rw.sd       <- 0.02     ## particle perturbation (0.02 used in manuscript, 0.02 suggested to debug/check code)
 nparams           <- 2        ## number of parameter sobol samples (200 used in manuscript, 5 suggested to debug/check code)
 nsim              <- 150      ## number of stochastic epidemic simulations for each fitted beta0 for dynamics (300 used in manuscript, 150 suggested to debug/check code)
 sim.length        <- 200 
 
-focal.county      <- "King" 
-focal.state_abbr  <- "WA"
+focal.county      <- "Miami-Dade" 
+focal.state_abbr  <- "FL"
 
 ## Required packages to run this code
 needed_packages <- c(
@@ -54,7 +54,7 @@ if (fit.with == "D_C" | fit.with == "D") {
 ## Scrape death data from the NYT github repo to stay up to date or load a previously saved dataset
 #deaths <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
 deaths  <- read.csv("us-counties.txt")
-deaths  <- deaths %>% mutate(date = as.Date(date)) %>% filter(county == focal.county)
+deaths  <- deaths %>% mutate(date = as.Date(date)) %>% dplyr::filter(county == focal.county)
 deaths  <- deaths %>% dplyr::filter(date < max(date) - fit.minus)
 } else if (fit.with == "H") {
 ## Not supported right now for SCC, ony currently have data for Contra Costa County.
@@ -96,17 +96,33 @@ sim_end    <- sim_start + sim.length
 
 param_array <- array(
   data = 0
-, dim  = c(nparams, n.mif_runs, 8))
+, dim  = c(nparams, n.mif_runs, 9))
 dimnames(param_array)[[3]] <- c(
   "log_lik"
 , "beta0est"
 , "E_init"
-, "detect_k"
-, "detect_mid"
+, "detect_t0"
+, "detect_t1"
+, "detect_max"
 , "theta"
 , "theta2"
 , "beta_min"
   )  
+
+
+startvals <- array(
+  data = 0
+, dim  = c(8, n.mif_runs, nparams))
+dimnames(startvals)[[1]] <- c(
+  "beta0"
+, "E_init"
+, "detect_t0"
+, "detect_t1"
+, "detect_max"
+, "theta"
+, "theta2"
+, "beta_min"  
+)
 
 Reff <- matrix(data = 0, nrow = nrow(variable_params), ncol = sim.length)
 
@@ -118,7 +134,7 @@ if (fit.with == "D" | fit.with == "D_C") {
   ## Adjust the data for the current start date
 county.data <- deaths %>% 
   mutate(day = as.numeric(date - variable_params[i, ]$sim_start)) %>% 
-  filter(day > 0) %>%
+  dplyr::filter(day > 0) %>%
   dplyr::select(day, date, deaths, cases) %>% 
   mutate(deaths = deaths - lag(deaths),
          cases = cases - lag(cases)) %>% 
@@ -126,14 +142,14 @@ county.data <- deaths %>%
   mutate(deaths = mutate(., 
                          deaths_lag = lag(deaths),
                          deaths_lead = lead(deaths)) %>% 
-           select(contains("deaths")) %>%
+           dplyr::select(contains("deaths")) %>%
            purrr::pmap_dbl(~median(c(...)))) %>% 
   mutate(cases = mutate(., 
                          cases_lag = lag(cases),
                          cases_lead = lead(cases)) %>% 
-           select(contains("cases")) %>%
+           dplyr::select(contains("cases")) %>%
            purrr::pmap_dbl(~median(c(...)))) %>%
-  filter(!is.na(deaths), !is.na(cases))
+  dplyr::filter(!is.na(deaths), !is.na(cases))
 
 county.data <- rbind(
   data.frame(
@@ -154,14 +170,23 @@ names(county.data)[2] <- "hosp"
 }
   
 mobility <- readRDS("unfolded_daily_clean.rds") %>% 
-  filter(county_name == focal.county & state_abbr == focal.state_abbr)  %>%
-  select(datestr, sip_prop) %>% 
-  filter(!is.na(sip_prop)) %>%
+  dplyr::filter(county_name == focal.county & state_abbr == focal.state_abbr)  %>%
+  dplyr::select(datestr, sip_prop) %>% 
+  dplyr::filter(!is.na(sip_prop)) %>%
   mutate(day = as.numeric(datestr - as.Date("2019-12-31"))) %>% 
   arrange(day) %>% 
-  filter(datestr >= variable_params[i, ]$sim_start) %>%
-  mutate(day = day - 14)
+  # three day moving median
+  mutate(sip_prop = mutate(., 
+                         sip_prop_lag = lag(sip_prop),
+                         sip_prop_lead = lead(sip_prop)) %>% 
+           select(contains("sip_prop")) %>%
+           purrr::pmap_dbl(~median(c(...)))) %>% 
+  dplyr::filter(datestr >= variable_params[i, ]$sim_start) %>%
+  mutate(day = day - as.numeric((variable_params[i, ]$sim_start - as.Date("2019-12-31")))) %>%
+  dplyr::filter(!is.na(sip_prop)) %>% 
+  dplyr::filter(day > 0)
 
+if (min(mobility$day) > 1) {
 mobility <- rbind(
   data.frame(
     datestr  = as.Date(seq(1:(min(mobility$day) - 1)), origin = variable_params[i, ]$sim_start)
@@ -169,17 +194,24 @@ mobility <- rbind(
   , day      = seq(1:(min(mobility$day) - 1))
   )
 , mobility
-  )
+  )  
+}
 
 ## Remove dates after one week after movement data ends
-county.data <- county.data %>% filter(date < (max(mobility$datestr) + 7))
+county.data <- county.data %>% dplyr::filter(date < (max(mobility$datestr) + 7))
+
+#mob.covtab <- covariate_table(
+#    sip_prop     = c(mobility$sip_prop, rep(mean(mobility$sip_prop[(length(mobility$sip_prop) - 10):length(mobility$sip_prop)]), sim.length - length(mobility$sip_prop))),
+#    order        = "constant",
+#    times        = seq(mobility$day[1], sim.length + mobility$day[1] - 1, by = 1),
+#    intervention = rep(0, sim.length)
+#    )
 
 mob.covtab <- covariate_table(
-    sip_prop     = c(mobility$sip_prop, rep(mean(mobility$sip_prop[(length(mobility$sip_prop) - 10):length(mobility$sip_prop)]), sim.length - length(mobility$sip_prop))),
+    sip_prop     = mobility$sip_prop,
     order        = "constant",
-    times        = seq(mobility$day[1], sim.length + mobility$day[1] - 1, by = 1),
-  # intervention = c(rep(0, 115), rep(1, sim.length - 115))
-    intervention = rep(0, sim.length)
+    times        = mobility$day,
+    intervention = rep(0, nrow(mobility))
     )
 
 covid_mobility <- pomp(
@@ -188,8 +220,8 @@ covid_mobility <- pomp(
  , t0         = 1
  , covar      = mob.covtab
  , rprocess   = euler(sir_step_mobility, delta.t = 1/6)
- , rmeasure   = rmeas_multi_logis
- , dmeasure   = dmeas_multi_logis
+ , rmeasure   = rmeas_multi_pwl
+ , dmeasure   = dmeas_multi_pwl
  , rinit      = sir_init
  , partrans   = par_trans
  , accumvars  = accum_names
@@ -210,7 +242,7 @@ if (variable_params[i, ]$beta0est == 0) {
 checktime <- system.time({
   
 ## Run mifs_local one time as a "burn-in" run (using MCMC terms...)
-registerDoRNG(610408798)
+registerDoRNG(610408799)
 mifs_local <- foreach(j = 1:n.mif_runs, .combine = c) %dopar%  {
     
 library(pomp)
@@ -231,8 +263,9 @@ mifs_temp <- covid_mobility %>%
     c(
       beta0       = rlnorm(1, log(0.7), 0.3)
     , E_init      = rpois(1, 2) + 1
-    , detect_k    = rlnorm(1, log(0.02), 0.8)
-    , detect_mid  = rlnorm(1, log(200), 0.5)
+    , detect_t0   = rlnorm(1, log(max(which(county.data$cases == 0))), 0.2)
+    , detect_t1   = rlnorm(1, log(max(which(county.data$cases == 0))), 0.2)
+    , detect_max  = runif(1, 0.1, 0.7)
     , theta       = rlnorm(1, log(5), 0.4)
     , theta2      = rlnorm(1, log(10), 0.6)
     , beta_min    = rlnorm(1, log(0.01), 0.8)
@@ -241,29 +274,31 @@ mifs_temp <- covid_mobility %>%
   )
   , Np     = n.mif_particles
   , Nmif   = n.mif_length
-  , cooling.fraction.50 = 0.5
+  , cooling.fraction.50 = 0.75
   , rw.sd  = rw.sd(
       beta0       = 0.02
     , E_init      = 0.05
-    , detect_k    = 0.02
-    , detect_mid  = 0.15
+    , detect_max  = 0.02
+    , detect_t0   = 0.10
+    , detect_t1   = 0.10
     , theta       = 0.005
     , theta2      = 0.01
     , beta_min    = 0.02
   )
         ) %>%
-  mif2(Nmif = n.mif_length) %>%
-  mif2(Nmif = n.mif_length) %>%
-  mif2(Nmif = n.mif_length) %>%
-  mif2(Nmif = n.mif_length) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.3) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.3) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.3) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.1) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.1) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.1)
+  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.75) %>%
+  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.50) %>%
+  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.50) %>%
+  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.50) %>%
+  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.30) %>%
+  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.30) %>%
+  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.30) %>%
+  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.10) %>%
+  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.10) %>%
+  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.10)
   
-ll <- replicate(10, mifs_temp %>% pfilter(Np = 50000) %>% logLik())
+# ll <- replicate(10, mifs_temp %>% pfilter(Np = 50000) %>% logLik())
+ll <- replicate(10, mifs_temp %>% pfilter(Np = 5000) %>% logLik())
 ll <- logmeanexp(ll, se = TRUE)
 return(list(mifs_temp, ll))
 
@@ -271,7 +306,10 @@ return(list(mifs_temp, ll))
 
 })
 
-mifs.ll    <- mifs_local[seq(2, (n.mif_runs * 2), by = 2)]
+mifs.sv           <- mifs_local[seq(3, (n.mif_runs * 3), by = 3)]
+startvals[, , i]  <- sapply(mifs.sv, c, simplify = "array")
+
+mifs.ll    <- mifs_local[seq(2, (n.mif_runs * 3), by = 3)]
 
 loglik.est <- numeric(n.mif_runs)
 loglik.se  <- numeric(n.mif_runs)
@@ -280,49 +318,28 @@ loglik.est[j] <- mifs.ll[[j]][1]
 loglik.se[j] <- mifs.ll[[j]][2]
 }
 
-mifs_local <- mifs_local[seq(1, (n.mif_runs * 2), by = 2)]
+mifs_local <- mifs_local[seq(1, (n.mif_runs * 3), by = 3)]
 best.fit   <- which(loglik.est == max(loglik.est))
 
-variable_params[i, "beta0est"]       <- coef(mifs_local[[best.fit]])["beta0"]
-variable_params[i, "E_init"]         <- coef(mifs_local[[best.fit]])["E_init"]
-variable_params[i, "detect_k"]       <- coef(mifs_local[[best.fit]])["detect_k"]
-variable_params[i, "detect_mid"]     <- coef(mifs_local[[best.fit]])["detect_mid"]
-variable_params[i, "theta"]          <- coef(mifs_local[[best.fit]])["theta"]
-variable_params[i, "theta2"]         <- coef(mifs_local[[best.fit]])["theta2"]
-variable_params[i, "beta_min"]       <- coef(mifs_local[[best.fit]])["beta_min"]
+variable_params[i, "beta0est"]   <- coef(mifs_local[[best.fit]])["beta0"]
+variable_params[i, "E_init"]     <- coef(mifs_local[[best.fit]])["E_init"]
+variable_params[i, "detect_max"] <- coef(mifs_local[[best.fit]])["detect_max"]
+variable_params[i, "detect_t0"]  <- coef(mifs_local[[best.fit]])["detect_t0"]
+variable_params[i, "detect_t1"]  <- coef(mifs_local[[best.fit]])["detect_t1"]
+variable_params[i, "theta"]      <- coef(mifs_local[[best.fit]])["theta"]
+variable_params[i, "theta2"]     <- coef(mifs_local[[best.fit]])["theta2"]
+variable_params[i, "beta_min"]   <- coef(mifs_local[[best.fit]])["beta_min"]
 
 all.params <- sapply(mifs_local, coef, simplify = "array")
 
 param_array[i, , "beta0est"]   <- all.params[which(dimnames(all.params)[[1]] == "beta0"), ]
 param_array[i, , "E_init"]     <- all.params[which(dimnames(all.params)[[1]] == "E_init"), ]
-param_array[i, , "detect_k"]   <- all.params[which(dimnames(all.params)[[1]] == "detect_k"), ]
-param_array[i, , "detect_mid"] <- all.params[which(dimnames(all.params)[[1]] == "detect_mid"), ]
+param_array[i, , "detect_t0"]  <- all.params[which(dimnames(all.params)[[1]] == "detect_t0"), ]
+param_array[i, , "detect_t1"]  <- all.params[which(dimnames(all.params)[[1]] == "detect_t1"), ]
+param_array[i, , "detect_max"] <- all.params[which(dimnames(all.params)[[1]] == "detect_max"), ]
 param_array[i, , "theta"]      <- all.params[which(dimnames(all.params)[[1]] == "theta"), ]
 param_array[i, , "theta2"]     <- all.params[which(dimnames(all.params)[[1]] == "theta2"), ]
 param_array[i, , "beta_min"]   <- all.params[which(dimnames(all.params)[[1]] == "beta_min"), ]
-
-## Check mif2 plots of convergence. Adjust according to parameters
-gg.fit <- try(
-  mifs_local %>%
-  traces() %>%
-  melt() %>%
-  filter(
-    variable == "loglik" | 
-    variable == "beta0"  | 
-    variable == "E_init" |
-    variable == "detect_k" |
-    variable == "detect_mid" |
-    variable == "theta" |
-    variable == "theta2" |
-    variable == "beta_min" 
-    ) %>% 
-  ggplot(aes(x = iteration, y = value, group = L1, colour = factor(L1)))+
-  geom_line() +
-  guides(color = FALSE) +
-  facet_wrap(~variable, scales = "free_y") +
-  theme_bw()
-, silent = TRUE
-)
 
 variable_params[i, "log_lik"]      <- loglik.est[best.fit]
 variable_params[i, "log_lik_se"]   <- loglik.se[best.fit]
@@ -340,8 +357,9 @@ SEIR.sim <- do.call(
       , c(
         beta0      = variable_params[i, "beta0est"]
       , E_init     = variable_params[i, "E_init"]
-      , detect_k   = variable_params[i, "detect_k"]
-      , detect_mid = variable_params[i, "detect_mid"]
+      , detect_max = variable_params[i, "detect_max"]
+      , detect_t0  = variable_params[i, "detect_t0"]
+      , detect_t1  = variable_params[i, "detect_t1"]
       , theta      = variable_params[i, "theta"]
       , theta2     = variable_params[i, "theta2"]
       , beta_min   = variable_params[i, "beta_min"]
@@ -362,26 +380,27 @@ SEIR.sim <- do.call(
                     mutate(.id = "median"))
     }
 
-
 SEIR.sim.s <- SEIR.sim %>% 
   dplyr::filter(.id != "median") %>%
   group_by(day) %>%
   summarize(S = mean(S), D = mean(D))
 
 betat      <- variable_params[i, "beta0est"] * exp(log(variable_params[i, "beta_min"]) * mob.covtab@table[1, ])
-Reff[i, ]  <- with(variable_params[i, ], covid_R0(
+Reff.t     <- with(variable_params[i, ], covid_R0(
    beta0est      = betat
  , fixed_params  = c(fixed_params, unlist(variable_params[i, ]))
  , sd_strength   = 1
  , prop_S        = SEIR.sim.s$S / (location_params[location_params$Parameter == "N", ]$est - SEIR.sim.s$D)
   )
   )
+Reff[i, 1:length(Reff.t)]  <- Reff.t
 
 ## Save an Rds periodically
 saveRDS(
    list(
     variable_params  = variable_params
   , fixed_params     = fixed_params
+  , startvals        = startvals
   , Reff             = Reff
   , param_array      = param_array
    ), paste(
@@ -397,6 +416,7 @@ saveRDS(
    list(
     variable_params  = variable_params
   , fixed_params     = fixed_params
+  , startvals        = startvals
   , Reff             = Reff
   , param_array      = param_array
    ), paste(

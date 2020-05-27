@@ -2,10 +2,10 @@
 sir_step_mobility <- Csnippet("
                      // adjust betat for social distancing interventions
                      double betat;
-                     if(beta0_sigma > 0 & I > 0){
-                       betat = rgammawn(beta0_sigma/I, beta0) * exp(log(beta_min)*sip_prop);
+                     if((beta0_sigma > 0) & (I > 0)){
+                     betat = rgammawn(beta0_sigma/sqrt(I), beta0) * exp(log(beta_min)*sip_prop);
                      } else {
-                       betat = beta0*exp(log(beta_min)*sip_prop);
+                     betat = beta0*exp(log(beta_min)*sip_prop);
                      } 
                      if ((intervention == 1) & (betat > beta_catch)) {
                      betat = beta_red;
@@ -13,7 +13,7 @@ sir_step_mobility <- Csnippet("
                      // (mobility*(1 - beta_min) + beta_min);
                      // if import rate is above zero, draw importations, assuming they are perfectly balanced with departures of susceptible individuals
                      double import = 0;
-                     if(import_rate > 0){
+                     if (import_rate > 0){
                       import = fmin(rpois(import_rate*dt), S);
                      }
                      // tracking of total imported, removing them them from susceptibles
@@ -121,19 +121,42 @@ dmeas_multi_logis <- Csnippet("double tol = 1e-16;
                   ")
 
 
+rmeas_multi_pwl <- Csnippet("double tol = 1e-16;
+                   double detect;
+                   if (t < detect_t0) {
+                   detect = 0;
+                   } else if ((t >= detect_t0) & (t <= (detect_t0 + detect_t1))) {
+                   detect = detect_max/detect_t1*(t - detect_t0);
+                   } else { 
+                   detect = detect_max; 
+                   }
+                   deaths = rnbinom_mu(theta, D_new + tol);
+                   cases = rnbinom_mu(theta2, detect*I_new_sympt + tol);
+                  ")
+
 dmeas_multi_pwl <- Csnippet("double tol = 1e-16;
                    double detect;
-                   if (t < detect_t0) detect = 0;
-                   else if (t >= detect_t0 & t <= detect_t1) {
-                   detect = detect_max/detect_t1*(t - detect_t0);
+                   if (t < detect_t0) {
+                   detect = 0;
+                   } else if ((t >= detect_t0) & (t <= (detect_t0 + detect_t1))) {
+                    detect = detect_max/detect_t1*(t - detect_t0);
+                   } else {
+                   detect = detect_max; 
                    }
-    //             lik = dnbinom_mu(deaths, theta, D_new + tol, give_log) + dnbinom_mu(cases, theta2, detect*I_new_sympt + tol, give_log);
+                   if (ISNA(deaths)) {
+                   lik = 0 + dnbinom_mu(cases, theta2, detect*I_new_sympt + tol, 1);
+                   } else {
                    lik = dnbinom_mu(deaths, theta, D_new + tol, 1) + dnbinom_mu(cases, theta2, detect*I_new_sympt + tol, 1);
+                   }
                    lik = (give_log) ? lik : exp(lik);
                   ")
 
-par_trans <- parameter_trans(log  = c("beta0", "import_rate", "E_init", "detect_k", "detect_mid", "theta", "theta2"),
-                            logit = c("beta_min"))
+# par_trans <- parameter_trans(log  = c("beta0", "import_rate", "E_init", "detect_k", "detect_mid", "theta", "theta2"), logit = c("beta_min"))
+# par_trans <- parameter_trans(log  = c("beta0", "import_rate", "E_init", "detect_k", "detect_mid", "theta", "theta2"))
+par_trans <- parameter_trans(log = c("beta0", "beta0_sigma", "import_rate", "E_init", 
+                                     "theta", "theta2",
+                                     "detect_t0", "detect_t1"),
+                            logit = c("beta_min", "detect_max"))
 
 param_names <- c(
    "beta0"
@@ -152,8 +175,9 @@ param_names <- c(
   , "theta2"
   , "beta_min"
   , "beta0_sigma"
-  , "detect_k"
-  , "detect_mid"
+  , "detect_t0"
+  , "detect_t1"
+  , "detect_max"
   , "beta_catch"
   , "beta_red"
 )
@@ -190,5 +214,11 @@ logis_func <- function (L, k, mid, day) {
 }
 beta_func  <- function (beta0, beta_min, sip_prop) {
   beta0 * exp(log(beta_min) * sip_prop)
+}
+beta_func_lin   <- function (beta0, beta_min, sip_prop) {
+  beta0 * (1 - sip_prop) + beta_min
+}
+beta_func_lin2  <- function (beta0, beta_min, sip_prop) {
+beta0 * (1 - (1 - beta_min)*sip_prop)
 }
 
