@@ -9,17 +9,17 @@ fitting           <- TRUE     ## Small change in pomp objects if fitting or simu
 fit.minus         <- 0        ## Use data until X days prior to the present
 more.params.uncer <- FALSE    ## Fit with more (FALSE) or fewer (TRUE) point estimates for a number of parameters
 fit.E0            <- TRUE     ## Also fit initial number of infected individuals that starts the epidemic?
-usable.cores      <- 2        ## Number of cores to use to fit
+usable.cores      <- 3        ## Number of cores to use to fit
 fit.with          <- "D_C"    ## Fit with D (deaths) or H (hospitalizations) -- Need your own data for H -- or both deaths and cases (D_C).
 fit_to_sip        <- TRUE     ## Fit beta0 and shelter in place strength simultaneously?
 meas.nb           <- TRUE     ## Negative binomial measurement process?
 import_cases      <- FALSE    ## Use importation of cases?
 ## mif2 fitting parameters. 
-n.mif_runs        <- 2        ## number of repeated fits (6 used in manuscript, 2 suggested to debug/check code)
-n.mif_length      <- 20       ## number of steps (100 used in manuscript, 20 suggested to debug/check code)
+n.mif_runs        <- 3        ## number of repeated fits (6 used in manuscript, 2 suggested to debug/check code)
+n.mif_length      <- 50       ## number of steps (100 used in manuscript, 20 suggested to debug/check code)
 n.mif_particles   <- 300      ## number of particles (3000 used in manuscript, 3000 suggested to debug/check code)
 n.mif_rw.sd       <- 0.02     ## particle perturbation (0.02 used in manuscript, 0.02 suggested to debug/check code)
-nparams           <- 2        ## number of parameter sobol samples (200 used in manuscript, 5 suggested to debug/check code)
+nparams           <- 40       ## number of parameter sobol samples (200 used in manuscript, 5 suggested to debug/check code)
 nsim              <- 150      ## number of stochastic epidemic simulations for each fitted beta0 for dynamics (300 used in manuscript, 150 suggested to debug/check code)
 sim.length        <- 200 
 
@@ -96,9 +96,10 @@ sim_end    <- sim_start + sim.length
 
 param_array <- array(
   data = 0
-, dim  = c(nparams, n.mif_runs, 9))
+, dim  = c(nparams, n.mif_runs, 10))
 dimnames(param_array)[[3]] <- c(
   "log_lik"
+, "log_lik_es"
 , "beta0est"
 , "E_init"
 , "detect_t0"
@@ -108,7 +109,6 @@ dimnames(param_array)[[3]] <- c(
 , "theta2"
 , "beta_min"
   )  
-
 
 startvals <- array(
   data = 0
@@ -247,6 +247,17 @@ mifs_local <- foreach(j = 1:n.mif_runs, .combine = c) %dopar%  {
     
 library(pomp)
 library(dplyr)
+  
+start_vals <- c(
+      beta0       = rlnorm(1, log(0.7), 0.3)
+    , E_init      = rpois(1, 2) + 1
+    , detect_t0   = rlnorm(1, log(max(which(county.data$cases == 0))), 0.2)
+    , detect_t1   = rlnorm(1, log(max(which(county.data$cases == 0))), 0.2)
+    , detect_max  = runif(1, 0.1, 0.7)
+    , theta       = rlnorm(1, log(5), 0.4)
+    , theta2      = rlnorm(1, log(10), 0.6)
+    , beta_min    = rlnorm(1, log(0.01), 0.8)  
+)
 
 mifs_temp <- covid_mobility %>%
   mif2(
@@ -261,14 +272,14 @@ mifs_temp <- covid_mobility %>%
   , {
 ## random start for each run
     c(
-      beta0       = rlnorm(1, log(0.7), 0.3)
-    , E_init      = rpois(1, 2) + 1
-    , detect_t0   = rlnorm(1, log(max(which(county.data$cases == 0))), 0.2)
-    , detect_t1   = rlnorm(1, log(max(which(county.data$cases == 0))), 0.2)
-    , detect_max  = runif(1, 0.1, 0.7)
-    , theta       = rlnorm(1, log(5), 0.4)
-    , theta2      = rlnorm(1, log(10), 0.6)
-    , beta_min    = rlnorm(1, log(0.01), 0.8)
+      start_vals["beta0"]
+    , start_vals["E_init"]
+    , start_vals["detect_t0"]
+    , start_vals["detect_t1"]
+    , start_vals["detect_max"]
+    , start_vals["theta"]
+    , start_vals["theta2"]
+    , start_vals["beta_min"]
       )
   }
   )
@@ -298,9 +309,9 @@ mifs_temp <- covid_mobility %>%
   mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.10)
   
 # ll <- replicate(10, mifs_temp %>% pfilter(Np = 50000) %>% logLik())
-ll <- replicate(10, mifs_temp %>% pfilter(Np = 5000) %>% logLik())
+ll <- replicate(10, mifs_temp %>% pfilter(Np = 50000) %>% logLik())
 ll <- logmeanexp(ll, se = TRUE)
-return(list(mifs_temp, ll))
+return(list(mifs_temp, ll, start_vals))
 
 }
 
