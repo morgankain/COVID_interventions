@@ -15,12 +15,12 @@ fit_to_sip        <- TRUE     ## Fit beta0 and shelter in place strength simulta
 meas.nb           <- TRUE     ## Negative binomial measurement process?
 import_cases      <- FALSE    ## Use importation of cases?
 ## mif2 fitting parameters. 
-n.mif_runs        <- 3        ## number of repeated fits (6 used in manuscript, 2 suggested to debug/check code)
-n.mif_length      <- 50       ## number of steps (100 used in manuscript, 20 suggested to debug/check code)
-n.mif_particles   <- 300      ## number of particles (3000 used in manuscript, 3000 suggested to debug/check code)
+n.mif_runs        <- 6        ## number of repeated fits (6 used in manuscript, 2 suggested to debug/check code)
+n.mif_length      <- 100       ## number of steps (100 used in manuscript, 20 suggested to debug/check code)
+n.mif_particles   <- 1200      ## number of particles (3000 used in manuscript, 3000 suggested to debug/check code)
 n.mif_rw.sd       <- 0.02     ## particle perturbation (0.02 used in manuscript, 0.02 suggested to debug/check code)
 nparams           <- 40       ## number of parameter sobol samples (200 used in manuscript, 5 suggested to debug/check code)
-nsim              <- 150      ## number of stochastic epidemic simulations for each fitted beta0 for dynamics (300 used in manuscript, 150 suggested to debug/check code)
+nsim              <- 200      ## number of stochastic epidemic simulations for each fitted beta0 for dynamics (300 used in manuscript, 150 suggested to debug/check code)
 sim.length        <- 200 
 
 focal.county      <- "Miami-Dade" 
