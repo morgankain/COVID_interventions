@@ -1,5 +1,7 @@
 fixed_params        <- fixed_params[-c(1, 5, 11, 12)]
 
+set.seed(1022)
+
 ## parameters that will vary
 variable_params <- sobolDesign(
   lower = c(
@@ -41,8 +43,9 @@ variable_params <- variable_params %>%
   , log_lik_se     = 0
   , beta0est       = 0
   , E_init         = 0
-  , detect_k       = 0
-  , detect_mid     = 0
+  , detect_t0      = 0
+  , detect_t1      = 0
+  , detect_max     = 0
   , theta          = 0
   , theta2         = 0
   , beta_min       = 0
