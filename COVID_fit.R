@@ -5,7 +5,7 @@
 set.seed(10001)
 fitting           <- TRUE     ## Small change in pomp objects if fitting or simulating
 fit.minus         <- 0        ## Use data until X days prior to the present
-more.params.uncer <- TRUE    ## Fit with more (FALSE) or fewer (TRUE) point estimates for a number of parameters
+more.params.uncer <- FALSE    ## Fit with more (FALSE) or fewer (TRUE) point estimates for a number of parameters
 fit.E0            <- TRUE     ## Also fit initial # that starts the epidemic?
 ## more.params.uncer = FALSE is more supported, uses parameter ranges with more research and reacts to choice of focal.county if possible
 ## !!!!! For FALSE update parameters in location_params.csv
@@ -15,10 +15,10 @@ fit.with          <- "D"      ## Fit with D (deaths) or H (hospitalizations)
 fit_to_sip        <- TRUE     ## Fit beta0 and shelter in place simultaneously?
 import_cases      <- FALSE    ## Use importation of cases?
 n.mif_runs        <- 2        ## mif2 fitting parameters
-n.mif_length      <- 20
-n.mif_particles   <- 3000
+n.mif_length      <- 100
+n.mif_particles   <- 600
 n.mif_rw.sd       <- 0.02
-focal.county      <- "Miami-Dade" ## County to fit to
+focal.county      <- "King"  ## County to fit to
 ## !!! Curently parameters exist for Santa Clara, Miami-Dade, New York City, King, Los Angeles
 ## !!! But only Santa Clara explored
 # county.N        <- 1.938e6         ## County population size
