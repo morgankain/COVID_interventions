@@ -26,14 +26,17 @@ usable.cores       <- 3       ## Number of cores to use to fit
 int.beta0_sigma    <- 1       ## heterogeneity value
 
 ## Where to simulate from
-sir_init.mid       <- FALSE         ## Starts the epidemic from some non-zero timepoint
-sir_init.mid.t     <- "2020-05-29"  ## Date to simulate forward from
+sir_init.mid       <- FALSE        ## Starts the epidemic from some non-zero timepoint
+sir_init.mid.t     <- "2020-05-28"  ## Date to simulate forward from
 
 ## Sim and plotting details
-sim_length         <- 300     ## How many days to run the simulation
+sim_length         <- 200     ## How many days to run the simulation
 state.plot         <- "D"     ## State variable for plotting (Hospit [H], Death [D], or Cases [C])
 plot.log10         <- TRUE    ## Plot on a log10 scale or not
 print.plot         <- FALSE
+
+counter.factual   <- FALSE    ## If true do a special analysis that ignores a lot of these other parameters
+cf.type           <- "may1"   ## Specifically modeled counterfactual analyses: no_int, delay, may1 coded for now
 
 ####
 ## Intervention parameters
@@ -125,7 +128,7 @@ variable_params <- variable_params %>%
  filter(log_lik > (max(log_lik) - loglik.thresh))
 
 ## For debug plots just pick one paramset
-variable_params <- variable_params[variable_params$paramset == 2, ]
+# variable_params <- variable_params[variable_params$paramset == 2, ]
 
 ## A few adjustments for preprint counterfactuals and other scenarios
 # 1) Start later
@@ -212,6 +215,47 @@ mobility <- mobility %>% filter(sip_prop != 0)
 ## Remove dates after one week after movement data ends
 county.data <- county.data %>% dplyr::filter(date < (max(mobility$datestr) + 7))
 
+if (counter.factual) {
+  
+if (cf.type == "no_int") {
+mob.covtab <- covariate_table(
+   sip_prop         = rep(mean(head(mobility$sip_prop, 7)), sim_length)
+ , order            = "constant"
+ , times            = seq(1, sim_length, by = 1)
+ , detect_t0        = min(county.data[!is.na(county.data$cases), ]$day) - 1
+ , iso_mild_level   = iso_mild_level
+ , iso_severe_level = iso_severe_level
+ , intervention     = rep(0, sim_length))  
+} else if (cf.type == "delay") {
+mob.covtab <- covariate_table(
+   sip_prop         = c(rep(mean(head(mobility$sip_prop, 7)), 7), mobility$sip_prop
+     , rep(mean(tail(mobility$sip_prop, 3)), sim_length - (length(mobility$sip_prop) + 7))) 
+ , order            = "constant"
+ , times            = seq(1, sim_length, by = 1)
+ , detect_t0        = min(county.data[!is.na(county.data$cases), ]$day) - 1
+ , iso_mild_level   = iso_mild_level
+ , iso_severe_level = iso_severe_level
+ , intervention     = rep(0, sim_length))  
+} else if (cf.type == "may1") { 
+  
+int.begin    <- as.numeric((as.Date("2020-05-01") - variable_params[i, ]$sim_start))
+int.phase1   <- nrow(mobility) + (int.begin - nrow(mobility))
+  
+mob.covtab <- covariate_table(
+   sip_prop         = c(
+      mobility$sip_prop[1:int.begin]
+    , rep(mean(head(mobility$sip_prop, 7)), sim_length - int.phase1)
+      )
+ , order            = "constant"
+ , times            = seq(1, sim_length, by = 1)
+ , detect_t0        = min(county.data[!is.na(county.data$cases), ]$day) - 1
+ , iso_mild_level   = iso_mild_level
+ , iso_severe_level = iso_severe_level
+ , intervention     = rep(0, sim_length))  
+}
+  
+} else {
+  
 ####
 ## Set up intervention scenario
 ####
@@ -284,6 +328,8 @@ mob.covtab <- covariate_table(
     )
 }
 
+}
+
 ## Second bit of the intervention will affect these parameters:
 fixed_params["beta0_sigma"] <- int.beta0_sigma  ## heterogeneity value
 fixed_params["beta_catch"]  <- int.beta_catch  ## beta0 values caught by intervention
@@ -340,29 +386,18 @@ SEIR.sim <- SEIR.sim %>%
       date     = round(as.Date(day, origin = variable_params[i, ]$sim_start))
     , paramset = variable_params[i, ]$paramset)
 
+# SEIR.sim %>% filter(date == sir_init.mid.t, .id == "median")
+
 ## Need to think about the most principled way of simulating forward from the present. For now just take the median up until the present as the
  ## starting values, and project from there
 if (sir_init.mid) {
   
 new.startvals <- SEIR.sim %>% filter(.id == "median" & date == sir_init.mid.t)  
-new.days      <- seq(as.numeric((as.Date(sir_init_mid.t) - variable_params[i, ]$sim_start)), sim_length)
+new.days      <- seq(as.numeric((as.Date(sir_init.mid.t) - variable_params[i, ]$sim_start)), sim_length)
 
-mob.covtab.c <- covariate_table(
-  ## First, can add whatever sip_prop into the future
-   sip_prop      = c(
-      mobility$sip_prop, rep(mobility$sip_prop[length(mobility$sip_prop)]
-        , sim_length - length(mobility$sip_prop))
-      )[new.days]
- , order         = "constant"
- , times         = seq(1, sim_length, by = 1)[new.days]
- , detect_t0     = min(county.data[!is.na(county.data$cases), ]$day) - 1
-  ## Next can add an intervention that stops large gatherings
- , intervention  = c(
-    rep(0, int.phase1)
-  , rep(1, int.phase2)
-  , rep(0, int.phase3)
- )[new.days]
-    )
+mob.covtab.c <- mob.covtab
+mob.covtab.c@times <- mob.covtab@times[1:(length(new.days))]
+mob.covtab.c@table <- mob.covtab@table[, min(new.days):sim_length]
 
 covid_mobility <- pomp(
    data       = county.data
@@ -387,7 +422,6 @@ SEIR.sim.c <- do.call(
     , params = c(prev.fit[["fixed_params"]]
       , c(
         beta0      = variable_params[i, "beta0est"]
-      , E_init     = variable_params[i, "E_init"]
       , detect_max = variable_params[i, "detect_max"]
       , detect_mid = variable_params[i, "detect_mid"]
       , detect_k   = variable_params[i, "detect_k"]
@@ -400,7 +434,8 @@ SEIR.sim.c <- do.call(
       , mu         = variable_params[i, "mu"]
         )
       , unlist(c(
-        S0         = round(new.startvals$S)
+        E_init     = round(new.startvals$E)
+      , S0         = round(new.startvals$S)
       , Ia0        = round(new.startvals$Ia)
       , Ip0        = round(new.startvals$Ip)
       , Is0        = round(new.startvals$Is)
@@ -424,8 +459,11 @@ SEIR.sim.c <- do.call(
 
 SEIR.sim.c <- SEIR.sim.c %>%
   mutate(
-      date     = round(as.Date(day, origin = variable_params[i, ]$sim_start))
+      date     = round(as.Date(day, origin = sir_init.mid.t))
     , paramset = variable_params[i, ]$paramset)
+
+# SEIR.sim.c %>% filter(date == as.Date(sir_init.mid.t) + 3, .id == "median")
+# SEIR.sim %>% filter(date == as.Date(sir_init.mid.t) + 2, .id == "median")
 
 }
 
@@ -471,6 +509,11 @@ detect.t <- data.frame(
 , detect   = detect.t
   )
 
+if (sir_init.mid) {
+SEIR.sim.c <- left_join(SEIR.sim.c, detect.t[, c(2, 3)], by = "date")
+SEIR.sim.c <- SEIR.sim.c %>% mutate(cases = I_new_sympt * detect)
+}
+
 betat  <- rbind(betat, betat.t)
 Reff   <- rbind(Reff, Reff.t)
 detect <- rbind(detect, detect.t)
@@ -478,7 +521,7 @@ detect <- rbind(detect, detect.t)
 ## Stich together output
 if (sir_init.mid) {
 if (i == 1) {
- SEIR.sim.f <- SEIR.sim.c  
+ SEIR.sim.f <- SEIR.sim.c 
 } else {
  SEIR.sim.f <- rbind(SEIR.sim.f, SEIR.sim.c) 
 }
@@ -512,34 +555,37 @@ SEIR.sim.f.D.a <- SEIR.sim.f %>% dplyr::select(date, day, .id, D, paramset)
 SEIR.sim.f.c <- SEIR.sim.f %>% 
   group_by(date, paramset) %>% 
   summarize(
-    lwr_c = quantile(cases, c(0.025))
-  , mid_c = quantile(cases, c(0.50))
-  , upr_c = quantile(cases, c(0.975))
+    lwr_c = quantile(cases, c(0.100))
+  , mid_c = quantile(cases, c(0.500))
+  , upr_c = quantile(cases, c(0.900))
   )
 
 SEIR.sim.f.d <- SEIR.sim.f %>% 
   group_by(date, paramset) %>% 
   summarize(
-    lwr_d = quantile(deaths, c(0.025))
-  , mid_d = quantile(deaths, c(0.50))
-  , upr_d = quantile(deaths, c(0.975))
+    lwr_d = quantile(deaths, c(0.100))
+  , mid_d = quantile(deaths, c(0.500))
+  , upr_d = quantile(deaths, c(0.900))
   )
 
 SEIR.sim.f.D <- SEIR.sim.f %>% 
   group_by(date, paramset) %>% 
   summarize(
-    lwr_D = quantile(D, c(0.025))
-  , mid_D = quantile(D, c(0.50))
-  , upr_D = quantile(D, c(0.975))
+    lwr_D = quantile(D, c(0.100))
+  , mid_D = quantile(D, c(0.500))
+  , upr_D = quantile(D, c(0.900))
   )
 
 # unique(SEIR.sim.f.d$paramset)
+
+# SEIR.sim.f.d <- SEIR.sim.f.d %>% 
 
 ## Actual plots
 if (print.plot) {
 test.paramset <- 2
 {
-gg1 <- ggplot(SEIR.sim.f.d[SEIR.sim.f.d$paramset == test.paramset, ]
+gg1 <- ggplot(SEIR.sim.f.d
+  #[SEIR.sim.f.d$paramset == test.paramset, ]
   ) + 
   geom_ribbon(aes(
     x = date
@@ -554,7 +600,7 @@ gg1 <- ggplot(SEIR.sim.f.d[SEIR.sim.f.d$paramset == test.paramset, ]
     geom_point(data = county.data
     , aes(
       x = date
-    , y = deaths), colour = "dodgerblue4", lwd = 3) + 
+    , y = deaths), colour = "dodgerblue4", lwd = 2) + 
     scale_y_continuous(trans = "log10") +
     scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
     theme(
@@ -563,7 +609,8 @@ gg1 <- ggplot(SEIR.sim.f.d[SEIR.sim.f.d$paramset == test.paramset, ]
   , plot.title = element_text(size = 12)) +
    xlab("Date") + ylab("Daily Deaths")
 
-gg5 <- ggplot(SEIR.sim.f.D[SEIR.sim.f.D$paramset == test.paramset, ]
+gg5 <- ggplot(SEIR.sim.f.D
+  #[SEIR.sim.f.D$paramset == test.paramset, ]
   ) + 
   geom_ribbon(aes(
     x = date
@@ -578,7 +625,7 @@ gg5 <- ggplot(SEIR.sim.f.D[SEIR.sim.f.D$paramset == test.paramset, ]
     geom_point(data = deaths
     , aes(
       x = date
-    , y = deaths), colour = "dodgerblue4", lwd = 3) + 
+    , y = deaths), colour = "dodgerblue4", lwd = 2) + 
     scale_y_continuous(trans = "log10") +
     scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
     theme(
@@ -587,7 +634,8 @@ gg5 <- ggplot(SEIR.sim.f.D[SEIR.sim.f.D$paramset == test.paramset, ]
   , plot.title = element_text(size = 12)) +
    xlab("Date") + ylab("Total Deaths")
 
-gg2 <- ggplot(SEIR.sim.f.c[SEIR.sim.f.c$paramset == test.paramset, ]
+gg2 <- ggplot(SEIR.sim.f.c
+  #[SEIR.sim.f.c$paramset == test.paramset, ]
   ) + 
   geom_ribbon(aes(
     x = date
@@ -602,7 +650,7 @@ gg2 <- ggplot(SEIR.sim.f.c[SEIR.sim.f.c$paramset == test.paramset, ]
     geom_point(data = county.data
     , aes(
       x = date
-    , y = cases), colour = "firebrick4", lwd = 3) + 
+    , y = cases), colour = "firebrick4", lwd = 2) + 
     scale_y_continuous(trans = "log10") +
     scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
     theme(
