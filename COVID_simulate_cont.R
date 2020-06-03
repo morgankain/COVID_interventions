@@ -21,9 +21,17 @@ fit.E0             <- TRUE    ## Was E0 also fit?
 usable.cores       <- 3       ## Number of cores to use to fit
 
 ## Intervention parameters
+int.init           <- "2020-06-01"
+int.end            <- "2020-08-01"
+int.beta0_sigma    <- 1       ## heterogeneity value
+int.beta_catch     <- 1       ## beta0 values caught by intervention
+int.beta_red       <- 1       ## new values after those that are caught
 
+## Where to simulate from
+sir_init.mid       <- FALSE         ## Starts the epidemic from some non-zero timepoint
+sir_init.mid.t     <- "2020-05-29"  ## Date to simulate forward from
 
-sim_length         <- 400     ## How many days to run the simulation
+sim_length         <- 200     ## How many days to run the simulation
 state.plot         <- "D"     ## State variable for plotting (Hospit [H], Death [D], or Cases [C])
 plot.log10         <- TRUE    ## Plot on a log10 scale or not
 
@@ -185,6 +193,17 @@ mobility <- mobility %>% filter(sip_prop != 0)
 ## Remove dates after one week after movement data ends
 county.data <- county.data %>% dplyr::filter(date < (max(mobility$datestr) + 7))
 
+####
+## Set up intervention scenario
+####
+
+int.begin    <- as.numeric((as.Date(int.init) - variable_params[i, ]$sim_start))
+int.duration <- as.Date(int.end) - as.Date(int.init)
+
+int.phase1 <- nrow(mobility) + (int.begin - nrow(mobility))
+int.phase2 <- as.numeric(int.duration)
+int.phase3 <- sim_length - int.phase1 - int.phase2
+
 ## First of the interventions adjust this covariate_table
 mob.covtab <- covariate_table(
   ## First, can add whatever sip_prop into the future
@@ -197,15 +216,16 @@ mob.covtab <- covariate_table(
  , detect_t0     = min(county.data[!is.na(county.data$cases), ]$day) - 1
   ## Next can add an intervention that stops large gatherings
  , intervention  = c(
-    rep(0, nrow(mobility))
-  , rep(0, sim_length - length(mobility$sip_prop))
+    rep(0, int.phase1)
+  , rep(1, int.phase2)
+  , rep(0, int.phase3)
  )
     )
 
 ## Second bit of the intervention will affect these parameters:
-fixed_params["beta0_sigma"] <- 1  ## heterogeneity value
-fixed_params["beta_catch"]  <- 1  ## beta0 values caught by intervention
-fixed_params["beta_red"]    <- 1  ## new values after those that are caught
+fixed_params["beta0_sigma"] <- int.beta0_sigma  ## heterogeneity value
+fixed_params["beta_catch"]  <- int.beta_catch  ## beta0 values caught by intervention
+fixed_params["beta_red"]    <- int.beta_red  ## new values after those that are caught
 
 covid_mobility <- pomp(
    data       = county.data
@@ -252,11 +272,100 @@ SEIR.sim <- do.call(
            summarise_all(median) %>%
                     mutate(.id = "median"))
     }
-
+      
 SEIR.sim <- SEIR.sim %>%
   mutate(
       date     = round(as.Date(day, origin = variable_params[i, ]$sim_start))
     , paramset = variable_params[i, ]$paramset)
+
+## Need to think about the most principled way of simulating forward from the present. For now just take the median up until the present as the
+ ## starting values, and project from there
+if (sir_init.mid) {
+  
+new.startvals <- SEIR.sim %>% filter(.id == "median" & date == sir_init.mid.t)  
+new.days      <- seq(as.numeric((as.Date(sir_init_mid.t) - variable_params[i, ]$sim_start)), sim_length)
+
+mob.covtab.c <- covariate_table(
+  ## First, can add whatever sip_prop into the future
+   sip_prop      = c(
+      mobility$sip_prop, rep(mobility$sip_prop[length(mobility$sip_prop)]
+        , sim_length - length(mobility$sip_prop))
+      )[new.days]
+ , order         = "constant"
+ , times         = seq(1, sim_length, by = 1)[new.days]
+ , detect_t0     = min(county.data[!is.na(county.data$cases), ]$day) - 1
+  ## Next can add an intervention that stops large gatherings
+ , intervention  = c(
+    rep(0, int.phase1)
+  , rep(1, int.phase2)
+  , rep(0, int.phase3)
+ )[new.days]
+    )
+
+covid_mobility <- pomp(
+   data       = county.data
+ , times      = "day"
+ , t0         = 1
+ , covar      = mob.covtab.c
+ , rprocess   = euler(sir_step_mobility, delta.t = 1/6)
+ , rmeasure   = rmeas_multi_logis
+ , dmeasure   = dmeas_multi_logis
+ , rinit      = sir_init_mid
+ , partrans   = par_trans
+ , accumvars  = accum_names
+ , paramnames = c(param_names, mid_init_param_names)
+ , statenames = state_names
+)
+
+SEIR.sim.c <- do.call(
+  pomp::simulate
+  , list(
+    object         = covid_mobility
+    , times        = mob.covtab.c@times
+    , params = c(prev.fit[["fixed_params"]]
+      , c(
+        beta0      = variable_params[i, "beta0est"]
+      , E_init     = variable_params[i, "E_init"]
+      , detect_max = variable_params[i, "detect_max"]
+      , detect_mid = variable_params[i, "detect_mid"]
+      , detect_k   = variable_params[i, "detect_k"]
+      , theta      = variable_params[i, "theta"]
+      , theta2     = variable_params[i, "theta2"]
+      , beta_min   = variable_params[i, "beta_min"]
+      , Ca         = variable_params[i, "Ca"]
+      , alpha      = variable_params[i, "alpha"]
+      , delta      = variable_params[i, "delta"]
+      , mu         = variable_params[i, "mu"]
+        )
+      , unlist(c(
+        S0         = round(new.startvals$S)
+      , Ia0        = round(new.startvals$Ia)
+      , Ip0        = round(new.startvals$Ip)
+      , Is0        = round(new.startvals$Is)
+      , Im0        = round(new.startvals$Im)
+      , Hr0        = round(new.startvals$Hr)
+      , Hd0        = round(new.startvals$Hd)
+      , R0         = round(new.startvals$R)
+      , D0         = round(new.startvals$D)
+      )))
+    , nsim         = nsim
+    , format       = "d"
+    , include.data = F
+    , seed         = 1001)) %>% {
+      rbind(.,
+         group_by(., day) %>%
+           dplyr::select(-.id) %>%
+           summarise_all(median) %>%
+                    mutate(.id = "median"))
+
+}
+
+SEIR.sim.c <- SEIR.sim.c %>%
+  mutate(
+      date     = round(as.Date(day, origin = variable_params[i, ]$sim_start))
+    , paramset = variable_params[i, ]$paramset)
+
+}
 
 SEIR.sim.s <- SEIR.sim %>% 
   dplyr::filter(.id != "median") %>%
@@ -305,10 +414,18 @@ Reff   <- rbind(Reff, Reff.t)
 detect <- rbind(detect, detect.t)
 
 ## Stich together output
+if (sir_init.mid) {
+if (i == 1) {
+ SEIR.sim.f <- SEIR.sim.c  
+} else {
+ SEIR.sim.f <- rbind(SEIR.sim.f, SEIR.sim.c) 
+}
+} else {
 if (i == 1) {
  SEIR.sim.f <- SEIR.sim  
 } else {
  SEIR.sim.f <- rbind(SEIR.sim.f, SEIR.sim) 
+}  
 }
 
 ## Keep track of progress
@@ -348,16 +465,16 @@ gg1 <- ggplot(SEIR.sim.f.d
     x = date
   , ymin = lwr_d
   , ymax = upr_d
-  , group = paramset), alpha = 0.1) +
+  , group = paramset), alpha = 0.05) +
   geom_line(aes(
       x = date
     , y = mid_d
     , group = paramset)
-      , alpha = 1, lwd = .5) + 
+      , alpha = 0.5, lwd = .5) + 
     geom_point(data = county.data
     , aes(
       x = date
-    , y = deaths)) + 
+    , y = deaths), colour = "dodgerblue4", lwd = 3) + 
     scale_y_continuous(trans = "log10") +
     scale_x_date(labels = date_format("%Y-%b"), date_breaks = "3 month") +
     theme(
@@ -372,16 +489,16 @@ gg2 <- ggplot(SEIR.sim.f.c
     x = date
   , ymin = lwr_c
   , ymax = upr_c
-  , group = paramset), alpha = 0.1) +
+  , group = paramset), alpha = 0.05) +
   geom_line(aes(
       x = date
     , y = mid_c
     , group = paramset)
-      , alpha = 1, lwd = .5) + 
+      , alpha = 0.5, lwd = .5) + 
     geom_point(data = county.data
     , aes(
       x = date
-    , y = cases)) + 
+    , y = cases), colour = "firebrick4", lwd = 3) + 
     scale_y_continuous(trans = "log10") +
     scale_x_date(labels = date_format("%Y-%b"), date_breaks = "3 month") +
     theme(
