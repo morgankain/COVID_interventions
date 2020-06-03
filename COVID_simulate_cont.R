@@ -6,6 +6,9 @@
 ## Note: This script is set up to be able to be run from its own from a saved .Rds.
  ## Thus, packages are set to be loaded etc. (these lines do not need to be run if COVID_fit_cont.R was just run)
 
+## For detailed conceivable intervention scenarios and details on how tosimulate them see:
+## "potential_intervention_details_and_plots.R"
+
 ####
 ## Parameters
 ####
@@ -20,22 +23,35 @@ nsim               <- 200     ## Number of epidemic simulations for each paramet
 fit.E0             <- TRUE    ## Was E0 also fit?
 usable.cores       <- 3       ## Number of cores to use to fit
 
-## Intervention parameters
-int.init           <- "2020-06-01"
-int.end            <- "2020-08-01"
 int.beta0_sigma    <- 1       ## heterogeneity value
-int.beta_catch     <- 1       ## beta0 values caught by intervention
-int.beta_red       <- 1       ## new values after those that are caught
 
 ## Where to simulate from
 sir_init.mid       <- FALSE         ## Starts the epidemic from some non-zero timepoint
 sir_init.mid.t     <- "2020-05-29"  ## Date to simulate forward from
 
-sim_length         <- 200     ## How many days to run the simulation
+## Sim and plotting details
+sim_length         <- 300     ## How many days to run the simulation
 state.plot         <- "D"     ## State variable for plotting (Hospit [H], Death [D], or Cases [C])
 plot.log10         <- TRUE    ## Plot on a log10 scale or not
+print.plot         <- FALSE
 
-loglik.thresh      <- 1       ## Keep parameter sets with a likelihood within top X loglik units
+####
+## Intervention parameters
+####
+int.movement       <- "pre"     ## Shape of human movement after the data ends ::: pre, post, mid
+int.type           <- "none"    ## Extra intervention apart from the movement  ::: none, inf_iso, tail
+int.init           <- "2020-06-08"
+int.end            <- "2020-08-01"
+
+## Test and Isolate parameters
+iso_mild_level     <- 0.2
+iso_severe_level   <- 0.2
+
+## Tail chopping parameters
+int.beta_catch     <- 1       ## beta0 values caught by intervention
+int.beta_red       <- 1       ## new values after those that are caught
+
+loglik.thresh      <- 2       ## Keep parameter sets with a likelihood within top X loglik units
 params.all         <- TRUE    ## Keep all fitted parameters above loglik thresh?...
 nparams            <- 50      ## ...if FALSE, pick a random subset for speed
 
@@ -105,8 +121,11 @@ fixed_params     <- prev.fit[["fixed_params"]]
  ## and keep only the best fits as defined by loglik
 variable_params <- variable_params %>% 
   filter(log_lik != 0) %>% 
-# filter(log_lik == max(log_lik)) ## only used for manuscript dyanmic trajectory plots
-  filter(log_lik > (max(log_lik) - loglik.thresh))
+ # filter(log_lik == max(log_lik)) ## only used for manuscript dyanmic trajectory plots
+ filter(log_lik > (max(log_lik) - loglik.thresh))
+
+## For debug plots just pick one paramset
+variable_params <- variable_params[variable_params$paramset == 2, ]
 
 ## A few adjustments for preprint counterfactuals and other scenarios
 # 1) Start later
@@ -204,23 +223,66 @@ int.phase1 <- nrow(mobility) + (int.begin - nrow(mobility))
 int.phase2 <- as.numeric(int.duration)
 int.phase3 <- sim_length - int.phase1 - int.phase2
 
-## First of the interventions adjust this covariate_table
+## Covariate table with all of the intervention scenarios
+{
 mob.covtab <- covariate_table(
   ## First, can add whatever sip_prop into the future
-   sip_prop      = c(
-      mobility$sip_prop, rep(mobility$sip_prop[length(mobility$sip_prop)]
-        , sim_length - length(mobility$sip_prop))
+  
+   sip_prop      = {
+     if (int.movement == "pre") {
+     c(
+      mobility$sip_prop
+    , rep(mean(tail(mobility$sip_prop, 3)), int.phase1 - length(mobility$sip_prop))
+    , rep(mean(head(mobility$sip_prop, 7)), sim_length - int.phase1)
+      )       
+     } else if (int.movement == "post") {
+     c(
+      mobility$sip_prop
+    , rep(mean(tail(mobility$sip_prop, 3)), int.phase1 - length(mobility$sip_prop))
+    , rep(mean(tail(mobility$sip_prop, 3)), sim_length - int.phase1)
       )
+     } else if (int.movement == "mid") {
+     c(
+      mobility$sip_prop
+    , rep(mean(tail(mobility$sip_prop, 3)), int.phase1 - length(mobility$sip_prop))
+    , rep((mean(head(mobility$sip_prop, 7)) + mean(tail(mobility$sip_prop, 3))) / 2, sim_length - int.phase1)
+      )         
+     }
+    
+   }
+  
  , order         = "constant"
  , times         = seq(1, sim_length, by = 1)
  , detect_t0     = min(county.data[!is.na(county.data$cases), ]$day) - 1
+  
+ , iso_mild_level   = iso_mild_level
+ , iso_severe_level = iso_severe_level
+  
   ## Next can add an intervention that stops large gatherings
- , intervention  = c(
+  
+ , intervention  = {
+   if (int.type == "none") {
+   c(
+    rep(0, int.phase1)
+  , rep(0, int.phase2)
+  , rep(0, int.phase3)
+  )     
+   } else if (int.type == "tail") {
+   c(
     rep(0, int.phase1)
   , rep(1, int.phase2)
   , rep(0, int.phase3)
- )
+   ) 
+   } else if (int.type == "inf_iso") {
+   c(
+    rep(0, int.phase1)
+  , rep(2, int.phase2)
+  , rep(2, int.phase3)
+   )   
+  }
+   }
     )
+}
 
 ## Second bit of the intervention will affect these parameters:
 fixed_params["beta0_sigma"] <- int.beta0_sigma  ## heterogeneity value
@@ -372,7 +434,7 @@ SEIR.sim.s <- SEIR.sim %>%
   group_by(day) %>%
   summarize(S = mean(S), D = mean(D))
 
-betat.t      <- variable_params[i, "beta0est"] * exp(log(variable_params[i, "beta_min"])*mob.covtab@table[2, ])
+betat.t      <- variable_params[i, "beta0est"] * exp(log(variable_params[i, "beta_min"])*mob.covtab@table[which(dimnames(mob.covtab@table)[[1]] == "sip_prop"), ])
 
 Reff.t       <- with(variable_params[i, ], covid_R0(
    beta0est      = betat.t
@@ -382,10 +444,10 @@ Reff.t       <- with(variable_params[i, ], covid_R0(
   )
   )
 
-detect.t <- c(rep(0, mob.covtab@table[1, 1])
+detect.t <- c(rep(0, mob.covtab@table[which(dimnames(mob.covtab@table)[[1]] == "detect_t0"), 1])
   , (variable_params[i, "detect_max"] / 
     (1 + exp(-variable_params[i, "detect_k"] * (mob.covtab@times - variable_params[i, "detect_mid"])))
-    )[-seq(1, mob.covtab@table[1, 1])]
+    )[-seq(1, mob.covtab@table[which(dimnames(mob.covtab@table)[[1]] == "detect_t0"), 1])]
 )
 
 betat.t <- data.frame(
@@ -443,6 +505,10 @@ SEIR.sim.f <- SEIR.sim.f %>% filter(date < min(variable_params$sim_start + sim_l
 ## Summary and plotting
 ####
 
+SEIR.sim.f.c.a <- SEIR.sim.f %>% dplyr::select(date, day, .id, cases, paramset)
+SEIR.sim.f.d.a <- SEIR.sim.f %>% dplyr::select(date, day, .id, deaths, paramset)
+SEIR.sim.f.D.a <- SEIR.sim.f %>% dplyr::select(date, day, .id, D, paramset)
+
 SEIR.sim.f.c <- SEIR.sim.f %>% 
   group_by(date, paramset) %>% 
   summarize(
@@ -459,7 +525,21 @@ SEIR.sim.f.d <- SEIR.sim.f %>%
   , upr_d = quantile(deaths, c(0.975))
   )
 
-gg1 <- ggplot(SEIR.sim.f.d
+SEIR.sim.f.D <- SEIR.sim.f %>% 
+  group_by(date, paramset) %>% 
+  summarize(
+    lwr_D = quantile(D, c(0.025))
+  , mid_D = quantile(D, c(0.50))
+  , upr_D = quantile(D, c(0.975))
+  )
+
+# unique(SEIR.sim.f.d$paramset)
+
+## Actual plots
+if (print.plot) {
+test.paramset <- 2
+{
+gg1 <- ggplot(SEIR.sim.f.d[SEIR.sim.f.d$paramset == test.paramset, ]
   ) + 
   geom_ribbon(aes(
     x = date
@@ -470,20 +550,44 @@ gg1 <- ggplot(SEIR.sim.f.d
       x = date
     , y = mid_d
     , group = paramset)
-      , alpha = 0.5, lwd = .5) + 
+      , alpha = 0.50, lwd = .5) + 
     geom_point(data = county.data
     , aes(
       x = date
     , y = deaths), colour = "dodgerblue4", lwd = 3) + 
     scale_y_continuous(trans = "log10") +
-    scale_x_date(labels = date_format("%Y-%b"), date_breaks = "3 month") +
+    scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
     theme(
     axis.text.x = element_text(size = 10)
   , legend.title = element_text(size = 12)
   , plot.title = element_text(size = 12)) +
-   xlab("Date") + ylab("Deaths")
+   xlab("Date") + ylab("Daily Deaths")
 
-gg2 <- ggplot(SEIR.sim.f.c
+gg5 <- ggplot(SEIR.sim.f.D[SEIR.sim.f.D$paramset == test.paramset, ]
+  ) + 
+  geom_ribbon(aes(
+    x = date
+  , ymin = lwr_D
+  , ymax = upr_D
+  , group = paramset), alpha = 0.05) +
+  geom_line(aes(
+      x = date
+    , y = mid_D
+    , group = paramset)
+      , alpha = 0.50, lwd = .5) + 
+    geom_point(data = deaths
+    , aes(
+      x = date
+    , y = deaths), colour = "dodgerblue4", lwd = 3) + 
+    scale_y_continuous(trans = "log10") +
+    scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
+    theme(
+    axis.text.x = element_text(size = 10)
+  , legend.title = element_text(size = 12)
+  , plot.title = element_text(size = 12)) +
+   xlab("Date") + ylab("Total Deaths")
+
+gg2 <- ggplot(SEIR.sim.f.c[SEIR.sim.f.c$paramset == test.paramset, ]
   ) + 
   geom_ribbon(aes(
     x = date
@@ -494,13 +598,13 @@ gg2 <- ggplot(SEIR.sim.f.c
       x = date
     , y = mid_c
     , group = paramset)
-      , alpha = 0.5, lwd = .5) + 
+      , alpha = 0.50, lwd = .5) + 
     geom_point(data = county.data
     , aes(
       x = date
     , y = cases), colour = "firebrick4", lwd = 3) + 
     scale_y_continuous(trans = "log10") +
-    scale_x_date(labels = date_format("%Y-%b"), date_breaks = "3 month") +
+    scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
     theme(
     axis.text.x = element_text(size = 10)
   , legend.title = element_text(size = 12)
@@ -508,20 +612,24 @@ gg2 <- ggplot(SEIR.sim.f.c
    xlab("Date") + ylab("Observed Cases")
   
 gg3 <- ggplot(data = Reff, aes(x = date, y = Reff)) + 
-    geom_line(aes(group = paramset), alpha = 0.4) +
+    geom_line(aes(group = paramset), alpha = 0.5) +
     theme(
     axis.text.x = element_text(size = 10)
   , legend.title = element_text(size = 12)
   , plot.title = element_text(size = 12)) +
    xlab("Date") + ylab("Reff") +
+   scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
    geom_hline(yintercept = 1, linetype = "dashed", lwd = 0.5)
 
 gg4 <- ggplot(data = detect, aes(x = date, y = detect)) + 
-    geom_line(aes(group = paramset), alpha = 0.4) +
+    geom_line(aes(group = paramset), alpha = 0.5) +
     theme(
     axis.text.x = element_text(size = 10)
    , legend.title = element_text(size = 12)
   , plot.title = element_text(size = 12)) +
+   scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
    xlab("Date") + ylab("Case detection proportion")
-  
-gridExtra::grid.arrange(gg1, gg2, gg3, gg4, ncol = 1)
+  }
+gridExtra::grid.arrange(gg1, gg5, gg2, gg3, gg4, ncol = 1)
+}
+

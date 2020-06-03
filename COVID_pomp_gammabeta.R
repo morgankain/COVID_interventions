@@ -24,8 +24,14 @@ sir_step_mobility <- Csnippet("
                      // tracking of total imported, removing them them from susceptibles
                      import_total += import;
                      S -= import;
+                     
+                     // adjust contact rates if isolation of symptomatic cases is in place
                      double iso_m = 1;
                      double iso_s = 1;
+                     if (intervention == 2){
+                      iso_m = iso_mild_level;
+                      iso_s = iso_severe_level;
+                     }
                      
                      // calculate transition numbers
                      double dSE = rbinom(S, 1-exp(-betat*(Ca*Ia/N + Cp*Ip/N + iso_m*Cm*Im/N + iso_s*Cs*Is/N)*dt)); 
