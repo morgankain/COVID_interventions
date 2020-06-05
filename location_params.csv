@@ -1,6 +1,6 @@
 Parameter,est,lwr,upr,location,details
 E0,,3,6,Miami-Dade,starting epidemic size
-sim_start,,42,65,Miami-Dade,beginning date of the epidemic
+sim_start,,36,49,Miami-Dade,beginning date of the epidemic
 int_start1,,75,79,Miami-Dade,any first wave social distancing intervention
 int_length1,,,,Miami-Dade,length of the first wave of social distancing
 int_start2,84,,,Miami-Dade,primary form of social distancing implemented
@@ -10,7 +10,7 @@ soc_dist_level_sip,,0.2,0.45,Miami-Dade,strength of the primary form of social d
 N,2761581,,,Miami-Dade,population size
 IFR,0.01124727,,,Miami-Dade,mortality rate of symptomatic infections
 E0,,3,6,Los Angeles,starting epidemic size
-sim_start,,8,24,Los Angeles,beginning date of the epidemic
+sim_start,,27,40,Los Angeles,beginning date of the epidemic
 int_start1,,69,78,Los Angeles,any first wave social distancing intervention
 int_length1,,,,Los Angeles,length of the first wave of social distancing
 int_start2,79,,,Los Angeles,primary form of social distancing implemented
@@ -20,7 +20,7 @@ soc_dist_level_sip,,0.2,0.45,Los Angeles,strength of the primary form of social 
 N,10039107,,,Los Angeles,population size
 IFR,0.0095,,,Los Angeles,mortality rate of symptomatic infections
 E0,,3,6,King,starting epidemic size
-sim_start,,8,25,King,beginning date of the epidemic
+sim_start,,6,19,King,beginning date of the epidemic
 int_start1,,66,71,King,any first wave social distancing intervention
 int_length1,,,,King,length of the first wave of social distancing
 int_start2,83,,,King,primary form of social distancing implemented
@@ -40,7 +40,7 @@ soc_dist_level_sip,,0.2,0.45,New York City,strength of the primary form of socia
 N,8399000,,,New York City,population size
 IFR,,0.00903,0.01121,New York City,mortality rate of symptomatic infections
 E0,,3,6,Santa Clara,starting epidemic size
-sim_start,,14,28,Santa Clara,beginning date of the epidemic
+sim_start,,22,35,Santa Clara,beginning date of the epidemic
 int_start1,,60,69,Santa Clara,any first wave social distancing intervention
 int_length1,,,,Santa Clara,length of the first wave of social distancing
 int_start2,77,,,Santa Clara,primary form of social distancing implemented
@@ -50,7 +50,7 @@ soc_dist_level_sip,,0.2,0.45,Santa Clara,strength of the primary form of social 
 N,1938000,,,Santa Clara,population size
 IFR,,0.00903,0.01121,Santa Clara,mortality rate of symptomatic infections
 E0,,3,6,Fulton,starting epidemic size
-sim_start,,42,65,Fulton,beginning date of the epidemic
+sim_start,,33,46,Fulton,beginning date of the epidemic
 int_start1,,75,79,Fulton,any first wave social distancing intervention
 int_length1,,,,Fulton,length of the first wave of social distancing
 int_start2,,,,Fulton,primary form of social distancing implemented
