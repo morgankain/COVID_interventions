@@ -58,6 +58,11 @@ int.beta_catch     <- 1000      ## beta0 values caught by intervention
 int.catch_eff      <- 0         ## effectiveness at catching beta0 values above the beta_catch (0 - 1)
 # int.beta_red       <- 1       ## new values after those that are caught
 
+# crude way to ensure int.beta_catch > 0
+if(int.beta_catch <= 0){
+  int.beta_catch <- 0.0001
+}
+
 loglik.thresh      <- 2       ## Keep parameter sets with a likelihood within top X loglik units
 params.all         <- TRUE    ## Keep all fitted parameters above loglik thresh?...
 nparams            <- 50      ## ...if FALSE, pick a random subset for speed
