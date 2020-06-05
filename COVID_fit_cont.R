@@ -32,8 +32,8 @@ sim.length        <- 200
 detect.logis      <- TRUE
 fixed.E0          <- FALSE
 
-focal.county      <- "Santa Clara" 
-focal.state_abbr  <- "CA"
+focal.county      <- "King" 
+focal.state_abbr  <- "WA"
 
 ## Required packages to run this code
 needed_packages <- c(
@@ -65,6 +65,10 @@ if (fit.with == "D_C" | fit.with == "D") {
 deaths  <- read.csv("us-counties.txt")
 deaths  <- deaths %>% mutate(date = as.Date(date)) %>% dplyr::filter(county == focal.county)
 deaths  <- deaths %>% dplyr::filter(date < max(date) - fit.minus)
+
+if (focal.county == "Fulton") {
+deaths <- deaths %>% filter(state == "Georgia")
+}
 } else if (fit.with == "H") {
 ## Not supported right now for SCC, ony currently have data for Contra Costa County.
  ## To use H, supply your own data and change the path
@@ -282,7 +286,9 @@ covid_mobility <- pomp(
 ## Extra params for the new model:
  ## 1) beta0_sigma can't really be fit, so assume for now
  ## 2) fit with no intervention and then simulate later with an intervention
-fixed_params["beta0_sigma"] <- 1
+ ## From work on the distribution of individual, algebra converting between the individual negative binomial dispersion
+ ## and the population level gamma variance avialable in the supp of our upcoming paper
+fixed_params["beta0_sigma"] <- 0.16
 fixed_params["beta_catch"]  <- 1
 fixed_params["beta_red"]    <- 1 
 

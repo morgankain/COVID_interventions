@@ -49,3 +49,13 @@ soc_dist_level_wfh,,0.7,0.9,Santa Clara,strength of the first wave of social dis
 soc_dist_level_sip,,0.2,0.45,Santa Clara,strength of the primary form of social distancing
 N,1938000,,,Santa Clara,population size
 IFR,,0.00903,0.01121,Santa Clara,mortality rate of symptomatic infections
+E0,,3,6,Fulton,starting epidemic size
+sim_start,,42,65,Fulton,beginning date of the epidemic
+int_start1,,75,79,Fulton,any first wave social distancing intervention
+int_length1,,,,Fulton,length of the first wave of social distancing
+int_start2,,,,Fulton,primary form of social distancing implemented
+int_length2,,,,Fulton,length of the primary form of social distancing
+soc_dist_level_wfh,,0.7,0.9,Fulton,strength of the first wave of social distancing
+soc_dist_level_sip,,0.2,0.45,Fulton,strength of the primary form of social distancing
+N,1064000,,,Fulton,population size
+IFR,,0.00903,0.01121,Fulton,mortality rate of symptomatic infections

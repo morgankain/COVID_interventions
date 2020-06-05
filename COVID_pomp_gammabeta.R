@@ -3,13 +3,14 @@ sir_step_mobility <- Csnippet("
                      // adjust betat for social distancing interventions
                      double betat;
                      if((beta0_sigma > 0) & (I > 0)){
-                 //  betat = rgammawn(beta0_sigma/sqrt(I), beta0) * exp(log(beta_min)*sip_prop);
-                 //  betat = rgammawn(beta0_sigma/sqrt(I), beta0) * fmax(1 - sip_prop*beta_min, 0);
-                 //  betat = beta0*fmax(1 - sip_prop*beta_min, 0);
-                     betat = beta0*exp(log(beta_min)*sip_prop);
+                     betat = rgammawn(sqrt(beta0 / (beta0_sigma * I)), beta0) * exp(log(beta_min)*sip_prop);
+                //   betat = rgammawn(beta0_sigma/sqrt(I), beta0) * exp(log(beta_min)*sip_prop);
+                //   betat = rgammawn(beta0_sigma/sqrt(I), beta0) * fmax(1 - sip_prop*beta_min, 0);
+                //   betat = beta0*fmax(1 - sip_prop*beta_min, 0);
+                //   betat = beta0*exp(log(beta_min)*sip_prop);
                      } else {
-                 //  betat = beta0*exp(log(beta_min)*sip_prop);
-                 //  betat = beta0*fmax(1 - sip_prop*beta_min, 0);
+                //   betat = beta0*exp(log(beta_min)*sip_prop);
+                //   betat = beta0*fmax(1 - sip_prop*beta_min, 0);
                      betat = beta0*exp(log(beta_min)*sip_prop);
                      } 
                      if ((intervention == 1) & (betat > beta_catch)) {
@@ -28,10 +29,10 @@ sir_step_mobility <- Csnippet("
                      // adjust contact rates if isolation of symptomatic cases is in place
                      double iso_m = 1;
                      double iso_s = 1;
-                     if (intervention == 2){
-                      iso_m = iso_mild_level;
-                      iso_s = iso_severe_level;
-                     }
+                //   if (intervention == 2){
+                //    iso_m = iso_mild_level;
+                //    iso_s = iso_severe_level;
+                //   }
                      
                      // calculate transition numbers
                      double dSE = rbinom(S, 1-exp(-betat*(Ca*Ia/N + Cp*Ip/N + iso_m*Cm*Im/N + iso_s*Cs*Is/N)*dt)); 
@@ -98,8 +99,8 @@ sir_init_mid <- Csnippet("
                      H_new = 0;
                      import_total = 0;
                      ")
-mid_init_param_names = c("S0", "Ia0", "Ip0", "Is0", "Im0",
-                         "Hr0", "Hd0", "R0", "D0")
+
+mid_init_param_names <- c("S0", "Ia0", "Ip0", "Is0", "Im0", "Hr0", "Hd0", "R0", "D0")
 
 if (fixed.E0) {
   

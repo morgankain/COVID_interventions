@@ -1,3 +1,4 @@
+library(scales)
 ####
 ## Simulation: Lift all interventions June 8 (resume pre-intervention beta)
 ####
@@ -61,8 +62,6 @@ SEIR.sim.f.d.a <- rbind(SEIR.sim.f.d.a.s1, SEIR.sim.f.d.a.s2, SEIR.sim.f.d.a.s3)
 SEIR.sim.f.D.a <- rbind(SEIR.sim.f.D.a.s1, SEIR.sim.f.D.a.s2, SEIR.sim.f.D.a.s3)
 
 fig2_colors <- c("#B40F20", "#E58601", "#046C9A", "grey30") # old colors
-
-library(scales)
 
 # SEIR.sim.f.c.a <- SEIR.sim.f.c.a %>% filter(date > as.Date(sir_init.mid.t) + 1)
 # SEIR.sim.f.D.a <- SEIR.sim.f.D.a %>% filter(date > as.Date(sir_init.mid.t) + 1)

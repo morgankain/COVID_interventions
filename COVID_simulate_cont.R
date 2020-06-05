@@ -17,7 +17,8 @@ set.seed(10001)
 fitting            <- FALSE   ## Small change in pomp objects if fitting or simulating
 ## TRUE if COVID_fit previously run, FALSE if COVID_fit was just run and global environment is still full
 use.rds            <- TRUE    
-rds.name           <- "output/Santa Clara_TRUE_FALSE_0_2020-06-02_cont_temp_NZ_sig_exp.Rds"
+#rds.name           <- "output/Santa Clara_TRUE_FALSE_0_2020-06-02_cont_temp_NZ_sig_exp.Rds"
+#rds.name           <- "output/Santa Clara_TRUE_FALSE_0_2020-06-04_cont_temp_NZ_sig_exp_gamma.Rds"
 more.params.uncer  <- FALSE   ## Fit with more (FALSE) or fewer (TRUE) point estimates for a number of parameters
 nsim               <- 200     ## Number of epidemic simulations for each parameter set
 fit.E0             <- TRUE    ## Was E0 also fit?
@@ -26,7 +27,7 @@ usable.cores       <- 3       ## Number of cores to use to fit
 int.beta0_sigma    <- 1       ## heterogeneity value
 
 ## Where to simulate from
-sir_init.mid       <- FALSE        ## Starts the epidemic from some non-zero timepoint
+sir_init.mid       <- FALSE         ## Starts the epidemic from some non-zero timepoint
 sir_init.mid.t     <- "2020-05-28"  ## Date to simulate forward from
 
 ## Sim and plotting details
@@ -41,8 +42,8 @@ cf.type           <- "may1"   ## Specifically modeled counterfactual analyses: n
 ####
 ## Intervention parameters
 ####
-int.movement       <- "pre"     ## Shape of human movement after the data ends ::: pre, post, mid
-int.type           <- "none"    ## Extra intervention apart from the movement  ::: none, inf_iso, tail
+int.movement       <- "mid"     ## Shape of human movement after the data ends ::: pre, post, mid
+int.type           <- "inf_iso"    ## Extra intervention apart from the movement  ::: none, inf_iso, tail
 int.init           <- "2020-06-08"
 int.end            <- "2020-08-01"
 
@@ -64,8 +65,8 @@ meas.nb            <- TRUE    ## Negative binomial measurement process?
 import_cases       <- FALSE   ## Use importation of cases?
 fit.minus          <- 0       ## Use data until X days prior to the present
 
-focal.county      <- "Santa Clara" 
-focal.state_abbr  <- "CA"
+focal.county      <- "Miami-Dade" 
+focal.state_abbr  <- "FL"
 
 ## Required packages to run this code
 needed_packages <- c(
@@ -128,7 +129,7 @@ variable_params <- variable_params %>%
  filter(log_lik > (max(log_lik) - loglik.thresh))
 
 ## For debug plots just pick one paramset
-# variable_params <- variable_params[variable_params$paramset == 2, ]
+variable_params <- variable_params[variable_params$paramset == 2, ]
 
 ## A few adjustments for preprint counterfactuals and other scenarios
 # 1) Start later
@@ -555,9 +556,12 @@ SEIR.sim.f.D.a <- SEIR.sim.f %>% dplyr::select(date, day, .id, D, paramset)
 SEIR.sim.f.c <- SEIR.sim.f %>% 
   group_by(date, paramset) %>% 
   summarize(
-    lwr_c = quantile(cases, c(0.100))
+#    lwr_c = quantile(cases, c(0.100))
+#  , mid_c = quantile(cases, c(0.500))
+#  , upr_c = quantile(cases, c(0.900))
+    lwr_c = quantile(cases, c(0.025))
   , mid_c = quantile(cases, c(0.500))
-  , upr_c = quantile(cases, c(0.900))
+  , upr_c = quantile(cases, c(0.975))
   )
 
 SEIR.sim.f.d <- SEIR.sim.f %>% 
@@ -578,7 +582,11 @@ SEIR.sim.f.D <- SEIR.sim.f %>%
 
 # unique(SEIR.sim.f.d$paramset)
 
-# SEIR.sim.f.d <- SEIR.sim.f.d %>% 
+# SEIR.sim.f.d <- SEIR.sim.f.d %>% filter(date < "2020-03-15")
+# SEIR.sim.f.D <- SEIR.sim.f.D %>% filter(date < "2020-03-15")
+# SEIR.sim.f.c <- SEIR.sim.f.c %>% filter(date < "2020-03-15")
+# Reff         <- Reff %>% filter(date < "2020-03-15")
+# detect       <- detect %>% filter(date < "2020-03-15")
 
 ## Actual plots
 if (print.plot) {
@@ -681,3 +689,47 @@ gg4 <- ggplot(data = detect, aes(x = date, y = detect)) +
 gridExtra::grid.arrange(gg1, gg5, gg2, gg3, gg4, ncol = 1)
 }
 
+SEIR.sim.f.c.a <- SEIR.sim.f.c.a %>% filter(date < "2020-04-01")
+
+ggplot(SEIR.sim.f.c.a) + 
+  geom_line(aes(
+      x = date
+    , y = cases
+    , group = .id)
+      , alpha = 0.10, lwd = .2) + 
+    geom_point(data = county.data
+    , aes(
+      x = date
+    , y = cases), colour = "firebrick4", lwd = 2) + 
+    scale_y_continuous(trans = "log10") +
+    scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
+    theme(
+    axis.text.x = element_text(size = 10)
+  , legend.title = element_text(size = 12)
+  , plot.title = element_text(size = 12)) +
+   xlab("Date") + ylab("Observed Cases")
+
+SEIR.sim.f.c <- SEIR.sim.f.c %>% filter(date < "2020-04-01")
+
+ggplot(SEIR.sim.f.c) + 
+  geom_ribbon(aes(
+    x = date
+  , ymin = lwr_c
+  , ymax = upr_c
+  , group = paramset), alpha = 0.50) +
+  geom_line(aes(
+      x = date
+    , y = mid_c
+    , group = paramset)
+      , alpha = 0.50, lwd = .5) + 
+    geom_point(data = county.data
+    , aes(
+      x = date
+    , y = cases), colour = "firebrick4", lwd = 2) + 
+    scale_y_continuous(trans = "log10") +
+    scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
+    theme(
+    axis.text.x = element_text(size = 10)
+  , legend.title = element_text(size = 12)
+  , plot.title = element_text(size = 12)) +
+   xlab("Date") + ylab("Observed Cases")
