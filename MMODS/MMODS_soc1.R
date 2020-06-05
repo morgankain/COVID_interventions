@@ -9,15 +9,15 @@ fitting           <- TRUE     ## Small change in pomp objects if fitting or simu
 fit.minus         <- 0        ## Use data until X days prior to the present
 more.params.uncer <- FALSE    ## Fit with more (FALSE) or fewer (TRUE) point estimates for a number of parameters
 fit.E0            <- TRUE     ## Also fit initial number of infected individuals that starts the epidemic?
-usable.cores      <- 3        ## Number of cores to use to fit
+usable.cores      <- 6        ## Number of cores to use to fit
 fit.with          <- "D_C"    ## Fit with D (deaths) or H (hospitalizations) -- Need your own data for H -- or both deaths and cases (D_C).
 fit_to_sip        <- TRUE     ## Fit beta0 and shelter in place strength simultaneously?
 meas.nb           <- TRUE     ## Negative binomial measurement process?
 import_cases      <- FALSE    ## Use importation of cases?
 ## mif2 fitting parameters. 
-n.mif_runs        <- 3        ## number of repeated fits (6 used in manuscript, 2 suggested to debug/check code)
-n.mif_length      <- 20       ## number of steps (100 used in manuscript, 20 suggested to debug/check code)
-n.mif_particles   <- 300      ## number of particles (3000 used in manuscript, 3000 suggested to debug/check code)
+n.mif_runs        <- 6        ## number of repeated fits (6 used in manuscript, 2 suggested to debug/check code)
+n.mif_length      <- 100       ## number of steps (100 used in manuscript, 20 suggested to debug/check code)
+n.mif_particles   <- 750      ## number of particles (3000 used in manuscript, 3000 suggested to debug/check code)
 n.mif_rw.sd       <- 0.02     ## particle perturbation (0.02 used in manuscript, 0.02 suggested to debug/check code)
 nparams           <- 20       ## number of parameter sobol samples (200 used in manuscript, 5 suggested to debug/check code)
 nsim              <- 200      ## number of stochastic epidemic simulations for each fitted beta0 for dynamics (300 used in manuscript, 150 suggested to debug/check code)
@@ -27,6 +27,7 @@ sim.length        <- 300
 detect.logis      <- TRUE
 fixed.E0          <- FALSE
 
+print("MMODS")
 focal.county      <- "NA" 
 focal.state_abbr  <- "NA"
 
@@ -49,8 +50,8 @@ needed_packages <- c(
 lapply(needed_packages, require, character.only = TRUE)
 
 ## Be very careful here, adjust according to your machine's capabilities
-  registerDoParallel(cores = usable.cores)
-# registerDoParallel(cores = (Sys.getenv("SLURM_NTASKS_PER_NODE")))
+# registerDoParallel(cores = usable.cores)
+ registerDoParallel(cores = (Sys.getenv("SLURM_NTASKS_PER_NODE")))
   
 source("COVID_pomp_gammabeta.R")
 
@@ -76,19 +77,19 @@ sim_end    <- sim_start + sim.length
 
 param_array <- array(
   data = 0
-, dim  = c(nparams, n.mif_runs, 8))
+, dim  = c(nparams, n.mif_runs, 10))
 dimnames(param_array)[[3]] <- c(
   "log_lik"
 , "log_lik_es"
 , "beta0est"
 , "E_init"
-#, {
-#  if (detect.logis) {
-# c("detect_k", "detect_mid") 
-#  } else {
-# c("detect_t0", "detect_t1") 
-#  }
-#}
+, {
+  if (detect.logis) {
+ c("detect_k", "detect_mid") 
+  } else {
+ c("detect_t0", "detect_t1") 
+  }
+}
 , c("detect_max"
 , "theta"
 , "theta2"
@@ -98,17 +99,17 @@ dimnames(param_array)[[3]] <- c(
 
 startvals <- array(
   data = 0
-, dim  = c(6, n.mif_runs, nparams))
+, dim  = c(8, n.mif_runs, nparams))
 dimnames(startvals)[[1]] <- c(
   "beta0"
 , "E_init"
-#, {
-#  if (detect.logis) {
-# c("detect_k", "detect_mid") 
-#  } else {
-# c("detect_t0", "detect_t1") 
-#  }
-#}
+, {
+  if (detect.logis) {
+ c("detect_k", "detect_mid") 
+  } else {
+ c("detect_t0", "detect_t1") 
+  }
+}
 , c("detect_max"
 , "theta"
 , "theta2"
@@ -236,8 +237,8 @@ library(dplyr)
 start_vals <- c(
       beta0       = rlnorm(1, log(0.7), 0.3)
     , E_init      = rpois(1, 2) + 1
-#    , detect_k    = rlnorm(1, log(0.1), 0.2)
-#    , detect_mid  = rlnorm(1, log(60), 0.2)
+    , detect_k    = rlnorm(1, log(0.1), 0.2)
+    , detect_mid  = rlnorm(1, log(60), 0.2)
     , detect_max   = runif(1, 0.1, 0.7)
     , theta        = rlnorm(1, log(1), 0.4)
     , theta2       = rlnorm(1, log(1), 0.4)
@@ -259,8 +260,8 @@ mifs_temp <- covid_mobility %>%
     c(
       start_vals["beta0"]
     , start_vals["E_init"]
-#    , start_vals["detect_k"]
-#    , start_vals["detect_mid"]
+    , start_vals["detect_k"]
+    , start_vals["detect_mid"]
     , start_vals["detect_max"]
     , start_vals["theta"]
     , start_vals["theta2"]
@@ -275,8 +276,8 @@ mifs_temp <- covid_mobility %>%
       beta0       = 0.02
     , E_init      = ivp(0.02)
     , detect_max  = 0.02
-#    , detect_mid  = 0.02
-#    , detect_k    = 0.02
+    , detect_mid  = 0.02
+    , detect_k    = 0.02
     , theta       = 0.02
     , theta2      = 0.02
     , beta_min    = 0.02
@@ -294,7 +295,7 @@ mifs_temp <- covid_mobility %>%
   mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.10)
   
 # ll <- replicate(10, mifs_temp %>% pfilter(Np = 50000) %>% logLik())
-ll <- replicate(10, mifs_temp %>% pfilter(Np = 20000) %>% logLik())
+ll <- replicate(10, mifs_temp %>% pfilter(Np = 10000) %>% logLik())
 ll <- logmeanexp(ll, se = TRUE)
 return(list(mifs_temp, ll, start_vals))
 
@@ -378,8 +379,8 @@ return(list(mifs_temp, ll, start_vals))
 })  
 }
 
-#mifs.sv           <- mifs_local[seq(3, (n.mif_runs * 3), by = 3)]
-#startvals[, , i]  <- sapply(mifs.sv, c, simplify = "array")
+mifs.sv           <- mifs_local[seq(3, (n.mif_runs * 3), by = 3)]
+startvals[, , i]  <- sapply(mifs.sv, c, simplify = "array")
 
 mifs.ll    <- mifs_local[seq(2, (n.mif_runs * 3), by = 3)]
 
@@ -442,8 +443,8 @@ SEIR.sim <- do.call(
         beta0      = variable_params[i, "beta0est"]
       , E_init     = variable_params[i, "E_init"]
       , detect_max = variable_params[i, "detect_max"]
-#      , detect_mid = variable_params[i, "detect_mid"]
-#      , detect_k   = variable_params[i, "detect_k"]
+      , detect_mid = variable_params[i, "detect_mid"]
+      , detect_k   = variable_params[i, "detect_k"]
       , theta      = variable_params[i, "theta"]
       , theta2     = variable_params[i, "theta2"]
       , beta_min   = variable_params[i, "beta_min"]
@@ -476,8 +477,8 @@ SEIR.sim <- do.call(
         beta0      = variable_params[i, "beta0est"]
       , E_init     = variable_params[i, "E_init"]
       , detect_max = variable_params[i, "detect_max"]
-#      , detect_t0 = variable_params[i, "detect_t0"]
-#      , detect_t1   = variable_params[i, "detect_t1"]
+      , detect_t0 = variable_params[i, "detect_t0"]
+      , detect_t1   = variable_params[i, "detect_t1"]
       , theta      = variable_params[i, "theta"]
       , theta2     = variable_params[i, "theta2"]
       , beta_min   = variable_params[i, "beta_min"]
@@ -517,7 +518,7 @@ Reff.t       <- with(variable_params[i, ], covid_R0(
    beta0est      = betat
  , fixed_params  = c(fixed_params, unlist(variable_params[i, ]))
  , sd_strength   = 1
- , prop_S        = SEIR.sim.s$S / (location_params[location_params$Parameter == "N", ]$est - SEIR.sim.s$D)
+ , prop_S        = SEIR.sim.s$S / (fixed_params["N"] - SEIR.sim.s$D)
   )
   )
 Reff[i, 1:length(Reff.t)]  <- Reff.t
@@ -532,7 +533,7 @@ saveRDS(
   , param_array      = param_array
    ), paste(
      paste("output/"
-       , paste(focal.county, fit_to_sip, more.params.uncer, fit.minus, Sys.Date(), "cont", "temp", sep = "_")
+       , paste(focal.county, fit_to_sip, more.params.uncer, fit.minus, Sys.Date(), "cont", "temp_MMODS", sep = "_")
          , sep = "")
      , "Rds", sep = "."))
 
@@ -548,7 +549,7 @@ saveRDS(
   , param_array      = param_array
    ), paste(
      paste("output/"
-       , paste(focal.county, fit_to_sip, more.params.uncer, fit.minus, Sys.Date(), "cont", "final", sep = "_")
+       , paste(focal.county, fit_to_sip, more.params.uncer, fit.minus, Sys.Date(), "cont", "final_MMODS", sep = "_")
          , sep = "")
      , "Rds", sep = "."))
   
