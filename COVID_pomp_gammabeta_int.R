@@ -1,20 +1,18 @@
 ## Discrete levels of social distancing
 sir_step_mobility <- Csnippet("
                      // adjust betat for social distancing interventions
-                     double betat;
-                     if((beta0_sigma > 0) & (I > 0)){
-                 //  betat = rgammawn(beta0_sigma/sqrt(I), beta0) * exp(log(beta_min)*sip_prop);
-                 //  betat = rgammawn(beta0_sigma/sqrt(I), beta0) * fmax(1 - sip_prop*beta_min, 0);
-                 //  betat = beta0*fmax(1 - sip_prop*beta_min, 0);
-                     betat = beta0*exp(log(beta_min)*sip_prop);
-                     } else {
-                 //  betat = beta0*exp(log(beta_min)*sip_prop);
-                 //  betat = beta0*fmax(1 - sip_prop*beta_min, 0);
-                     betat = beta0*exp(log(beta_min)*sip_prop);
-                     } 
-                     if ((intervention == 1) & (betat > beta_catch)) {
-                     betat = beta_red;
+                     // double betat;
+                     int n_beta = round(fmax(I, 1));
+                     if(beta0_sigma > 0){
+                      if((catch_eff > 0) & intervention == 1){
+                          betat = rtgamma_eff(n_beta, sqrt(beta0/ beta0_sigma), beta0, beta_catch, catch_eff)*exp(log(beta_min)*sip_prop);
+                      } else{
+                          betat =  rgammawn(sqrt(beta0 / (beta0_sigma * n_beta)), beta0) * exp(log(beta_min)*sip_prop);
+                      }
+                     } else{
+                        betat = beta0*exp(log(beta_min)*sip_prop);
                      }
+                     
                      // (mobility*(1 - beta_min) + beta_min);
                      // if import rate is above zero, draw importations, assuming they are perfectly balanced with departures of susceptible individuals
                      double import = 0;
@@ -79,6 +77,22 @@ sir_step_mobility <- Csnippet("
                      D_new += dHdD; // daily fatalities
                      H_new += dIsHr + dIsHd; // daily new hospitalizations
                      ")
+
+trunc_gamma <- Csnippet("
+static double rtgamma_eff(int N, double sigma, double mu, 
+                                 double trim, double eff){
+  double out = 0; 
+  for(int i = 0; i < N; ++i) {
+    double ind = rgammawn(sigma, mu);
+    if(runif(0, 1) <= eff){ // if we're effective
+      while(ind > trim){ // and its above the cutoff, resample
+        ind = rgammawn(sigma, mu);
+      }
+    }
+    out += ind;
+  }
+  return out/N;
+}")
 
 sir_init_mid <- Csnippet("
                      S = S0;
@@ -145,20 +159,6 @@ sir_init <- Csnippet("
                      ")
     
 }
-
-trunc_gamma <- Csnippet("
-static R_INLINE void rtgamma_eff(int N, double sigma, double mu, 
-                                 double trim, double eff, double *out){
-  for(int i = 0; i < N; ++i) {
-    out[i] = rgammawn(sigma, mu);
-    double treat = runif(0, 1);
-    if(treat <= eff & out[i] > trim){ // if its above the cutoff and we're effective, resample
-      while(out[i] > trim){
-        out[i] = rgammawn(sigma, mu);
-      }
-    }
-  }
-}")
 
 rmeas_deaths <- Csnippet("double tol = 1e-16;
                    deaths = rnbinom_mu(theta, D_new + tol);
@@ -333,7 +333,7 @@ param_names <- c(
   , "detect_mid"
   , "detect_max"
   , "beta_catch"
-  , "beta_red"
+  , "catch_eff"
 )
   
 } else {
@@ -368,7 +368,7 @@ param_names <- c(
   , "detect_t1"
   , "detect_max"
   , "beta_catch"
-  , "beta_red"
+  , "catch_eff"
 )
    
 }
@@ -381,6 +381,7 @@ state_names = c(
   , "R" , "D" 
   , "D_new", "H_new" 
   , "import_total"
+  , "betat"
 )
 
 accum_names <- c("D_new", "H_new", "I_new_sympt")

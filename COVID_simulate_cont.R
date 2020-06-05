@@ -19,12 +19,14 @@ fitting            <- FALSE   ## Small change in pomp objects if fitting or simu
 use.rds            <- TRUE    
 #rds.name           <- "output/Santa Clara_TRUE_FALSE_0_2020-06-02_cont_temp_NZ_sig_exp.Rds"
 #rds.name           <- "output/Santa Clara_TRUE_FALSE_0_2020-06-04_cont_temp_NZ_sig_exp_gamma.Rds"
+rds.name           <- "output/Miami-Dade_TRUE_FALSE_0_2020-06-05_cont_final_NZ_sig_exp_gamma.Rds"
+mobility.file      <- "mobility/unfolded_Jun03.rds"
 more.params.uncer  <- FALSE   ## Fit with more (FALSE) or fewer (TRUE) point estimates for a number of parameters
-nsim               <- 200     ## Number of epidemic simulations for each parameter set
+nsim               <- 10     ## Number of epidemic simulations for each parameter set
 fit.E0             <- TRUE    ## Was E0 also fit?
-usable.cores       <- 3       ## Number of cores to use to fit
+usable.cores       <- 1       ## Number of cores to use to fit
 
-int.beta0_sigma    <- 1       ## heterogeneity value
+int.beta0_sigma    <- 0.16       ## heterogeneity value
 
 ## Where to simulate from
 sir_init.mid       <- FALSE         ## Starts the epidemic from some non-zero timepoint
@@ -42,8 +44,8 @@ cf.type           <- "may1"   ## Specifically modeled counterfactual analyses: n
 ####
 ## Intervention parameters
 ####
-int.movement       <- "mid"     ## Shape of human movement after the data ends ::: pre, post, mid
-int.type           <- "inf_iso"    ## Extra intervention apart from the movement  ::: none, inf_iso, tail
+int.movement       <- "post"     ## Shape of human movement after the data ends ::: pre, post, mid
+int.type           <- "tail"    ## Extra intervention apart from the movement  ::: none, inf_iso, tail
 int.init           <- "2020-06-08"
 int.end            <- "2020-08-01"
 
@@ -52,8 +54,9 @@ iso_mild_level     <- 0.2
 iso_severe_level   <- 0.2
 
 ## Tail chopping parameters
-int.beta_catch     <- 1       ## beta0 values caught by intervention
-int.beta_red       <- 1       ## new values after those that are caught
+int.beta_catch     <- 1000      ## beta0 values caught by intervention
+int.catch_eff      <- 0         ## effectiveness at catching beta0 values above the beta_catch (0 - 1)
+# int.beta_red       <- 1       ## new values after those that are caught
 
 loglik.thresh      <- 2       ## Keep parameter sets with a likelihood within top X loglik units
 params.all         <- TRUE    ## Keep all fitted parameters above loglik thresh?...
@@ -64,6 +67,9 @@ fit_to_sip         <- TRUE    ## Fit beta0 and shelter in place strength simulta
 meas.nb            <- TRUE    ## Negative binomial measurement process?
 import_cases       <- FALSE   ## Use importation of cases?
 fit.minus          <- 0       ## Use data until X days prior to the present
+
+fixed.E0           <- !fit.E0
+detect.logis       <- T
 
 focal.county      <- "Miami-Dade" 
 focal.state_abbr  <- "FL"
@@ -93,7 +99,7 @@ lapply(needed_packages, require, character.only = TRUE)
 ## Theme for pretty plots
 source("ggplot_theme.R")
 ## Bring in pomp objects.
-source("COVID_pomp_gammabeta.R")
+source("COVID_pomp_gammabeta_int.R")
   
 if (fit.with == "D_C" | fit.with == "D") {
 ## Scrape death data from the NYT github repo to stay up to date or load a previously saved dataset
@@ -129,7 +135,7 @@ variable_params <- variable_params %>%
  filter(log_lik > (max(log_lik) - loglik.thresh))
 
 ## For debug plots just pick one paramset
-variable_params <- variable_params[variable_params$paramset == 2, ]
+# variable_params <- variable_params[variable_params$paramset == 2, ]
 
 ## A few adjustments for preprint counterfactuals and other scenarios
 # 1) Start later
@@ -183,7 +189,7 @@ county.data <- rbind(
 , county.data 
   )
 
-mobility <- readRDS("unfolded_May27.rds") %>% 
+mobility <- readRDS(mobility.file) %>% 
   dplyr::filter(county_name == focal.county & state_abbr == focal.state_abbr)  %>%
   dplyr::select(datestr, sip_prop) %>% 
   dplyr::filter(!is.na(sip_prop)) %>%
@@ -331,11 +337,6 @@ mob.covtab <- covariate_table(
 
 }
 
-## Second bit of the intervention will affect these parameters:
-fixed_params["beta0_sigma"] <- int.beta0_sigma  ## heterogeneity value
-fixed_params["beta_catch"]  <- int.beta_catch  ## beta0 values caught by intervention
-fixed_params["beta_red"]    <- int.beta_red  ## new values after those that are caught
-
 covid_mobility <- pomp(
    data       = county.data
  , times      = "day"
@@ -349,14 +350,23 @@ covid_mobility <- pomp(
  , accumvars  = accum_names
  , paramnames = param_names
  , statenames = state_names
+ , globals    = trunc_gamma
 )
+
+## Second bit of the intervention will affect these parameters:
+fixed_params["beta0_sigma"] <- int.beta0_sigma  ## heterogeneity value
+fixed_params["beta_catch"]  <- int.beta_catch  ## beta0 values caught by intervention
+fixed_params["catch_eff"]   <- int.catch_eff  ## beta0 values caught by intervention
+# fixed_params["beta_red"]    <- int.beta_red  ## new values after those that are caught
+
 
 SEIR.sim <- do.call(
   pomp::simulate
   , list(
     object         = covid_mobility
     , times        = mob.covtab@times
-    , params = c(prev.fit[["fixed_params"]]
+    , params = c(fixed_params
+      # prev.fit[["fixed_params"]]
       , c(
         beta0      = variable_params[i, "beta0est"]
       , E_init     = variable_params[i, "E_init"]
@@ -413,6 +423,7 @@ covid_mobility <- pomp(
  , accumvars  = accum_names
  , paramnames = c(param_names, mid_init_param_names)
  , statenames = state_names
+ , globals    = trunc_gamma
 )
 
 SEIR.sim.c <- do.call(
