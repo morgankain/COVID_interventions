@@ -76,19 +76,19 @@ sim_end    <- sim_start + sim.length
 
 param_array <- array(
   data = 0
-, dim  = c(nparams, n.mif_runs, 10))
+, dim  = c(nparams, n.mif_runs, 8))
 dimnames(param_array)[[3]] <- c(
   "log_lik"
 , "log_lik_es"
 , "beta0est"
 , "E_init"
-, {
-  if (detect.logis) {
- c("detect_k", "detect_mid") 
-  } else {
- c("detect_t0", "detect_t1") 
-  }
-}
+#, {
+#  if (detect.logis) {
+# c("detect_k", "detect_mid") 
+#  } else {
+# c("detect_t0", "detect_t1") 
+#  }
+#}
 , c("detect_max"
 , "theta"
 , "theta2"
@@ -98,17 +98,17 @@ dimnames(param_array)[[3]] <- c(
 
 startvals <- array(
   data = 0
-, dim  = c(8, n.mif_runs, nparams))
+, dim  = c(6, n.mif_runs, nparams))
 dimnames(startvals)[[1]] <- c(
   "beta0"
 , "E_init"
-, {
-  if (detect.logis) {
- c("detect_k", "detect_mid") 
-  } else {
- c("detect_t0", "detect_t1") 
-  }
-}
+#, {
+#  if (detect.logis) {
+# c("detect_k", "detect_mid") 
+#  } else {
+# c("detect_t0", "detect_t1") 
+#  }
+#}
 , c("detect_max"
 , "theta"
 , "theta2"
@@ -217,7 +217,7 @@ covid_mobility <- pomp(
 ## Extra params for the new model:
  ## 1) beta0_sigma can't really be fit, so assume for now
  ## 2) fit with no intervention and then simulate later with an intervention
-fixed_params["beta0_sigma"] <- 1
+fixed_params["beta0_sigma"] <- 0.16
 fixed_params["beta_catch"]  <- 1
 fixed_params["beta_red"]    <- 1 
 
@@ -236,8 +236,8 @@ library(dplyr)
 start_vals <- c(
       beta0       = rlnorm(1, log(0.7), 0.3)
     , E_init      = rpois(1, 2) + 1
-    , detect_k    = rlnorm(1, log(0.1), 0.2)
-    , detect_mid  = rlnorm(1, log(60), 0.2)
+#    , detect_k    = rlnorm(1, log(0.1), 0.2)
+#    , detect_mid  = rlnorm(1, log(60), 0.2)
     , detect_max   = runif(1, 0.1, 0.7)
     , theta        = rlnorm(1, log(1), 0.4)
     , theta2       = rlnorm(1, log(1), 0.4)
@@ -259,8 +259,8 @@ mifs_temp <- covid_mobility %>%
     c(
       start_vals["beta0"]
     , start_vals["E_init"]
-    , start_vals["detect_k"]
-    , start_vals["detect_mid"]
+#    , start_vals["detect_k"]
+#    , start_vals["detect_mid"]
     , start_vals["detect_max"]
     , start_vals["theta"]
     , start_vals["theta2"]
@@ -275,8 +275,8 @@ mifs_temp <- covid_mobility %>%
       beta0       = 0.02
     , E_init      = ivp(0.02)
     , detect_max  = 0.02
-    , detect_mid  = 0.02
-    , detect_k    = 0.02
+#    , detect_mid  = 0.02
+#    , detect_k    = 0.02
     , theta       = 0.02
     , theta2      = 0.02
     , beta_min    = 0.02
@@ -294,7 +294,7 @@ mifs_temp <- covid_mobility %>%
   mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.10)
   
 # ll <- replicate(10, mifs_temp %>% pfilter(Np = 50000) %>% logLik())
-ll <- replicate(10, mifs_temp %>% pfilter(Np = 50000) %>% logLik())
+ll <- replicate(10, mifs_temp %>% pfilter(Np = 20000) %>% logLik())
 ll <- logmeanexp(ll, se = TRUE)
 return(list(mifs_temp, ll, start_vals))
 
@@ -378,8 +378,8 @@ return(list(mifs_temp, ll, start_vals))
 })  
 }
 
-mifs.sv           <- mifs_local[seq(3, (n.mif_runs * 3), by = 3)]
-startvals[, , i]  <- sapply(mifs.sv, c, simplify = "array")
+#mifs.sv           <- mifs_local[seq(3, (n.mif_runs * 3), by = 3)]
+#startvals[, , i]  <- sapply(mifs.sv, c, simplify = "array")
 
 mifs.ll    <- mifs_local[seq(2, (n.mif_runs * 3), by = 3)]
 
@@ -442,8 +442,8 @@ SEIR.sim <- do.call(
         beta0      = variable_params[i, "beta0est"]
       , E_init     = variable_params[i, "E_init"]
       , detect_max = variable_params[i, "detect_max"]
-      , detect_mid = variable_params[i, "detect_mid"]
-      , detect_k   = variable_params[i, "detect_k"]
+#      , detect_mid = variable_params[i, "detect_mid"]
+#      , detect_k   = variable_params[i, "detect_k"]
       , theta      = variable_params[i, "theta"]
       , theta2     = variable_params[i, "theta2"]
       , beta_min   = variable_params[i, "beta_min"]
@@ -476,8 +476,8 @@ SEIR.sim <- do.call(
         beta0      = variable_params[i, "beta0est"]
       , E_init     = variable_params[i, "E_init"]
       , detect_max = variable_params[i, "detect_max"]
-      , detect_t0 = variable_params[i, "detect_t0"]
-      , detect_t1   = variable_params[i, "detect_t1"]
+#      , detect_t0 = variable_params[i, "detect_t0"]
+#      , detect_t1   = variable_params[i, "detect_t1"]
       , theta      = variable_params[i, "theta"]
       , theta2     = variable_params[i, "theta2"]
       , beta_min   = variable_params[i, "beta_min"]
@@ -506,11 +506,11 @@ SEIR.sim.s <- SEIR.sim %>%
   summarize(S = mean(S), D = mean(D))
 
 if (detect.logis) {
-betat      <- variable_params[i, "beta0est"] * (1 - variable_params[i, "beta_min"] * mob.covtab@table[2, ])  
-#betat     <- variable_params[i, "beta0est"] * exp(log(variable_params[i, "beta_min"])*mob.covtab@table[2, ])
+#betat      <- variable_params[i, "beta0est"] * (1 - variable_params[i, "beta_min"] * mob.covtab@table[2, ])  
+betat     <- variable_params[i, "beta0est"] * exp(log(variable_params[i, "beta_min"])*mob.covtab@table[2, ])
 } else {
-betat      <- variable_params[i, "beta0est"] * (1 - variable_params[i, "beta_min"] * mob.covtab@table[1, ])  
-#betat     <- variable_params[i, "beta0est"] * exp(log(variable_params[i, "beta_min"])*mob.covtab@table[1, ])
+#betat      <- variable_params[i, "beta0est"] * (1 - variable_params[i, "beta_min"] * mob.covtab@table[1, ])  
+betat     <- variable_params[i, "beta0est"] * exp(log(variable_params[i, "beta_min"])*mob.covtab@table[2, ])
 }
 
 Reff.t       <- with(variable_params[i, ], covid_R0(
@@ -551,8 +551,4 @@ saveRDS(
        , paste(focal.county, fit_to_sip, more.params.uncer, fit.minus, Sys.Date(), "cont", "final", sep = "_")
          , sep = "")
      , "Rds", sep = "."))
-
-
-
-
   

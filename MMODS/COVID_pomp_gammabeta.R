@@ -3,9 +3,10 @@ sir_step_mobility <- Csnippet("
                      // adjust betat for social distancing interventions
                      double betat;
                      if((beta0_sigma > 0) & (I > 0)){
-                 //  betat = rgammawn(beta0_sigma/sqrt(I), beta0) * exp(log(beta_min)*sip_prop);
-                 //  betat = rgammawn(beta0_sigma/sqrt(I), beta0) * fmax(1 - sip_prop*beta_min, 0);
-                 //  betat = beta0*fmax(1 - sip_prop*beta_min, 0);
+                //   betat = rgammawn(sqrt(beta0 / (beta0_sigma * I)), beta0) * exp(log(beta_min)*sip_prop);
+                //   betat = rgammawn(beta0_sigma/sqrt(I), beta0) * exp(log(beta_min)*sip_prop);
+                //   betat = rgammawn(beta0_sigma/sqrt(I), beta0) * fmax(1 - sip_prop*beta_min, 0);
+                //   betat = beta0*fmax(1 - sip_prop*beta_min, 0);
                      betat = beta0*exp(log(beta_min)*sip_prop);
                      } else {
                  //  betat = beta0*exp(log(beta_min)*sip_prop);
@@ -146,7 +147,8 @@ rmeas_multi_logis <- Csnippet("double tol = 1e-16;
                    if (t < detect_t0) {
                    detect = 0;
                    } else {
-                   detect = detect_max / (1 + exp(-detect_k * (t - detect_mid)));                   
+              //   detect = detect_max / (1 + exp(-detect_k * (t - detect_mid)));     
+                   detect = detect_max;  
                    }
                    deaths = rnbinom_mu(theta, D_new + tol);
                    cases  = rnbinom_mu(theta2, detect*I_new_sympt + tol);
@@ -158,7 +160,8 @@ dmeas_multi_logis <- Csnippet("double tol = 1e-16;
                    if (t < detect_t0) {
                    detect = 0;
                    } else {
-                   detect = detect_max / (1 + exp(-detect_k * (t - detect_mid)));                   
+              //   detect = detect_max / (1 + exp(-detect_k * (t - detect_mid)));     
+                   detect = detect_max;                  
                    }
             
                    if (ISNA(deaths) & ISNA(cases)) {
@@ -280,8 +283,8 @@ par_trans <- parameter_trans(log = c("beta0", "beta0_sigma", "import_rate"
   , "E_init"
   , "theta"
   , "theta2"
-  , "detect_k"
-  , "detect_mid"
+#  , "detect_k"
+#  , "detect_mid"
   )
   , logit = c("beta_min", "detect_max")) 
 
@@ -302,8 +305,8 @@ param_names <- c(
   , "theta2"
   , "beta_min"
   , "beta0_sigma"
-  , "detect_k"
-  , "detect_mid"
+#  , "detect_k"
+#  , "detect_mid"
   , "detect_max"
   , "beta_catch"
   , "beta_red"
