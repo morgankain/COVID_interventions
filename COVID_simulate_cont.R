@@ -9,75 +9,7 @@
 ## For detailed conceivable intervention scenarios and details on how tosimulate them see:
 ## "potential_intervention_details_and_plots.R"
 
-####
-## Parameters
-####
-
 set.seed(10001)
-fitting            <- FALSE   ## Small change in pomp objects if fitting or simulating
-## TRUE if COVID_fit previously run, FALSE if COVID_fit was just run and global environment is still full
-use.rds            <- TRUE    
-#rds.name           <- "output/Santa Clara_TRUE_FALSE_0_2020-06-02_cont_temp_NZ_sig_exp.Rds"
-#rds.name           <- "output/Santa Clara_TRUE_FALSE_0_2020-06-04_cont_temp_NZ_sig_exp_gamma.Rds"
-rds.name           <- "output/Miami-Dade_TRUE_FALSE_0_2020-06-05_cont_final_NZ_sig_exp_gamma.Rds"
-mobility.file      <- "mobility/unfolded_Jun03.rds"
-more.params.uncer  <- FALSE   ## Fit with more (FALSE) or fewer (TRUE) point estimates for a number of parameters
-nsim               <- 10     ## Number of epidemic simulations for each parameter set
-fit.E0             <- TRUE    ## Was E0 also fit?
-usable.cores       <- 1       ## Number of cores to use to fit
-
-int.beta0_sigma    <- 0.16       ## heterogeneity value
-
-## Where to simulate from
-sir_init.mid       <- FALSE         ## Starts the epidemic from some non-zero timepoint
-sir_init.mid.t     <- "2020-05-28"  ## Date to simulate forward from
-
-## Sim and plotting details
-sim_length         <- 200     ## How many days to run the simulation
-state.plot         <- "D"     ## State variable for plotting (Hospit [H], Death [D], or Cases [C])
-plot.log10         <- TRUE    ## Plot on a log10 scale or not
-print.plot         <- FALSE
-
-counter.factual   <- FALSE    ## If true do a special analysis that ignores a lot of these other parameters
-cf.type           <- "may1"   ## Specifically modeled counterfactual analyses: no_int, delay, may1 coded for now
-
-####
-## Intervention parameters
-####
-int.movement       <- "post"     ## Shape of human movement after the data ends ::: pre, post, mid
-int.type           <- "tail"    ## Extra intervention apart from the movement  ::: none, inf_iso, tail
-int.init           <- "2020-06-08"
-int.end            <- "2020-08-01"
-
-## Test and Isolate parameters
-iso_mild_level     <- 0.2
-iso_severe_level   <- 0.2
-
-## Tail chopping parameters
-int.beta_catch     <- 1000      ## beta0 values caught by intervention
-int.catch_eff      <- 0         ## effectiveness at catching beta0 values above the beta_catch (0 - 1)
-# int.beta_red       <- 1       ## new values after those that are caught
-
-# crude way to ensure int.beta_catch > 0
-if(int.beta_catch <= 0){
-  int.beta_catch <- 0.0001
-}
-
-loglik.thresh      <- 2       ## Keep parameter sets with a likelihood within top X loglik units
-params.all         <- TRUE    ## Keep all fitted parameters above loglik thresh?...
-nparams            <- 50      ## ...if FALSE, pick a random subset for speed
-
-fit.with           <- "D_C"   ## Fit with D (deaths) or H (hospitalizations) -- Need your own data for H -- or both deaths and cases (D_C).
-fit_to_sip         <- TRUE    ## Fit beta0 and shelter in place strength simultaneously?
-meas.nb            <- TRUE    ## Negative binomial measurement process?
-import_cases       <- FALSE   ## Use importation of cases?
-fit.minus          <- 0       ## Use data until X days prior to the present
-
-fixed.E0           <- !fit.E0
-detect.logis       <- T
-
-focal.county      <- "Miami-Dade" 
-focal.state_abbr  <- "FL"
 
 ## Required packages to run this code
 needed_packages <- c(
@@ -136,8 +68,8 @@ fixed_params     <- prev.fit[["fixed_params"]]
  ## and keep only the best fits as defined by loglik
 variable_params <- variable_params %>% 
   filter(log_lik != 0) %>% 
- # filter(log_lik == max(log_lik)) ## only used for manuscript dyanmic trajectory plots
- filter(log_lik > (max(log_lik) - loglik.thresh))
+ filter(log_lik == max(log_lik)) ## only used for manuscript dyanmic trajectory plots
+ # filter(log_lik > (max(log_lik) - loglik.thresh))
 
 ## For debug plots just pick one paramset
 # variable_params <- variable_params[variable_params$paramset == 2, ]
@@ -360,8 +292,18 @@ covid_mobility <- pomp(
 
 ## Second bit of the intervention will affect these parameters:
 fixed_params["beta0_sigma"] <- int.beta0_sigma  ## heterogeneity value
-fixed_params["beta_catch"]  <- int.beta_catch  ## beta0 values caught by intervention
-fixed_params["catch_eff"]   <- int.catch_eff  ## beta0 values caught by intervention
+fixed_params["beta_catch"]  <- {                ## beta0 values caught by intervention
+  if(int.beta_catch_type == "pct") {
+    max(qgamma(p = (1 - int.beta_catch), 
+               shape = int.beta0_sigma, 
+               scale = variable_params[i, "beta0est"]/int.beta0_sigma),
+        0.001)
+  } else{
+    max(int.beta_catch, 0.001)# crude way to ensure int.beta_catch > 0, note that even this nonzero low beta_catch will be problematic but will eventually finish
+  }
+}
+
+fixed_params["catch_eff"]   <- int.catch_eff   ## beta0 values caught by intervention
 # fixed_params["beta_red"]    <- int.beta_red  ## new values after those that are caught
 
 
@@ -565,36 +507,45 @@ SEIR.sim.f <- SEIR.sim.f %>% filter(date < min(variable_params$sim_start + sim_l
 ## Summary and plotting
 ####
 
-SEIR.sim.f.c.a <- SEIR.sim.f %>% dplyr::select(date, day, .id, cases, paramset)
-SEIR.sim.f.d.a <- SEIR.sim.f %>% dplyr::select(date, day, .id, deaths, paramset)
-SEIR.sim.f.D.a <- SEIR.sim.f %>% dplyr::select(date, day, .id, D, paramset)
-
-SEIR.sim.f.c <- SEIR.sim.f %>% 
-  group_by(date, paramset) %>% 
+SEIR.sim.f.t <- SEIR.sim.f %>% dplyr::select(date, day, .id, paramset, any_of(plot_vars))  %>%
+  pivot_longer(any_of(plot_vars))
+SEIR.sim.f.ci <- SEIR.sim.f.t %>% 
+  group_by(date, paramset, name) %>% 
   summarize(
-#    lwr_c = quantile(cases, c(0.100))
-#  , mid_c = quantile(cases, c(0.500))
-#  , upr_c = quantile(cases, c(0.900))
-    lwr_c = quantile(cases, c(0.025))
-  , mid_c = quantile(cases, c(0.500))
-  , upr_c = quantile(cases, c(0.975))
-  )
+      lwr = quantile(value, c(0.025))
+    , mid = quantile(value, c(0.500))
+    , upr = quantile(value, c(0.975))
+  ) 
+# SEIR.sim.f.c.a <- SEIR.sim.f %>% dplyr::select(date, day, .id, cases, paramset)
+# SEIR.sim.f.d.a <- SEIR.sim.f %>% dplyr::select(date, day, .id, deaths, paramset)
+# SEIR.sim.f.D.a <- SEIR.sim.f %>% dplyr::select(date, day, .id, D, paramset)
 
-SEIR.sim.f.d <- SEIR.sim.f %>% 
-  group_by(date, paramset) %>% 
-  summarize(
-    lwr_d = quantile(deaths, c(0.100))
-  , mid_d = quantile(deaths, c(0.500))
-  , upr_d = quantile(deaths, c(0.900))
-  )
-
-SEIR.sim.f.D <- SEIR.sim.f %>% 
-  group_by(date, paramset) %>% 
-  summarize(
-    lwr_D = quantile(D, c(0.100))
-  , mid_D = quantile(D, c(0.500))
-  , upr_D = quantile(D, c(0.900))
-  )
+# SEIR.sim.f.c <- SEIR.sim.f %>% 
+#   group_by(date, paramset) %>% 
+#   summarize(
+# #    lwr_c = quantile(cases, c(0.100))
+# #  , mid_c = quantile(cases, c(0.500))
+# #  , upr_c = quantile(cases, c(0.900))
+#     lwr_c = quantile(cases, c(0.025))
+#   , mid_c = quantile(cases, c(0.500))
+#   , upr_c = quantile(cases, c(0.975))
+#   )
+# 
+# SEIR.sim.f.d <- SEIR.sim.f %>% 
+#   group_by(date, paramset) %>% 
+#   summarize(
+#     lwr_d = quantile(deaths, c(0.100))
+#   , mid_d = quantile(deaths, c(0.500))
+#   , upr_d = quantile(deaths, c(0.900))
+#   )
+# 
+# SEIR.sim.f.D <- SEIR.sim.f %>% 
+#   group_by(date, paramset) %>% 
+#   summarize(
+#     lwr_D = quantile(D, c(0.100))
+#   , mid_D = quantile(D, c(0.500))
+#   , upr_D = quantile(D, c(0.900))
+#   )
 
 # unique(SEIR.sim.f.d$paramset)
 
@@ -610,7 +561,7 @@ test.paramset <- 2
 {
 gg1 <- ggplot(SEIR.sim.f.d
   #[SEIR.sim.f.d$paramset == test.paramset, ]
-  ) + 
+  ) +
   geom_ribbon(aes(
     x = date
   , ymin = lwr_d
@@ -620,11 +571,11 @@ gg1 <- ggplot(SEIR.sim.f.d
       x = date
     , y = mid_d
     , group = paramset)
-      , alpha = 0.50, lwd = .5) + 
+      , alpha = 0.50, lwd = .5) +
     geom_point(data = county.data
     , aes(
       x = date
-    , y = deaths), colour = "dodgerblue4", lwd = 2) + 
+    , y = deaths), colour = "dodgerblue4", lwd = 2) +
     scale_y_continuous(trans = "log10") +
     scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
     theme(
@@ -635,7 +586,7 @@ gg1 <- ggplot(SEIR.sim.f.d
 
 gg5 <- ggplot(SEIR.sim.f.D
   #[SEIR.sim.f.D$paramset == test.paramset, ]
-  ) + 
+  ) +
   geom_ribbon(aes(
     x = date
   , ymin = lwr_D
@@ -645,11 +596,11 @@ gg5 <- ggplot(SEIR.sim.f.D
       x = date
     , y = mid_D
     , group = paramset)
-      , alpha = 0.50, lwd = .5) + 
+      , alpha = 0.50, lwd = .5) +
     geom_point(data = deaths
     , aes(
       x = date
-    , y = deaths), colour = "dodgerblue4", lwd = 2) + 
+    , y = deaths), colour = "dodgerblue4", lwd = 2) +
     scale_y_continuous(trans = "log10") +
     scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
     theme(
@@ -660,7 +611,7 @@ gg5 <- ggplot(SEIR.sim.f.D
 
 gg2 <- ggplot(SEIR.sim.f.c
   #[SEIR.sim.f.c$paramset == test.paramset, ]
-  ) + 
+  ) +
   geom_ribbon(aes(
     x = date
   , ymin = lwr_c
@@ -670,11 +621,11 @@ gg2 <- ggplot(SEIR.sim.f.c
       x = date
     , y = mid_c
     , group = paramset)
-      , alpha = 0.50, lwd = .5) + 
+      , alpha = 0.50, lwd = .5) +
     geom_point(data = county.data
     , aes(
       x = date
-    , y = cases), colour = "firebrick4", lwd = 2) + 
+    , y = cases), colour = "firebrick4", lwd = 2) +
     scale_y_continuous(trans = "log10") +
     scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
     theme(
@@ -682,8 +633,8 @@ gg2 <- ggplot(SEIR.sim.f.c
   , legend.title = element_text(size = 12)
   , plot.title = element_text(size = 12)) +
    xlab("Date") + ylab("Observed Cases")
-  
-gg3 <- ggplot(data = Reff, aes(x = date, y = Reff)) + 
+
+gg3 <- ggplot(data = Reff, aes(x = date, y = Reff)) +
     geom_line(aes(group = paramset), alpha = 0.5) +
     theme(
     axis.text.x = element_text(size = 10)
@@ -693,7 +644,7 @@ gg3 <- ggplot(data = Reff, aes(x = date, y = Reff)) +
    scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
    geom_hline(yintercept = 1, linetype = "dashed", lwd = 0.5)
 
-gg4 <- ggplot(data = detect, aes(x = date, y = detect)) + 
+gg4 <- ggplot(data = detect, aes(x = date, y = detect)) +
     geom_line(aes(group = paramset), alpha = 0.5) +
     theme(
     axis.text.x = element_text(size = 10)
@@ -705,47 +656,47 @@ gg4 <- ggplot(data = detect, aes(x = date, y = detect)) +
 gridExtra::grid.arrange(gg1, gg5, gg2, gg3, gg4, ncol = 1)
 }
 
-SEIR.sim.f.c.a <- SEIR.sim.f.c.a %>% filter(date < "2020-04-01")
-
-ggplot(SEIR.sim.f.c.a) + 
-  geom_line(aes(
-      x = date
-    , y = cases
-    , group = .id)
-      , alpha = 0.10, lwd = .2) + 
-    geom_point(data = county.data
-    , aes(
-      x = date
-    , y = cases), colour = "firebrick4", lwd = 2) + 
-    scale_y_continuous(trans = "log10") +
-    scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
-    theme(
-    axis.text.x = element_text(size = 10)
-  , legend.title = element_text(size = 12)
-  , plot.title = element_text(size = 12)) +
-   xlab("Date") + ylab("Observed Cases")
-
-SEIR.sim.f.c <- SEIR.sim.f.c %>% filter(date < "2020-04-01")
-
-ggplot(SEIR.sim.f.c) + 
-  geom_ribbon(aes(
-    x = date
-  , ymin = lwr_c
-  , ymax = upr_c
-  , group = paramset), alpha = 0.50) +
-  geom_line(aes(
-      x = date
-    , y = mid_c
-    , group = paramset)
-      , alpha = 0.50, lwd = .5) + 
-    geom_point(data = county.data
-    , aes(
-      x = date
-    , y = cases), colour = "firebrick4", lwd = 2) + 
-    scale_y_continuous(trans = "log10") +
-    scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
-    theme(
-    axis.text.x = element_text(size = 10)
-  , legend.title = element_text(size = 12)
-  , plot.title = element_text(size = 12)) +
-   xlab("Date") + ylab("Observed Cases")
+# SEIR.sim.f.c.a <- SEIR.sim.f.c.a %>% filter(date < "2020-04-01")
+# 
+# ggplot(SEIR.sim.f.c.a) + 
+#   geom_line(aes(
+#       x = date
+#     , y = cases
+#     , group = .id)
+#       , alpha = 0.10, lwd = .2) + 
+#     geom_point(data = county.data
+#     , aes(
+#       x = date
+#     , y = cases), colour = "firebrick4", lwd = 2) + 
+#     scale_y_continuous(trans = "log10") +
+#     scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
+#     theme(
+#     axis.text.x = element_text(size = 10)
+#   , legend.title = element_text(size = 12)
+#   , plot.title = element_text(size = 12)) +
+#    xlab("Date") + ylab("Observed Cases")
+# 
+# SEIR.sim.f.c <- SEIR.sim.f.c %>% filter(date < "2020-04-01")
+# 
+# ggplot(SEIR.sim.f.c) + 
+#   geom_ribbon(aes(
+#     x = date
+#   , ymin = lwr_c
+#   , ymax = upr_c
+#   , group = paramset), alpha = 0.50) +
+#   geom_line(aes(
+#       x = date
+#     , y = mid_c
+#     , group = paramset)
+#       , alpha = 0.50, lwd = .5) + 
+#     geom_point(data = county.data
+#     , aes(
+#       x = date
+#     , y = cases), colour = "firebrick4", lwd = 2) + 
+#     scale_y_continuous(trans = "log10") +
+#     scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
+#     theme(
+#     axis.text.x = element_text(size = 10)
+#   , legend.title = element_text(size = 12)
+#   , plot.title = element_text(size = 12)) +
+#    xlab("Date") + ylab("Observed Cases")
