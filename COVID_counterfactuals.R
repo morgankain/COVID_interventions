@@ -3,7 +3,7 @@ source("./COVID_simulate_cont_params.R")
 
 focal.county       <- "Contra Costa"
 focal.state_abbr   <- "CA"
-rds.name           <- "output/Contra Costa_TRUE_FALSE_0_2020-06-10_cont_temp_NZ_sig_exp_gamma_full_try_NA.Rds"
+rds.name           <- "output/Contra_Costa_2020-06-10.Rds"
 
 ####
 ## Counterfactual: No SIP at all (continue pre-intervention beta through today)
@@ -24,6 +24,7 @@ SEIR.sim.f.t.s1    <- SEIR.sim.f.t %>% mutate(intervention = sim_title)
 ####
 counter.factual    <- TRUE
 cf.type            <- "delay"
+delay.time         <- 7
 int.movement       <- "pre"
 int.type           <- "none"
 int.init           <- "2020-06-08"
@@ -156,3 +157,5 @@ gg <- ggplot() +
 )
 }
 
+## check point est for lives saved
+SEIR.sim.f.ci %>% group_by(intervention, name) %>% filter(name == "D") %>% summarize(max(mid))
