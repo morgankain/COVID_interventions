@@ -24,14 +24,14 @@ needed_packages <- c(
   , "foreach"
   , "doParallel"
   , "data.table"
-  , "doRNG")
+  , "doRNG"
+  , "scales")
 
 ## load packages. Install all packages that return "FALSE"
 lapply(needed_packages, require, character.only = TRUE)
 
 ## Be very careful here, adjust according to your machine's capabilities
-  registerDoParallel(cores = usable.cores)
-# registerDoParallel(cores = (Sys.getenv("SLURM_NTASKS_PER_NODE")))
+registerDoParallel(cores = usable.cores)
   
 ## Theme for pretty plots
 source("ggplot_theme.R")
@@ -45,8 +45,7 @@ deaths  <- read.csv("us-counties.txt")
 deaths  <- deaths %>% mutate(date = as.Date(date)) %>% dplyr::filter(county == focal.county)
 deaths  <- deaths %>% dplyr::filter(date < max(date) - fit.minus)
 } else if (fit.with == "H") {
-## Not supported right now for SCC, ony currently have data for Contra Costa County.
- ## To use H, supply your own data and change the path
+## OLD
 hospit     <- read.csv("contra_costa/ccc_data.csv")
 hospit     <- hospit %>% 
   mutate(date = as.Date(REPORT_DATE)) %>% 
@@ -66,22 +65,15 @@ fixed_params     <- prev.fit[["fixed_params"]]
   
 ## drop the rows that have 0s for likelihood (in case exited prematurely) 
  ## and keep only the best fits as defined by loglik
+if (loglik.max) {
 variable_params <- variable_params %>% 
-  filter(log_lik != 0) %>% 
- filter(log_lik == max(log_lik)) ## only used for manuscript dyanmic trajectory plots
- # filter(log_lik > (max(log_lik) - loglik.thresh))
-
-## For debug plots just pick one paramset
-# variable_params <- variable_params[variable_params$paramset == 2, ]
-
-## A few adjustments for preprint counterfactuals and other scenarios
-# 1) Start later
-# variable_params <- variable_params %>% mutate(int_start2 = int_start2 + 7) 
-# 2) adjustment to social distancing strength
-# variable_params <- variable_params %>% mutate(soc_dist_level_sip = 0.2)
-
-## Adjust variable params for the simulation scenario. !!! Some adjustment to be made
-# variable_params <- variable_params %>% 
+filter(log_lik != 0) %>% 
+filter(log_lik == max(log_lik))
+} else {
+variable_params <- variable_params %>% 
+filter(log_lik != 0) %>% 
+filter(log_lik > (max(log_lik) - loglik.thresh))  
+}
 
 if (!params.all) {
   variable_params <- variable_params[sample(1:nrow(variable_params), nparams), ]
@@ -103,17 +95,18 @@ county.data <- deaths %>%
   dplyr::select(day, date, deaths, cases) %>% 
   mutate(deaths = deaths - lag(deaths),
          cases = cases - lag(cases)) %>% 
+## Three day moving window caused lots of problems so comment it out for now
     # three day moving median
-  mutate(deaths = mutate(., 
-                         deaths_lag = lag(deaths),
-                         deaths_lead = lead(deaths)) %>% 
-           dplyr::select(contains("deaths")) %>%
-           purrr::pmap_dbl(~median(c(...)))) %>% 
-  mutate(cases = mutate(., 
-                         cases_lag = lag(cases),
-                         cases_lead = lead(cases)) %>% 
-           dplyr::select(contains("cases")) %>%
-           purrr::pmap_dbl(~median(c(...)))) %>%
+#  mutate(deaths = mutate(., 
+#                         deaths_lag = lag(deaths),
+#                         deaths_lead = lead(deaths)) %>% 
+#           dplyr::select(contains("deaths")) %>%
+#           purrr::pmap_dbl(~median(c(...)))) %>% 
+#  mutate(cases = mutate(., 
+#                         cases_lag = lag(cases),
+#                         cases_lead = lead(cases)) %>% 
+#           dplyr::select(contains("cases")) %>%
+#           purrr::pmap_dbl(~median(c(...)))) %>%
   dplyr::filter(!is.na(deaths), !is.na(cases))
 
 county.data <- rbind(
@@ -133,11 +126,12 @@ mobility <- readRDS(mobility.file) %>%
   mutate(day = as.numeric(datestr - as.Date("2019-12-31"))) %>% 
   arrange(day) %>% 
   # three day moving median
-  mutate(sip_prop = mutate(., 
-                         sip_prop_lag = lag(sip_prop),
-                         sip_prop_lead = lead(sip_prop)) %>% 
-           select(contains("sip_prop")) %>%
-           purrr::pmap_dbl(~median(c(...)))) %>% 
+## Three day moving window caused lots of problems so comment it out for now
+#  mutate(sip_prop = mutate(., 
+#                         sip_prop_lag = lag(sip_prop),
+#                         sip_prop_lead = lead(sip_prop)) %>% 
+#           select(contains("sip_prop")) %>%
+#           purrr::pmap_dbl(~median(c(...)))) %>% 
   dplyr::filter(datestr >= variable_params[i, ]$sim_start) %>%
   mutate(day = day - as.numeric((variable_params[i, ]$sim_start - as.Date("2019-12-31")))) %>%
   dplyr::filter(!is.na(sip_prop)) %>% 
@@ -159,6 +153,9 @@ mobility <- mobility %>% filter(sip_prop != 0)
 ## Remove dates after one week after movement data ends
 county.data <- county.data %>% dplyr::filter(date < (max(mobility$datestr) + 7))
 
+####
+## Set up counterfactual scenarios
+####
 if (counter.factual) {
   
 if (cf.type == "no_int") {
@@ -167,18 +164,18 @@ mob.covtab <- covariate_table(
  , order            = "constant"
  , times            = seq(1, sim_length, by = 1)
  , detect_t0        = min(county.data[!is.na(county.data$cases), ]$day) - 1
- , iso_mild_level   = iso_mild_level
- , iso_severe_level = iso_severe_level
+ , iso_mild_level   = NA
+ , iso_severe_level = NA
  , intervention     = rep(0, sim_length))  
 } else if (cf.type == "delay") {
 mob.covtab <- covariate_table(
-   sip_prop         = c(rep(mean(head(mobility$sip_prop, 7)), 7), mobility$sip_prop
-     , rep(mean(tail(mobility$sip_prop, 3)), sim_length - (length(mobility$sip_prop) + 7))) 
+   sip_prop         = c(rep(mean(head(mobility$sip_prop, 7)), delay.time), mobility$sip_prop
+     , rep(mean(tail(mobility$sip_prop, 3)), sim_length - (length(mobility$sip_prop) + delay.time))) 
  , order            = "constant"
  , times            = seq(1, sim_length, by = 1)
  , detect_t0        = min(county.data[!is.na(county.data$cases), ]$day) - 1
- , iso_mild_level   = iso_mild_level
- , iso_severe_level = iso_severe_level
+ , iso_mild_level   = NA
+ , iso_severe_level = NA
  , intervention     = rep(0, sim_length))  
 } else if (cf.type == "may1") { 
   
@@ -193,8 +190,8 @@ mob.covtab <- covariate_table(
  , order            = "constant"
  , times            = seq(1, sim_length, by = 1)
  , detect_t0        = min(county.data[!is.na(county.data$cases), ]$day) - 1
- , iso_mild_level   = iso_mild_level
- , iso_severe_level = iso_severe_level
+ , iso_mild_level   = NA
+ , iso_severe_level = NA
  , intervention     = rep(0, sim_length))  
 }
   
@@ -205,7 +202,7 @@ mob.covtab <- covariate_table(
 ####
 
 int.begin    <- as.numeric((as.Date(int.init) - variable_params[i, ]$sim_start))
-int.duration <- as.Date(int.end) - as.Date(int.init)
+int.duration <- min(as.Date(int.end), variable_params[i, ]$sim_start + sim_length) - as.Date(int.init)
 
 int.phase1 <- nrow(mobility) + (int.begin - nrow(mobility))
 int.phase2 <- as.numeric(int.duration)
@@ -243,8 +240,20 @@ mob.covtab <- covariate_table(
  , times         = seq(1, sim_length, by = 1)
  , detect_t0     = min(county.data[!is.na(county.data$cases), ]$day) - 1
   
- , iso_mild_level   = iso_mild_level
- , iso_severe_level = iso_severe_level
+ , iso_mild_level   = {
+   if (int.type == "inf_iso") {
+   iso_mild_level 
+   } else {
+     NA
+   }
+ }
+ , iso_severe_level = {
+   if (int.type == "inf_iso") {
+   iso_severe_level
+   } else {
+     NA
+   }
+ }
   
   ## Next can add an intervention that stops large gatherings
   
@@ -299,13 +308,11 @@ fixed_params["beta_catch"]  <- {                ## beta0 values caught by interv
                scale = variable_params[i, "beta0est"]/int.beta0_sigma),
         0.001)
   } else{
-    max(int.beta_catch, 0.001)# crude way to ensure int.beta_catch > 0, note that even this nonzero low beta_catch will be problematic but will eventually finish
+    max(int.beta_catch, 0.001) # crude way to ensure int.beta_catch > 0, note that even this nonzero low beta_catch will be problematic but will eventually finish
   }
 }
 
 fixed_params["catch_eff"]   <- int.catch_eff   ## beta0 values caught by intervention
-# fixed_params["beta_red"]    <- int.beta_red  ## new values after those that are caught
-
 
 SEIR.sim <- do.call(
   pomp::simulate
@@ -343,8 +350,6 @@ SEIR.sim <- SEIR.sim %>%
   mutate(
       date     = round(as.Date(day, origin = variable_params[i, ]$sim_start))
     , paramset = variable_params[i, ]$paramset)
-
-# SEIR.sim %>% filter(date == sir_init.mid.t, .id == "median")
 
 ## Need to think about the most principled way of simulating forward from the present. For now just take the median up until the present as the
  ## starting values, and project from there
@@ -421,9 +426,6 @@ SEIR.sim.c <- SEIR.sim.c %>%
       date     = round(as.Date(day, origin = sir_init.mid.t))
     , paramset = variable_params[i, ]$paramset)
 
-# SEIR.sim.c %>% filter(date == as.Date(sir_init.mid.t) + 3, .id == "median")
-# SEIR.sim %>% filter(date == as.Date(sir_init.mid.t) + 2, .id == "median")
-
 }
 
 SEIR.sim.s <- SEIR.sim %>% 
@@ -499,204 +501,20 @@ if (((i / 20) %% 1) == 0) {
 
 }
 
-## Because of the staggered start dates there is some oddity at the end of the simulation, just
- ## remove those few days
+## Because of the staggered start dates there is some oddity at the end of the simulation, just remove those few days
 SEIR.sim.f <- SEIR.sim.f %>% filter(date < min(variable_params$sim_start + sim_length))
 
 ####
-## Summary and plotting
+## Summary for plotting
 ####
 
 SEIR.sim.f.t <- SEIR.sim.f %>% dplyr::select(date, day, .id, paramset, any_of(plot_vars))  %>%
   pivot_longer(any_of(plot_vars))
+
 SEIR.sim.f.ci <- SEIR.sim.f.t %>% 
   group_by(date, paramset, name) %>% 
   summarize(
-      lwr = quantile(value, c(0.025))
+      lwr = quantile(value, 0 + ci.stoc)
     , mid = quantile(value, c(0.500))
-    , upr = quantile(value, c(0.975))
+    , upr = quantile(value, 1 - ci.stoc)
   ) 
-# SEIR.sim.f.c.a <- SEIR.sim.f %>% dplyr::select(date, day, .id, cases, paramset)
-# SEIR.sim.f.d.a <- SEIR.sim.f %>% dplyr::select(date, day, .id, deaths, paramset)
-# SEIR.sim.f.D.a <- SEIR.sim.f %>% dplyr::select(date, day, .id, D, paramset)
-
-# SEIR.sim.f.c <- SEIR.sim.f %>% 
-#   group_by(date, paramset) %>% 
-#   summarize(
-# #    lwr_c = quantile(cases, c(0.100))
-# #  , mid_c = quantile(cases, c(0.500))
-# #  , upr_c = quantile(cases, c(0.900))
-#     lwr_c = quantile(cases, c(0.025))
-#   , mid_c = quantile(cases, c(0.500))
-#   , upr_c = quantile(cases, c(0.975))
-#   )
-# 
-# SEIR.sim.f.d <- SEIR.sim.f %>% 
-#   group_by(date, paramset) %>% 
-#   summarize(
-#     lwr_d = quantile(deaths, c(0.100))
-#   , mid_d = quantile(deaths, c(0.500))
-#   , upr_d = quantile(deaths, c(0.900))
-#   )
-# 
-# SEIR.sim.f.D <- SEIR.sim.f %>% 
-#   group_by(date, paramset) %>% 
-#   summarize(
-#     lwr_D = quantile(D, c(0.100))
-#   , mid_D = quantile(D, c(0.500))
-#   , upr_D = quantile(D, c(0.900))
-#   )
-
-# unique(SEIR.sim.f.d$paramset)
-
-# SEIR.sim.f.d <- SEIR.sim.f.d %>% filter(date < "2020-03-15")
-# SEIR.sim.f.D <- SEIR.sim.f.D %>% filter(date < "2020-03-15")
-# SEIR.sim.f.c <- SEIR.sim.f.c %>% filter(date < "2020-03-15")
-# Reff         <- Reff %>% filter(date < "2020-03-15")
-# detect       <- detect %>% filter(date < "2020-03-15")
-
-## Actual plots
-if (print.plot) {
-test.paramset <- 2
-{
-gg1 <- ggplot(SEIR.sim.f.d
-  #[SEIR.sim.f.d$paramset == test.paramset, ]
-  ) +
-  geom_ribbon(aes(
-    x = date
-  , ymin = lwr_d
-  , ymax = upr_d
-  , group = paramset), alpha = 0.05) +
-  geom_line(aes(
-      x = date
-    , y = mid_d
-    , group = paramset)
-      , alpha = 0.50, lwd = .5) +
-    geom_point(data = county.data
-    , aes(
-      x = date
-    , y = deaths), colour = "dodgerblue4", lwd = 2) +
-    scale_y_continuous(trans = "log10") +
-    scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
-    theme(
-    axis.text.x = element_text(size = 10)
-  , legend.title = element_text(size = 12)
-  , plot.title = element_text(size = 12)) +
-   xlab("Date") + ylab("Daily Deaths")
-
-gg5 <- ggplot(SEIR.sim.f.D
-  #[SEIR.sim.f.D$paramset == test.paramset, ]
-  ) +
-  geom_ribbon(aes(
-    x = date
-  , ymin = lwr_D
-  , ymax = upr_D
-  , group = paramset), alpha = 0.05) +
-  geom_line(aes(
-      x = date
-    , y = mid_D
-    , group = paramset)
-      , alpha = 0.50, lwd = .5) +
-    geom_point(data = deaths
-    , aes(
-      x = date
-    , y = deaths), colour = "dodgerblue4", lwd = 2) +
-    scale_y_continuous(trans = "log10") +
-    scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
-    theme(
-    axis.text.x = element_text(size = 10)
-  , legend.title = element_text(size = 12)
-  , plot.title = element_text(size = 12)) +
-   xlab("Date") + ylab("Total Deaths")
-
-gg2 <- ggplot(SEIR.sim.f.c
-  #[SEIR.sim.f.c$paramset == test.paramset, ]
-  ) +
-  geom_ribbon(aes(
-    x = date
-  , ymin = lwr_c
-  , ymax = upr_c
-  , group = paramset), alpha = 0.05) +
-  geom_line(aes(
-      x = date
-    , y = mid_c
-    , group = paramset)
-      , alpha = 0.50, lwd = .5) +
-    geom_point(data = county.data
-    , aes(
-      x = date
-    , y = cases), colour = "firebrick4", lwd = 2) +
-    scale_y_continuous(trans = "log10") +
-    scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
-    theme(
-    axis.text.x = element_text(size = 10)
-  , legend.title = element_text(size = 12)
-  , plot.title = element_text(size = 12)) +
-   xlab("Date") + ylab("Observed Cases")
-
-gg3 <- ggplot(data = Reff, aes(x = date, y = Reff)) +
-    geom_line(aes(group = paramset), alpha = 0.5) +
-    theme(
-    axis.text.x = element_text(size = 10)
-  , legend.title = element_text(size = 12)
-  , plot.title = element_text(size = 12)) +
-   xlab("Date") + ylab("Reff") +
-   scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
-   geom_hline(yintercept = 1, linetype = "dashed", lwd = 0.5)
-
-gg4 <- ggplot(data = detect, aes(x = date, y = detect)) +
-    geom_line(aes(group = paramset), alpha = 0.5) +
-    theme(
-    axis.text.x = element_text(size = 10)
-   , legend.title = element_text(size = 12)
-  , plot.title = element_text(size = 12)) +
-   scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
-   xlab("Date") + ylab("Case detection proportion")
-  }
-gridExtra::grid.arrange(gg1, gg5, gg2, gg3, gg4, ncol = 1)
-}
-
-# SEIR.sim.f.c.a <- SEIR.sim.f.c.a %>% filter(date < "2020-04-01")
-# 
-# ggplot(SEIR.sim.f.c.a) + 
-#   geom_line(aes(
-#       x = date
-#     , y = cases
-#     , group = .id)
-#       , alpha = 0.10, lwd = .2) + 
-#     geom_point(data = county.data
-#     , aes(
-#       x = date
-#     , y = cases), colour = "firebrick4", lwd = 2) + 
-#     scale_y_continuous(trans = "log10") +
-#     scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
-#     theme(
-#     axis.text.x = element_text(size = 10)
-#   , legend.title = element_text(size = 12)
-#   , plot.title = element_text(size = 12)) +
-#    xlab("Date") + ylab("Observed Cases")
-# 
-# SEIR.sim.f.c <- SEIR.sim.f.c %>% filter(date < "2020-04-01")
-# 
-# ggplot(SEIR.sim.f.c) + 
-#   geom_ribbon(aes(
-#     x = date
-#   , ymin = lwr_c
-#   , ymax = upr_c
-#   , group = paramset), alpha = 0.50) +
-#   geom_line(aes(
-#       x = date
-#     , y = mid_c
-#     , group = paramset)
-#       , alpha = 0.50, lwd = .5) + 
-#     geom_point(data = county.data
-#     , aes(
-#       x = date
-#     , y = cases), colour = "firebrick4", lwd = 2) + 
-#     scale_y_continuous(trans = "log10") +
-#     scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
-#     theme(
-#     axis.text.x = element_text(size = 10)
-#   , legend.title = element_text(size = 12)
-#   , plot.title = element_text(size = 12)) +
-#    xlab("Date") + ylab("Observed Cases")

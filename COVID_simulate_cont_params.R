@@ -37,6 +37,7 @@ fit.minus          <- 0       ## Use data until X days prior to the present
 
 detect.logis       <- TRUE    ## Use logistic detection function. Don't change this, the other option is crap
 
+ci.stoc            <- 0.1     ## Size of the CI to use (0.1 means 80% CI)
 plot_vars          <- c("cases", "D")
 
 ## Need to specify, but ignored for all scenarios that isn't the tail chopping intervention
