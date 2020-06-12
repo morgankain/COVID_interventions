@@ -2,7 +2,7 @@
 ## Parameters
 ####
 
-mobility.file      <- "mobility/unfolded_Jun03.rds" ## Mobility data
+mobility.file      <- "mobility/unfolded_Jun05.rds" ## Mobility data
 
 fitting            <- FALSE   ## Small change in pomp objects if fitting or simulating
 use.rds            <- TRUE    ## Run from a previously stored RDS
@@ -38,6 +38,7 @@ fit.minus          <- 0       ## Use data until X days prior to the present
 detect.logis       <- TRUE    ## Use logistic detection function. Don't change this, the other option is crap
 
 ci.stoc            <- 0.1     ## Size of the CI to use (0.1 means 80% CI)
+ci.epidemic        <- TRUE    ## whether to limit to simulations where epidmeics occurs. epidemic defined by > 2 * E_init eventually are in the recovered class
 plot_vars          <- c("cases", "D")
 
 ## Need to specify, but ignored for all scenarios that isn't the tail chopping intervention

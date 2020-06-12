@@ -33,17 +33,26 @@ lapply(needed_packages, require, character.only = TRUE)
 ## Be very careful here, adjust according to your machine's capabilities
 registerDoParallel(cores = usable.cores)
   
-## Theme for pretty plots
-source("ggplot_theme.R")
 ## Bring in pomp objects.
 source("COVID_pomp_gammabeta_int.R")
-  
+# source("COVID_pomp_gammabeta.R")
 if (fit.with == "D_C" | fit.with == "D") {
 ## Scrape death data from the NYT github repo to stay up to date or load a previously saved dataset
-#deaths <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
-deaths  <- read.csv("us-counties.txt")
-deaths  <- deaths %>% mutate(date = as.Date(date)) %>% dplyr::filter(county == focal.county)
-deaths  <- deaths %>% dplyr::filter(date < max(date) - fit.minus)
+# deaths <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
+  ## One special case
+  if (focal.county == "Fulton") {
+    deaths  <- read.csv("us-counties.txt")
+    deaths  <- deaths %>% mutate(date = as.Date(date)) %>%
+      dplyr::filter((county == focal.county | county == "DeKalb") & state == focal.state) %>%
+      group_by(date) %>% summarize(cases = sum(cases), deaths = sum(deaths))
+    deaths <- deaths %>% mutate(county = focal.county, state = focal.state)
+  } else{
+    deaths  <- read.csv("us-counties.txt")
+    deaths  <- deaths %>% mutate(date = as.Date(date)) %>% 
+      dplyr::filter(county == focal.county,
+                    state == focal.state)
+    deaths  <- deaths %>% dplyr::filter(date < max(date) - fit.minus)
+  }
 } else if (fit.with == "H") {
 ## OLD
 hospit     <- read.csv("contra_costa/ccc_data.csv")
@@ -58,6 +67,7 @@ hospit    <- hospit %>% dplyr::filter(date < max(date) - fit.minus)
 ## Load the previously saved fits
  ## If COVID_fit_cont.R was just run, use parameers already stored in the global env 
 if (use.rds) {
+  print(rds.name)
 prev.fit         <- readRDS(rds.name)
 variable_params  <- prev.fit[["variable_params"]]
 fixed_params     <- prev.fit[["fixed_params"]]
@@ -67,8 +77,10 @@ fixed_params     <- prev.fit[["fixed_params"]]
  ## and keep only the best fits as defined by loglik
 if (loglik.max) {
 variable_params <- variable_params %>% 
-filter(log_lik != 0) %>% 
-filter(log_lik == max(log_lik))
+  filter(log_lik != 0) %>% 
+  filter(log_lik == max(log_lik))
+print(variable_params$paramset)
+print(variable_params$log_lik)
 } else {
 variable_params <- variable_params %>% 
 filter(log_lik != 0) %>% 
@@ -119,23 +131,39 @@ county.data <- rbind(
 , county.data 
   )
 
-mobility <- readRDS(mobility.file) %>% 
-  dplyr::filter(county_name == focal.county & state_abbr == focal.state_abbr)  %>%
-  dplyr::select(datestr, sip_prop) %>% 
-  dplyr::filter(!is.na(sip_prop)) %>%
-  mutate(day = as.numeric(datestr - as.Date("2019-12-31"))) %>% 
-  arrange(day) %>% 
-  # three day moving median
-## Three day moving window caused lots of problems so comment it out for now
-#  mutate(sip_prop = mutate(., 
-#                         sip_prop_lag = lag(sip_prop),
-#                         sip_prop_lead = lead(sip_prop)) %>% 
-#           select(contains("sip_prop")) %>%
-#           purrr::pmap_dbl(~median(c(...)))) %>% 
-  dplyr::filter(datestr >= variable_params[i, ]$sim_start) %>%
-  mutate(day = day - as.numeric((variable_params[i, ]$sim_start - as.Date("2019-12-31")))) %>%
-  dplyr::filter(!is.na(sip_prop)) %>% 
-  dplyr::filter(day > 0)
+if(focal.county == "Fulton"){
+  mobility <- readRDS(mobility.file) %>% 
+    dplyr::filter((county_name == focal.county | county_name == "DeKalb") & (state_abbr == focal.state_abbr)) %>%
+    dplyr::group_by(datestr) %>%
+    dplyr::summarize(sip_prop = mean(sip_prop)) %>%
+    dplyr::select(datestr, sip_prop) %>% 
+    dplyr::filter(!is.na(sip_prop)) %>%
+    mutate(day = as.numeric(datestr - as.Date("2019-12-31"))) %>% 
+    arrange(day) %>% 
+    dplyr::filter(datestr >= variable_params[i, ]$sim_start) %>%
+    mutate(day = day - as.numeric((variable_params[i, ]$sim_start - as.Date("2019-12-31")))) %>%
+    dplyr::filter(!is.na(sip_prop)) %>% 
+    dplyr::filter(day > 0)
+} else{
+  mobility <- readRDS(mobility.file) %>% 
+    dplyr::filter(county_name == focal.county & state_abbr == focal.state_abbr)  %>%
+    dplyr::select(datestr, sip_prop) %>% 
+    dplyr::filter(!is.na(sip_prop)) %>%
+    mutate(day = as.numeric(datestr - as.Date("2019-12-31"))) %>% 
+    arrange(day) %>% 
+    # three day moving median
+    ## Three day moving window caused lots of problems so comment it out for now
+    #  mutate(sip_prop = mutate(., 
+    #                         sip_prop_lag = lag(sip_prop),
+    #                         sip_prop_lead = lead(sip_prop)) %>% 
+    #           select(contains("sip_prop")) %>%
+    #           purrr::pmap_dbl(~median(c(...)))) %>% 
+    dplyr::filter(datestr >= variable_params[i, ]$sim_start) %>%
+    mutate(day = day - as.numeric((variable_params[i, ]$sim_start - as.Date("2019-12-31")))) %>%
+    dplyr::filter(!is.na(sip_prop)) %>% 
+    dplyr::filter(day > 0)
+}
+
 
 if (min(mobility$day) > 1) {
 mobility <- rbind(
@@ -334,22 +362,35 @@ SEIR.sim <- do.call(
       , alpha      = variable_params[i, "alpha"]
       , delta      = variable_params[i, "delta"]
       , mu         = variable_params[i, "mu"]
+      , rho_d       = variable_params[i, "rho_d"]
         ))
     , nsim         = nsim
     , format       = "d"
     , include.data = F
-    , seed         = 1001)) %>% {
-      rbind(.,
-         group_by(., day) %>%
-           dplyr::select(-.id) %>%
-           summarise_all(median) %>%
-                    mutate(.id = "median"))
-    }
+    , seed         = 1001)) 
       
 SEIR.sim <- SEIR.sim %>%
   mutate(
       date     = round(as.Date(day, origin = variable_params[i, ]$sim_start))
     , paramset = variable_params[i, ]$paramset)
+
+if(ci.epidemic){
+  epi_ids <- SEIR.sim %>% 
+    group_by(.id) %>% 
+    summarise(total_infect = max(D + R)) %>% 
+    filter(total_infect > 10*ceiling(variable_params[i, "E_init"])) %>% 
+    pull(.id)
+  print(paste0("limiting to epidemics, including ", length(epi_ids), " simulations"))
+  SEIR.sim %<>% filter(.id %in% epi_ids)
+}
+
+SEIR.sim %<>% {
+  rbind(.,
+        group_by(., day) %>%
+          dplyr::select(-.id) %>%
+          summarise_all(median) %>%
+          mutate(.id = "median"))
+}
 
 ## Need to think about the most principled way of simulating forward from the present. For now just take the median up until the present as the
  ## starting values, and project from there
@@ -396,6 +437,7 @@ SEIR.sim.c <- do.call(
       , alpha      = variable_params[i, "alpha"]
       , delta      = variable_params[i, "delta"]
       , mu         = variable_params[i, "mu"]
+      , rho_d       = variable_params[i, "rho_d"]
         )
       , unlist(c(
         E_init     = round(new.startvals$E)
@@ -508,7 +550,8 @@ SEIR.sim.f <- SEIR.sim.f %>% filter(date < min(variable_params$sim_start + sim_l
 ## Summary for plotting
 ####
 
-SEIR.sim.f.t <- SEIR.sim.f %>% dplyr::select(date, day, .id, paramset, any_of(plot_vars))  %>%
+SEIR.sim.f.t <- SEIR.sim.f %>% 
+  dplyr::select(date, day, .id, paramset, any_of(plot_vars))  %>%
   pivot_longer(any_of(plot_vars))
 
 SEIR.sim.f.ci <- SEIR.sim.f.t %>% 
