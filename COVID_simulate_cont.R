@@ -331,6 +331,8 @@ covid_mobility <- pomp(
  , globals    = trunc_gamma
 )
 
+print(int.type)
+
 ## Second bit of the intervention will affect these parameters:
 fixed_params["beta0_sigma"] <- int.beta0_sigma  ## heterogeneity value
 fixed_params["beta_catch"]  <- {                ## beta0 values caught by intervention
@@ -345,6 +347,8 @@ fixed_params["beta_catch"]  <- {                ## beta0 values caught by interv
 }
 
 fixed_params["catch_eff"]   <- int.catch_eff   ## beta0 values caught by intervention
+
+checktime <- system.time({
 
 SEIR.sim <- do.call(
   pomp::simulate
@@ -373,6 +377,10 @@ SEIR.sim <- do.call(
     , include.data = F
     , seed         = 1001)) 
       
+})[3]
+
+print(checktime)
+
 SEIR.sim <- SEIR.sim %>%
   mutate(
       date     = round(as.Date(day, origin = variable_params[i, ]$sim_start))
@@ -562,7 +570,12 @@ SEIR.sim.f.ci <- SEIR.sim.f.t %>%
   group_by(date, paramset, name) %>% 
   summarize(
       lwr = quantile(value, 0 + ci.stoc)
-    # , mid = quantile(value, c(0.500))
-    , mid = mean(value)
+    , mid = {
+      if (plot.median) {
+      quantile(value, c(0.500))  
+      } else {
+      mean(value) 
+      }
+    }
     , upr = quantile(value, 1 - ci.stoc)
   ) 
