@@ -16,7 +16,7 @@ set.seed(10001)
 registerDoParallel(cores = usable.cores)
   
 ## Bring in pomp objects.
-source("COVID_pomp_gammabeta_int.R")
+source("COVID_pomp_gammabeta_int.R", local = T)
 # source("COVID_pomp_gammabeta.R")
 if (fit.with == "D_C" | fit.with == "D") {
 ## Scrape death data from the NYT github repo to stay up to date or load a previously saved dataset
@@ -67,6 +67,8 @@ print(variable_params$log_lik)
 variable_params <- variable_params %>% 
 filter(log_lik != 0) %>% 
 filter(log_lik > (max(log_lik) - loglik.thresh))  
+print(variable_params$paramset)
+print(variable_params$log_lik)
 }
 
 if (!params.all) {
@@ -560,6 +562,7 @@ SEIR.sim.f.ci <- SEIR.sim.f.t %>%
   group_by(date, paramset, name) %>% 
   summarize(
       lwr = quantile(value, 0 + ci.stoc)
-    , mid = quantile(value, c(0.500))
+    # , mid = quantile(value, c(0.500))
+    , mid = mean(value)
     , upr = quantile(value, 1 - ci.stoc)
   ) 
