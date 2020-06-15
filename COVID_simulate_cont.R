@@ -67,7 +67,7 @@ hospit    <- hospit %>% dplyr::filter(date < max(date) - fit.minus)
 ## Load the previously saved fits
  ## If COVID_fit_cont.R was just run, use parameers already stored in the global env 
 if (use.rds) {
-  print(rds.name)
+print(rds.name)
 prev.fit         <- readRDS(rds.name)
 variable_params  <- prev.fit[["variable_params"]]
 fixed_params     <- prev.fit[["fixed_params"]]

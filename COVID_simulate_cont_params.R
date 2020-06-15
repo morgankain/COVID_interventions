@@ -46,3 +46,5 @@ int.beta_catch     <- 0.05            ## beta0 values caught by intervention; al
 int.beta_catch_type<- "pct"           ## if pct, treated as percentile, otherwise, as absoulte value
 int.catch_eff      <-  1              ## effectiveness at catching beta0 values above the beta_catch (0 - 1)
 
+ci.epidemic        <- TRUE    ## Remove all epidemic simulations that dont take off
+
