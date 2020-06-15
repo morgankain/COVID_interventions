@@ -10,25 +10,7 @@
 ## "potential_intervention_details_and_plots.R"
 
 set.seed(10001)
-
-## Required packages to run this code
-needed_packages <- c(
-    "pomp"
-  , "plyr"
-  , "dplyr"
-  , "ggplot2"
-  , "magrittr"
-  , "scales"
-  , "lubridate"
-  , "tidyr"
-  , "foreach"
-  , "doParallel"
-  , "data.table"
-  , "doRNG"
-  , "scales")
-
-## load packages. Install all packages that return "FALSE"
-lapply(needed_packages, require, character.only = TRUE)
+# source("needed_packages.R")
 
 ## Be very careful here, adjust according to your machine's capabilities
 registerDoParallel(cores = usable.cores)
@@ -293,17 +275,37 @@ mob.covtab <- covariate_table(
   , rep(0, int.phase3)
   )     
    } else if (int.type == "tail") {
+     
+     if (int.continue) {
+   c(
+    rep(0, int.phase1)
+  , rep(1, int.phase2)
+  , rep(1, int.phase3)
+   )   
+     } else {
    c(
     rep(0, int.phase1)
   , rep(1, int.phase2)
   , rep(0, int.phase3)
-   ) 
+   )   
+     }
+     
    } else if (int.type == "inf_iso") {
+     
+     if (int.continue) {
    c(
     rep(0, int.phase1)
   , rep(2, int.phase2)
   , rep(2, int.phase3)
    )   
+     } else {
+   c(
+    rep(0, int.phase1)
+  , rep(2, int.phase2)
+  , rep(0, int.phase3)
+   )   
+     }
+     
   }
    }
     )

@@ -1,24 +1,26 @@
 ## Discrete levels of social distancing
 sir_step_mobility <- Csnippet("
-                     // adjust betat for social distancing interventions
-                     // double betat;
-                     int n_beta = round(fmax(I, 1));
-                     if(beta0_sigma > 0){
-                      if((catch_eff > 0) & intervention == 1){
-                          betat = rtgamma_eff(n_beta, sqrt(beta0/ beta0_sigma), beta0, beta_catch, catch_eff)*exp(log(beta_min)*sip_prop);
-                      } else{
-                          betat =  rgammawn(sqrt(beta0 / (beta0_sigma * n_beta)), beta0) * exp(log(beta_min)*sip_prop);
-                      }
-                     } else{
-                        betat = beta0*exp(log(beta_min)*sip_prop);
-                     }
+                      // adjust betat for social distancing interventions
+                      // double betat;
                      
-                     // (mobility*(1 - beta_min) + beta_min);
+                      int n_beta = round(fmax(I, 1));
+                      
+                      if (beta0_sigma > 0) {
+                      if ((catch_eff > 0) & intervention == 1) {
+                        betat = rtgamma_eff(n_beta, sqrt(beta0/ beta0_sigma), beta0, beta_catch, catch_eff)*exp(log(beta_min)*sip_prop);
+                      } else {
+                        betat = rgammawn(sqrt(beta0 / (beta0_sigma * n_beta)), beta0) * exp(log(beta_min)*sip_prop);
+                      }
+                      } else {
+                        betat = beta0*exp(log(beta_min)*sip_prop);
+                      }
+                     
                      // if import rate is above zero, draw importations, assuming they are perfectly balanced with departures of susceptible individuals
                      double import = 0;
                      if (import_rate > 0){
                       import = fmin(rpois(import_rate*dt), S);
                      }
+                     
                      // tracking of total imported, removing them them from susceptibles
                      import_total += import;
                      S -= import;
@@ -168,6 +170,42 @@ dmeas_deaths <- Csnippet("double tol = 1e-16;
                    lik = dnbinom_mu(deaths, theta, D_new + tol, give_log);
                   ")  
 
+if (con_theta) {
+
+rmeas_multi_logis <- Csnippet("double tol = 1e-16;
+                   double detect;
+                   if (t < detect_t0) {
+                   detect = 0;
+                   } else {
+                   detect = detect_max / (1 + exp(-detect_k * (t - detect_mid)));                   
+                   }
+                   deaths = rnbinom_mu(theta, D_new + tol);
+                   cases  = rnbinom_mu(theta*theta2, detect*I_new_sympt + tol);
+                  ")
+
+# define evaluation of model prob density function
+dmeas_multi_logis <- Csnippet("double tol = 1e-16;
+                   double detect;
+                   if (t < detect_t0) {
+                   detect = 0;
+                   } else {
+                   detect = detect_max / (1 + exp(-detect_k * (t - detect_mid)));                   
+                   }
+            
+                   if (ISNA(deaths) & ISNA(cases)) {
+                   lik = 0 + 0;
+                   } else if (ISNA(deaths) & !ISNA(cases)) {
+                   lik = 0 + dnbinom_mu(cases, theta*theta2, detect*I_new_sympt + tol, 1);
+                   } else if (!ISNA(deaths) & ISNA(cases)) {
+                   lik = dnbinom_mu(deaths, theta, D_new + tol, 1) + 0;
+                   } else {
+                   lik = dnbinom_mu(deaths, theta, D_new + tol, 1) + dnbinom_mu(cases, theta*theta2, detect*I_new_sympt + tol, 1);
+                   }
+                   lik = (give_log) ? lik : exp(lik);
+                  ")
+
+} else {
+  
 rmeas_multi_logis <- Csnippet("double tol = 1e-16;
                    double detect;
                    if (t < detect_t0) {
@@ -199,6 +237,8 @@ dmeas_multi_logis <- Csnippet("double tol = 1e-16;
                    }
                    lik = (give_log) ? lik : exp(lik);
                   ")
+  
+}
 
 rmeas_multi_pwl <- Csnippet("double tol = 1e-16;
                    double detect;
@@ -303,6 +343,19 @@ dmeas_multi_exp <- Csnippet("double tol = 1e-16;
 
 if (detect.logis) {
   
+  if (con_theta) {
+  
+par_trans <- parameter_trans(log = c("beta0", "beta0_sigma", "import_rate"
+  , "E_init"
+  , "theta"
+#  , "theta2"
+  , "detect_k"
+  , "detect_mid"
+  )
+  , logit = c("beta_min", "detect_max", "theta2")) 
+
+  } else {
+  
 par_trans <- parameter_trans(log = c("beta0", "beta0_sigma", "import_rate"
   , "E_init"
   , "theta"
@@ -311,6 +364,8 @@ par_trans <- parameter_trans(log = c("beta0", "beta0_sigma", "import_rate"
   , "detect_mid"
   )
   , logit = c("beta_min", "detect_max")) 
+    
+}
 
 param_names <- c(
    "beta0"
