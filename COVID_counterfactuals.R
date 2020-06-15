@@ -146,7 +146,7 @@ gg <- ggplot() +
   , legend.title     = element_text(size = 12)
   , legend.text      = element_text(margin = margin(t = 0.3, unit = 'cm'), size = 11)
   , plot.title       = element_text(size = 12)
-  , legend.position  = c(0.245, 0.875)
+  , legend.position  = c(0.245, 0.925)
   , axis.ticks.x     = element_blank()
   , strip.background = element_blank()
   , strip.placement = "outside"

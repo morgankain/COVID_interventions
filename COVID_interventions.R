@@ -56,9 +56,9 @@ SEIR.sim.f.t.s3    <- SEIR.sim.f.t %>% mutate(intervention = sim_title)
 counter.factual    <- FALSE
 int.movement       <- "mid"
 int.type           <- "tail"
-int.beta_catch     <- 0.05
-int.beta_catch_type<- "pct"
-int.catch_eff      <-  1
+int.beta_catch     <- 0.05            ## beta0 values caught by intervention; alternatively, specify by top percent of distribution to trim
+int.beta_catch_type<- "pct"           ## if pct, treated as percentile, otherwise, as absoulte value
+int.catch_eff      <-  1              ## effectiveness at catching beta0 values above the beta_catch (0 - 1)
 int.init           <- "2020-06-08"
 int.end            <- "2020-10-01" 
 sim_title          <- "Reduce to 50% of shelter-in-place\nwith superspreading averted"

@@ -1,8 +1,8 @@
 fixed_params        <- fixed_params[-c(1, 5, 11, 12)]
 
 test_simstart <- seq(
-    as.numeric((as.Date(county.data[min(which(county.data$cases > 0)), ]$date) - 20) - as.Date("2020-01-01"))
-  , as.numeric((as.Date(county.data[min(which(county.data$cases > 0)), ]$date) - 7) - as.Date("2020-01-01"))
+    as.numeric((as.Date(county.data[min(which(county.data$cases > 0)), ]$date) - 17) - as.Date("2020-01-01"))
+  , as.numeric((as.Date(county.data[min(which(county.data$cases > 0)), ]$date) - 3) - as.Date("2020-01-01"))
   , by = 1
   )
 

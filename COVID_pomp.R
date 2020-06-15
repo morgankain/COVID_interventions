@@ -16,7 +16,7 @@ sir_step <- Csnippet("
                      // adjust contact rates if isolation of symptomatic cases is in place
                      double iso_m = 1;
                      double iso_s = 1;
-                     if(isolation == 1){
+                     if (isolation == 1){
                         iso_m = iso_mild_level;
                         iso_s = iso_severe_level;
                      }

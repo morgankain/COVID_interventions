@@ -32,8 +32,8 @@ sim.length        <- 200
 detect.logis      <- TRUE
 fixed.E0          <- FALSE
 
-focal.county      <- "King" 
-focal.state_abbr  <- "WA"
+focal.county      <- "Fulton" 
+focal.state_abbr  <- "GA"
 
 ## Required packages to run this code
 needed_packages <- c(
@@ -198,8 +198,7 @@ names(county.data)[2] <- "hosp"
 
 }
   
-#mobility <- readRDS("unfolded_daily_clean.rds") %>% 
-mobility <- readRDS("unfolded_May27.rds") %>% 
+mobility <- readRDS("unfolded_Jun03.rds") %>% 
   dplyr::filter(county_name == focal.county & state_abbr == focal.state_abbr)  %>%
   dplyr::select(datestr, sip_prop) %>% 
   dplyr::filter(!is.na(sip_prop)) %>%
@@ -365,7 +364,7 @@ mifs_temp <- covid_mobility %>%
   mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.10)
   
 # ll <- replicate(10, mifs_temp %>% pfilter(Np = 50000) %>% logLik())
-ll <- replicate(10, mifs_temp %>% pfilter(Np = 50000) %>% logLik())
+ll <- replicate(10, mifs_temp %>% pfilter(Np = 5000) %>% logLik())
 ll <- logmeanexp(ll, se = TRUE)
 return(list(mifs_temp, ll, start_vals))
 
@@ -441,7 +440,7 @@ mifs_temp <- covid_mobility %>%
   mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.10)
   
 # ll <- replicate(10, mifs_temp %>% pfilter(Np = 50000) %>% logLik())
-ll <- replicate(10, mifs_temp %>% pfilter(Np = 50000) %>% logLik())
+ll <- replicate(10, mifs_temp %>% pfilter(Np = 5000) %>% logLik())
 ll <- logmeanexp(ll, se = TRUE)
 return(list(mifs_temp, ll, start_vals))
 

@@ -16,10 +16,10 @@ meas.nb           <- TRUE     ## Negative binomial measurement process?
 import_cases      <- FALSE    ## Use importation of cases?
 ## mif2 fitting parameters. 
 n.mif_runs        <- 6        ## number of repeated fits (6 used in manuscript, 2 suggested to debug/check code)
-n.mif_length      <- 100       ## number of steps (100 used in manuscript, 20 suggested to debug/check code)
-n.mif_particles   <- 750      ## number of particles (3000 used in manuscript, 3000 suggested to debug/check code)
+n.mif_length      <- 120      ## number of steps (100 used in manuscript, 20 suggested to debug/check code)
+n.mif_particles   <- 300      ## number of particles (3000 used in manuscript, 3000 suggested to debug/check code)
 n.mif_rw.sd       <- 0.02     ## particle perturbation (0.02 used in manuscript, 0.02 suggested to debug/check code)
-nparams           <- 20       ## number of parameter sobol samples (200 used in manuscript, 5 suggested to debug/check code)
+nparams           <- 200      ## number of parameter sobol samples (200 used in manuscript, 5 suggested to debug/check code)
 nsim              <- 200      ## number of stochastic epidemic simulations for each fitted beta0 for dynamics (300 used in manuscript, 150 suggested to debug/check code)
 sim.length        <- 300
 
@@ -163,6 +163,8 @@ mobility <- rbind(
  
 ## Remove dates after one week after movement data ends
 county.data <- county.data %>% dplyr::filter(date < (max(mobility$date) + 7))
+
+mobility <- mobility %>% mutate(sip_prop = plogis(scale(sip_prop)))
 
 if (detect.logis) {
 mob.covtab <- covariate_table(
