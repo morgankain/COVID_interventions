@@ -168,7 +168,48 @@ dmeas_deaths <- Csnippet("double tol = 1e-16;
                    lik = dnbinom_mu(deaths, theta, D_new + tol, give_log);
                   ")  
 
-rmeas_multi_logis <- Csnippet("double tol = 1e-16;
+if(con_theta){
+  rmeas_multi_logis <- Csnippet("double tol = 1e-16;
+                   double detect;
+                   if (t < detect_t0) {
+                   detect = 0;
+                   } else {
+                   detect = detect_max / (1 + exp(-detect_k * (t - detect_mid)));                   
+                   }
+                   deaths = rnbinom_mu(theta, D_new + tol);
+                   cases  = rnbinom_mu(theta*theta2, detect*I_new_sympt + tol);
+                  ")
+  
+  # define evaluation of model prob density function
+  dmeas_multi_logis <- Csnippet("double tol = 1e-16;
+                   double detect;
+                   if (t < detect_t0) {
+                   detect = 0;
+                   } else {
+                   detect = detect_max / (1 + exp(-detect_k * (t - detect_mid)));                   
+                   }
+            
+                   if (ISNA(deaths) & ISNA(cases)) {
+                   lik = 0 + 0;
+                   } else if (ISNA(deaths) & !ISNA(cases)) {
+                   lik = 0 + dnbinom_mu(cases, theta*theta2, detect*I_new_sympt + tol, 1);
+                   } else if (!ISNA(deaths) & ISNA(cases)) {
+                   lik = dnbinom_mu(deaths, theta, D_new + tol, 1) + 0;
+                   } else {
+                   lik = dnbinom_mu(deaths, theta, D_new + tol, 1) + dnbinom_mu(cases, theta*theta2, detect*I_new_sympt + tol, 1);
+                   }
+                   lik = (give_log) ? lik : exp(lik);
+                  ")
+  par_trans <- parameter_trans(log = c("beta0", "beta0_sigma", "import_rate"
+                                       , "E_init"
+                                       , "theta"
+                                       , "detect_k"
+                                       , "detect_mid"
+  )
+  , logit = c("beta_min", "detect_max", "theta2")) 
+  
+} else{
+  rmeas_multi_logis <- Csnippet("double tol = 1e-16;
                    double detect;
                    if (t < detect_t0) {
                    detect = 0;
@@ -178,9 +219,9 @@ rmeas_multi_logis <- Csnippet("double tol = 1e-16;
                    deaths = rnbinom_mu(theta, D_new + tol);
                    cases  = rnbinom_mu(theta2, detect*I_new_sympt + tol);
                   ")
-
-# define evaluation of model prob density function
-dmeas_multi_logis <- Csnippet("double tol = 1e-16;
+  
+  # define evaluation of model prob density function
+  dmeas_multi_logis <- Csnippet("double tol = 1e-16;
                    double detect;
                    if (t < detect_t0) {
                    detect = 0;
@@ -198,119 +239,17 @@ dmeas_multi_logis <- Csnippet("double tol = 1e-16;
                    lik = dnbinom_mu(deaths, theta, D_new + tol, 1) + dnbinom_mu(cases, theta2, detect*I_new_sympt + tol, 1);
                    }
                    lik = (give_log) ? lik : exp(lik);
-                  ")
-
-rmeas_multi_pwl <- Csnippet("double tol = 1e-16;
-                   double detect;
-                   if (t < detect_t0) {
-                   detect = 0;
-                   } else if ((t >= detect_t0) & (t <= (detect_t0 + detect_t1))) {
-                   detect = detect_max/detect_t1*(t - detect_t0);
-                   } else { 
-                   detect = detect_max; 
-                   }
-                   deaths = rnbinom_mu(theta, D_new + tol);
-                   cases = rnbinom_mu(theta2, detect*I_new_sympt + tol);
-                  ")
-
-dmeas_multi_pwl <- Csnippet("double tol = 1e-16;
-                   double detect;
-                   if (t < detect_t0) {
-                   detect = 0;
-                   } else if ((t >= detect_t0) & (t <= (detect_t0 + detect_t1))) {
-                   detect = detect_max/detect_t1*(t - detect_t0);
-                   } else {
-                   detect = detect_max; 
-                   }
-                   
-                   if (ISNA(deaths) & ISNA(cases)) {
-                   lik = 0 + 0;
-                   } else if (ISNA(deaths) & !ISNA(cases)) {
-                   lik = 0 + dnbinom_mu(cases, theta2, detect*I_new_sympt + tol, 1);
-                   } else if (!ISNA(deaths) & ISNA(cases)) {
-                   lik = dnbinom_mu(deaths, theta, D_new + tol, 1) + 0;
-                   } else {
-                   lik = dnbinom_mu(deaths, theta, D_new + tol, 1) + dnbinom_mu(cases, theta2, detect*I_new_sympt + tol, 1);
-                   }
-                   lik = (give_log) ? lik : exp(lik);
-                  ")
-
-rmeas_multi_pwl2 <- Csnippet("double tol = 1e-16;
-                   double detect;
-                   if (t < detect_t0) {
-                   detect = 0;
-                   } else if ((t >= detect_t0) & (t <= (detect_t0 + detect_t1))) {
-                   detect = detect_min + ((detect_max - detect_min)/detect_t1*(t - detect_t0));
-                   } else { 
-                   detect = detect_max; 
-                   }
-                   deaths = rnbinom_mu(theta, D_new + tol);
-                   cases = rnbinom_mu(theta2, detect*I_new_sympt + tol);
-                  ")
-
-dmeas_multi_pwl2 <- Csnippet("double tol = 1e-16;
-                   double detect;
-                   if (t < detect_t0) {
-                   detect = 0;
-                   } else if ((t >= detect_t0) & (t <= (detect_t0 + detect_t1))) {
-                   detect = detect_min + ((detect_max - detect_min)/detect_t1*(t - detect_t0));
-                   } else {
-                   detect = detect_max; 
-                   }
-                   
-                   if (ISNA(deaths) & ISNA(cases)) {
-                   lik = 0 + 0;
-                   } else if (ISNA(deaths) & !ISNA(cases)) {
-                   lik = 0 + dnbinom_mu(cases, theta2, detect*I_new_sympt + tol, 1);
-                   } else if (!ISNA(deaths) & ISNA(cases)) {
-                   lik = dnbinom_mu(deaths, theta, D_new + tol, 1) + 0;
-                   } else {
-                   lik = dnbinom_mu(deaths, theta, D_new + tol, 1) + dnbinom_mu(cases, theta2, detect*I_new_sympt + tol, 1);
-                   }
-                   lik = (give_log) ? lik : exp(lik);
-                  ")
-
-rmeas_multi_exp <- Csnippet("double tol = 1e-16;
-                   double detect;
-                   if (t < detect_t0) {
-                   detect = 0;
-                   } else { 
-                   detect = exp(detect_k*t); 
-                   }
-                   deaths = rnbinom_mu(theta, D_new + tol);
-                   cases = rnbinom_mu(theta2, detect*I_new_sympt + tol);
-                  ")
-
-dmeas_multi_exp <- Csnippet("double tol = 1e-16;
-                   double detect;
-                   if (t < detect_t0) {
-                   detect = 0;
-                   } else { 
-                   detect = exp(detect_k*t); 
-                   }
-                   
-                   if (ISNA(deaths) & ISNA(cases)) {
-                   lik = 0 + 0;
-                   } else if (ISNA(deaths) & !ISNA(cases)) {
-                   lik = 0 + dnbinom_mu(cases, theta2, detect*I_new_sympt + tol, 1);
-                   } else if (!ISNA(deaths) & ISNA(cases)) {
-                   lik = dnbinom_mu(deaths, theta, D_new + tol, 1) + 0;
-                   } else {
-                   lik = dnbinom_mu(deaths, theta, D_new + tol, 1) + dnbinom_mu(cases, theta2, detect*I_new_sympt + tol, 1);
-                   }
-                   lik = (give_log) ? lik : exp(lik);
-                  ")
-
-if (detect.logis) {
-  
-par_trans <- parameter_trans(log = c("beta0", "beta0_sigma", "import_rate"
-  , "E_init"
-  , "theta"
-  , "theta2"
-  , "detect_k"
-  , "detect_mid"
+                  ")  
+  par_trans <- parameter_trans(log = c("beta0", "beta0_sigma", "import_rate"
+                                       , "E_init"
+                                       , "theta"
+                                       , "theta2"
+                                       , "detect_k"
+                                       , "detect_mid"
   )
   , logit = c("beta_min", "detect_max")) 
+  
+}
 
 param_names <- c(
    "beta0"
@@ -336,42 +275,6 @@ param_names <- c(
   , "catch_eff"
 )
   
-} else {
-  
-par_trans <- parameter_trans(log = c("beta0", "beta0_sigma", "import_rate"
-  , "E_init"
-  , "theta"
-  , "theta2"
-#  , "detect_t0"
-  , "detect_t1"
-  )
-  , logit = c("beta_min", "detect_max"))    
-
-param_names <- c(
-   "beta0"
-  , "Ca", "Cp", "Cs", "Cm"
-  , "alpha"
-  , "mu"
-  , "delta"
-  , "gamma"
-  , "lambda_a", "lambda_s", "lambda_m", "lambda_p"
-  , "rho_r"
-  , "rho_d"
-  , "N"
-  , "E_init"
-  , "import_rate"
-  , "theta"
-  , "theta2"
-  , "beta_min"
-  , "beta0_sigma"
- # , "detect_t0"
-  , "detect_t1"
-  , "detect_max"
-  , "beta_catch"
-  , "catch_eff"
-)
-   
-}
 
 state_names = c(
     "S" , "E" , "Ia"
