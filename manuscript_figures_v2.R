@@ -10,42 +10,42 @@ counties_list = {list(
     focal.county = "Santa Clara",
     focal.state = "California",
     focal.state_abbr = "CA",
-    rds.name = "./output/Santa Clara_TRUE_FALSE_0_2020-06-12_cont_temp_SC_ind_theta.rds",
+    rds.name = "./output/Santa Clara_TRUE_FALSE_0_2020-06-15_cont_temp_SC_ind_theta_continue.rds",
     con_theta = F
   ),
   LA = list(
     focal.county = "Los Angeles",
     focal.state = "California",
     focal.state_abbr = "CA",
-    rds.name = "output/Los Angeles_TRUE_FALSE_0_2020-06-12_cont_temp_LA_ind_theta.rds",
+    rds.name = "output/Los Angeles_independent_theta_200_2020-06-15.rds",
     con_theta = F
   ),
   KC = list(
     focal.county = "King",
     focal.state = "Washington",
     focal.state_abbr = "WA",
-    rds.name = "output/King_TRUE_FALSE_0_2020-06-12_cont_temp_KC_ind_theta.rds",
+    rds.name = "output/King_TRUE_FALSE_0_2020-06-15_cont_temp_KC_ind_theta_continue.rds",
     con_theta = F
   ),
   FC = list(
     focal.county = "Fulton",
     focal.state = "Georgia",
     focal.state_abbr = "GA",
-    rds.name = "output/Fulton_TRUE_FALSE_0_2020-06-12_cont_temp_FC_ind_theta.rds",
+    rds.name = "output/Fulton_independent_theta_200_2020-06-15.rds",
     con_theta = F
   ),
   MD = list(
     focal.county = "Miami-Dade",
     focal.state = "Florida",
     focal.state_abbr = "FL",
-    rds.name = "output/Miami-Dade_TRUE_FALSE_0_2020-06-12_cont_temp_MD_ind_theta.rds",
+    rds.name = "output/Miami-Dade_independent_theta_200_2020-06-15.rds",
     con_theta = F
   ),
   CC = list(
     focal.county = "Contra Costa",
     focal.state = "California",
     focal.state_abbr = "CA",
-    rds.name = "output/Contra_Costa_TRUE_FALSE_0_2020-06-12_cont_temp_ind_theta.rds",
+    rds.name = "output/Contra Costa_independent_theta_200_2020-06-15.rds",
     con_theta = F
   )
 )}[-6]
@@ -59,7 +59,7 @@ int_vars <- list(
 )
 # set parameters
 source("COVID_simulate_cont_params.R")
-loglik.max     <- FALSE
+loglik.max     <- T
 loglik.thresh  <- 2
 ci.stoc        <- 0.025
 ci.epidemic    <- T
@@ -78,9 +78,9 @@ fig1_data <- plyr::adply(1:length(counties_list), 1,
                                ifelse(is.na(deaths), NA, 1)) %>%
                       select(date, any_of(plot_vars)) %>%
                       pivot_longer(any_of(plot_vars), values_to = "data")) %>% 
-          rbind(Reff %>% mutate(name = "Reff", mid = Reff, lwr = NA, upr = NA,
-                                data = NA) %>% 
-                  select(-Reff)) %>% 
+#          rbind(Reff %>% mutate(name = "Reff", mid = Reff, lwr = NA, upr = NA,
+#                                data = NA) %>% 
+#                  select(-Reff)) %>% 
           mutate(intervention = sim_title,
                  county = focal.county,
                  state = focal.state_abbr)
@@ -93,6 +93,9 @@ fig1_colors = c("#FF0000",
                 "#F2AD00",
                 "#F98400",
                 "#5BBCD6")[c(1,4,5,2,3)]
+
+fig1_data$name <- sapply(fig1_data$name, simpleCap)
+
 fig1_data %>% 
   filter(county != "Los Angeles") %>%
   mutate(county = paste0(county, " County,", state)) %>%
@@ -116,7 +119,9 @@ fig1_data %>%
   theme(
     strip.background = element_blank()
     , strip.placement = "outside"
-    , strip.text = element_text(size = 16)) 
+    , strip.text = element_text(size = 16)
+    , axis.text.x = element_text(size = 12)) +
+  xlab("Date")
 
 fig1_data %>% 
   filter(date < as.Date("2020-06-12")) %>%
@@ -214,9 +219,6 @@ fig2_data <- adply(1:length(int_vars), 1,
                                ifelse(is.na(deaths), NA, 1)) %>%
                       select(date, any_of(plot_vars)) %>%
                       pivot_longer(any_of(plot_vars), values_to = "data")) %>% 
-      #    rbind(Reff %>% mutate(name = "Reff", mid = Reff, lwr = NA, upr = NA,
-      #                          data = NA) %>% 
-      #          select(-Reff)) %>% 
           mutate(intervention = sim_title,
                  county = focal.county,
                  state = focal.state_abbr) 
@@ -229,24 +231,38 @@ fig2_data <- adply(1:length(int_vars), 1,
       }
         , .id = NULL)
 
-fig2_colors <- c("#D67236", "grey30", "#0b775e", "magenta4")
+fig2_data$name         <- sapply(fig2_data$name, simpleCap)
+fig2_data$intervention <- factor(fig2_data$intervention, levels = unique(fig2_data$intervention))
+
+fig2_colors <- c("#D67236", "dodgerblue4", "#0b775e", "magenta4")
 
 fig2_data %>% 
   filter(date >= as.Date("2020-02-10")) %>%
   filter(name != "Reff") %>%
   ggplot(aes(x = date, y = mid, ymin = lwr, ymax = upr, fill  = intervention, color = intervention)) +
-  geom_ribbon(alpha = 0.5, colour = NA) +
-  geom_line() +
+  geom_ribbon(data = (fig2_data %>% filter(date >= as.Date("2020-06-08")))
+   , alpha = 0.50, colour = NA) +
+  geom_line(data = (fig2_data %>% filter(date >= as.Date("2020-06-08")))
+   ) +
+  geom_ribbon(data = (fig2_data %>% filter(date <= as.Date("2020-06-08"), intervention == "Lift all interventions"))
+  , alpha = 0.50, colour = NA, fill = "black") +
+  geom_line(data = (fig2_data %>% filter(date <= as.Date("2020-06-08"), intervention == "Lift all interventions"))
+  , colour = "black") +
+  geom_vline(xintercept = as.Date("2020-06-08"), linetype = "dashed", lwd = 0.5) + 
   geom_point(aes(x = date, y = data), 
-             color = "black", size = 1.5) + 
-  scale_y_continuous(trans = "log10") + 
-#  scale_fill_manual(guide = F, values = fig2_colors) +
-#  scale_color_manual(guide = F, values = fig2_colors) +
-  scale_fill_manual(values = fig2_colors) +
-  scale_color_manual(values = fig2_colors) +
+             color = "black", size = 1) + 
+  scale_y_continuous(trans = "log10", labels = trans_format('log10', math_format(10^.x))) +
+  scale_fill_manual(values = fig2_colors, name = "Intervention") +
+  scale_color_manual(values = fig2_colors, name = "Intervention") +
   facet_grid(name ~ county, scales = "free_y", switch = "y")  +
   ylab("") + 
   theme(
     strip.background = element_blank()
+    , legend.position  = c(0.650, 0.885)
+    , legend.background = element_blank()
     , strip.placement = "outside"
-    , strip.text = element_text(size = 16)) 
+    , strip.text = element_text(size = 16)
+    , axis.text.x = element_text(size = 14)) +
+  xlab("Date")
+
+  
