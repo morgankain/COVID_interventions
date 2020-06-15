@@ -374,7 +374,7 @@ SEIR.sim <- SEIR.sim %>%
       date     = round(as.Date(day, origin = variable_params[i, ]$sim_start))
     , paramset = variable_params[i, ]$paramset)
 
-if (ci.epidemic){
+if(ci.epidemic){
   epi_ids <- SEIR.sim %>% 
     group_by(.id) %>% 
     summarise(total_infect = max(D + R)) %>% 
