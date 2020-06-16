@@ -2,7 +2,7 @@ source("ggplot_theme.R")
 source("needed_packages.R")
 
 #####
-## Figure 1: model fits ---
+## Figure 1: model fits ----
 #####
 
 counties_list = {list(
@@ -204,7 +204,7 @@ gridExtra::grid.arrange(fig1.1, fig1.2, ncol = 2, widths = c(4, 1.2))
 }
 
 #####
-## Figure 2: Interventions ---
+## Figure 2: Interventions ----
 #####
 
 counties_list <- {
@@ -334,4 +334,80 @@ fig2_data %>%
     , axis.text.x = element_text(size = 14)) +
   xlab("Date")
 
+#####
+## Figure 3: SIP and truncation combinations ----
+#####  
+
+# here's function to calculate SIP prop needed to maintain R=1 with a given tail truncation
+# works with vector catch_eff and beta_catch. output is beta_catch X catch_eff in dimensions
+sip_trunc_combns = function(beta_catch, beta_catch_type = "pct", 
+                            catch_eff, k, beta0, beta_min, fixed_params){
+  if(beta_catch_type == "pct"){
+    upper = qgamma(beta_catch, k, scale = beta0/k)
+  } else{
+    upper = beta_catch
+  }
   
+  # from fixed params calculated average duration of infection
+  d <- {(                
+    ## proportion * time in asymptomatic
+    fixed_params["alpha"] * fixed_params["Ca"] * (1/fixed_params["lambda_a"]) +                  
+      ## proportion * time in mildly symptomatic
+      (1 - fixed_params["alpha"]) * fixed_params["mu"] * ((1/fixed_params["lambda_p"]) + (1/fixed_params["lambda_m"])) +    
+      ## proportion * time in severely symptomatic
+      (1 - fixed_params["alpha"]) * (1 - fixed_params["mu"]) * ((1/fixed_params["lambda_p"]) + (1/fixed_params["lambda_s"]))      
+  )}
+  
+  # calculate expected value of truncated gamma dist when truncation with 100% efficacy
+  E_trunc <- beta0/k*pgamma(upper*k/beta0, k+1)*gamma(k+1)/(pgamma(upper*k/beta0, k)*gamma(k))
+  # out <- (log(catch_eff*E_trunc + (1- catch_eff)*beta0) + log(d))/-log(beta_min)
+  out <- -(log(outer(E_trunc, catch_eff, "*") + 
+                 matrix(rep(outer(beta0, 1- catch_eff,"*"), length(beta_catch)), 
+                        byrow = T, nrow = length(beta_catch))) + log(d))/log(beta_min)
+  return(out)
+}
+
+beta_catch_vals <- seq(0.5, 1, by = 0.01)
+catch_eff_vals <- seq(0.5, 1, by = 0.1)
+log_lik_thresh <- 0
+fig3_data <- adply(1:length(counties_list), 1, 
+                   function(i){
+                     fixed_params = readRDS(counties_list[[i]]$rds.name)$fixed_params
+                     variable_params = readRDS(counties_list[[i]]$rds.name)$variable_params %>% 
+                       filter(log_lik < 0) %>% 
+                       filter(log_lik >= max(log_lik) - log_lik_thresh) %>%
+                       arrange(desc(log_lik))
+                     # now loop over all the top fits
+                     adply(1:nrow(variable_params), 1, function(j){
+                       params_row = unlist(variable_params[j,])
+                       data.frame(
+                         beta_catch_pct = beta_catch_vals,
+                         sip = sip_trunc_combns(beta_catch_vals, 
+                                                "pct",
+                                                catch_eff_vals, 
+                                                k = fixed_params["beta0_sigma"],
+                                                beta0 = params_row["beta0est"],
+                                                beta_min = params_row["beta_min"],
+                                                fixed_params = c(fixed_params, params_row)) %>% 
+                           magrittr::set_colnames(paste0("catch_eff_", catch_eff_vals)),
+                         county = counties_list[[i]]$focal.county,
+                         paramset = params_row["paramset"]) %>% return
+                     }, .id = NULL) %>% return
+                   }, .id = NULL) %>% 
+  # make catch efficiency a column and pivot data longer
+  pivot_longer(starts_with("sip"), names_to = "catch_eff", 
+               names_prefix = "sip.catch_eff_", values_to = "sip")
+
+fig3_data %>% 
+  filter(sip > 0) %>%
+  mutate(., catch_eff_label = factor(paste0(as.numeric(catch_eff)*100, "% efficiency"),
+                                     levels = paste0(as.numeric(unique(pull(., catch_eff)))*100, "% efficiency"))) %>%
+  ggplot(aes(x = 1- beta_catch_pct, y = sip, color = county, 
+             group = interaction(paramset,county))) + 
+  geom_line(alpha =1) +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
+  xlab("Percentile of superspreading averted") +
+  ylab("Proportion sheltering-in-place") + 
+  scale_color_manual(values = fig1_colors) +
+  facet_wrap(~catch_eff_label)

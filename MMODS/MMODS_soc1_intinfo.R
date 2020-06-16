@@ -21,7 +21,8 @@ int.end            <- "2020-08-01" ## Doesnt matter, ignored for all int.type !=
 ####
 counter.factual    <- FALSE
 int.movement       <- "post"
-int.type           <- "peak14"
+int.type           <- "days_post_peak"
+int.post_peak_thresh<- 14
 int.init           <- "2020-06-08"
 int.end            <- "2020-08-01" ## Doesnt matter, ignored for all int.type != "tail"
 
@@ -29,7 +30,7 @@ int.end            <- "2020-08-01" ## Doesnt matter, ignored for all int.type !=
 ## Simulation: relax social distancing when the number of new daily cases is at 1% of peak. Also need to track for this int as well 
 ####
 counter.factual    <- FALSE
-int.movement       <- "pre"
+int.movement       <- "post"
 int.type           <- "one_perc"
 int.init           <- "2020-06-08"
 int.end            <- "2020-08-01" ## Doesnt matter, ignored for all int.type != "tail"
