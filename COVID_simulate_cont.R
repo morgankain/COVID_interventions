@@ -64,11 +64,20 @@ variable_params <- variable_params %>%
 print(variable_params$paramset)
 print(variable_params$log_lik)
 } else {
+  if (is.na(loglik.num)) {
 variable_params <- variable_params %>% 
 filter(log_lik != 0) %>% 
 filter(log_lik > (max(log_lik) - loglik.thresh))  
 print(variable_params$paramset)
+print(variable_params$log_lik) 
+  } else {
+variable_params <- variable_params %>% 
+filter(log_lik != 0) %>% 
+arrange(desc(log_lik)) %>%
+slice(1:loglik.num)
+print(variable_params$paramset)
 print(variable_params$log_lik)
+}
 }
 
 if (!params.all) {

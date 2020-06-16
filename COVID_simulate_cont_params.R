@@ -26,6 +26,7 @@ print.plot         <- FALSE
 
 loglik.max         <- TRUE    ## Use just the maximum likelihood fit for one trajectory (TRUE) or many as specified by loglik.thresh
 loglik.thresh      <- 2       ## Keep parameter sets with a likelihood within top X loglik units
+loglik.num         <- NA
 params.all         <- TRUE    ## Keep all fitted parameters above loglik thresh?...
 nparams            <- 50      ## ...if FALSE, pick a random subset for speed
 
