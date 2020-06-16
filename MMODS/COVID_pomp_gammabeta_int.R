@@ -2,21 +2,26 @@
 sir_step_mobility <- Csnippet("
                      // adjust betat for social distancing interventions
                      double betat;
-                     if((beta0_sigma > 0) & (I > 0)){
+                     if((intervention == 3) & (over_thresh_post_peak == 1)){ // days post peak
+                       betat = beta0*exp(log(beta_min)*sip_base);
+                     } else if((intervention == 4) & (over_thresh_one_perc == 1)){ // under 1% of peak cases, currently requiring 2 days under 1% of peak
+                       betat = beta0*exp(log(beta_min)*sip_base);
+                     } else{
+                       betat = beta0*exp(log(beta_min)*sip_prop);
+                     }
+
+                //     if((beta0_sigma > 0) & (I > 0)){
                 //   betat = rgammawn(sqrt(beta0 / (beta0_sigma * I)), beta0) * exp(log(beta_min)*sip_prop);
                 //   betat = rgammawn(beta0_sigma/sqrt(I), beta0) * exp(log(beta_min)*sip_prop);
                 //   betat = rgammawn(beta0_sigma/sqrt(I), beta0) * fmax(1 - sip_prop*beta_min, 0);
                 //   betat = beta0*fmax(1 - sip_prop*beta_min, 0);
-                     betat = beta0*exp(log(beta_min)*sip_prop);
-                     } else {
+                //     betat = beta0*exp(log(beta_min)*sip_prop);
+                //     } else {
                  //  betat = beta0*exp(log(beta_min)*sip_prop);
                  //  betat = beta0*fmax(1 - sip_prop*beta_min, 0);
-                     betat = beta0*exp(log(beta_min)*sip_prop);
-                     } 
-                     if ((intervention == 1) & (betat > beta_catch)) {
-                     betat = beta_red;
-                     }
-                     // (mobility*(1 - beta_min) + beta_min);
+                 //   betat = beta0*exp(log(beta_min)*sip_prop);
+                 //     } 
+
                      // if import rate is above zero, draw importations, assuming they are perfectly balanced with departures of susceptible individuals
                      double import = 0;
                      if (import_rate > 0){
@@ -79,6 +84,41 @@ sir_step_mobility <- Csnippet("
                      D  += dHdD; // fatalities
                      D_new += dHdD; // daily fatalities
                      H_new += dIsHr + dIsHd; // daily new hospitalizations
+                     
+                     
+                     // if the upcoming time t is an integer, 
+                     // simulate cases and update cases peak, and days post peak
+                     if(floor(t + dt) == ceil(t + dt/2)){ // super hack-y....
+                      double tol = 1e-16;
+                      double detect = 0;
+                      if ((t + dt) >= detect_t0) {
+                        detect = detect_max; 
+                      }
+                      //Rprintf(\"time = %f, I = %g, I_new_sympt = %g\\n\", 
+                      //        t, I,  I_new_sympt);
+                      cases_sim  = rnbinom_mu(theta2, detect*I_new_sympt + tol);
+                      cases_peak = fmax(cases_peak, cases_sim);
+                      double past_peak = (cases_sim < cases_peak);
+                      peak_under_one_perc = (cases_sim <= cases_peak*0.01)*past_peak;
+                      if(past_peak){
+                       days_past_peak  += 1;
+                      } else{
+                       days_past_peak = 0;
+                      }
+                      if(peak_under_one_perc){
+                       days_under_one_perc += peak_under_one_perc;
+                      } else{
+                       days_under_one_perc = 0;
+                      }
+                      if(days_past_peak >= post_peak_thresh){
+                       over_thresh_post_peak = 1; // this makes crossing these threshholds irreversible
+                      }
+                      if(days_under_one_perc >= one_perc_thresh){
+                       over_thresh_one_perc = 1; // this makes crossing these threshholds irreversible
+                      }
+
+            
+                     }
                      ")
 
 sir_init_mid <- Csnippet("
@@ -121,6 +161,7 @@ sir_init <- Csnippet("
                      D_new = 0;
                      H_new = 0;
                      import_total = 0;
+                     
                      ")
   
 } else {
@@ -143,6 +184,11 @@ sir_init <- Csnippet("
                      D_new = 0;
                      H_new = 0;
                      import_total = 0;
+                     peak_under_one_perc = 0;
+                     days_under_one_perc = 0;
+                     days_past_peak = 0;
+                     over_thresh_post_peak = 0;
+                     over_thresh_one_perc = 0;
                      ")
     
 }
@@ -306,7 +352,8 @@ dmeas_multi_exp <- Csnippet("double tol = 1e-16;
 
 if (detect.logis) {
   
-par_trans <- parameter_trans(log = c("beta0", "beta0_sigma", "import_rate"
+par_trans <- parameter_trans(
+  log = c("beta0", "beta0_sigma", "import_rate"
   , "E_init"
   , "theta"
   , "theta2"
@@ -337,6 +384,8 @@ param_names <- c(
   , "detect_max"
   , "beta_catch"
   , "beta_red"
+  , "post_peak_thresh"
+  , "one_perc_thresh"
 )
   
 } else {
@@ -372,6 +421,7 @@ param_names <- c(
   , "detect_max"
   , "beta_catch"
   , "beta_red"
+  , "post_peak_thresh"
 )
    
 }
@@ -384,6 +434,13 @@ state_names = c(
   , "R" , "D" 
   , "D_new", "H_new" 
   , "import_total"
+  , "cases_sim"
+  , "cases_peak"
+  , "peak_under_one_perc"
+  , "days_under_one_perc"
+  , "days_past_peak"
+  , "over_thresh_post_peak"
+  , "over_thresh_one_perc"
 )
 
 accum_names <- c("D_new", "H_new", "I_new_sympt")
