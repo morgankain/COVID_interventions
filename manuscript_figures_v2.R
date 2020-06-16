@@ -18,14 +18,14 @@ counties_list = {list(
     focal.state = "California",
     focal.state_abbr = "CA",
 #   rds.name = "output/Los Angeles_independent_theta_200_2020-06-15.rds",
-   rds.name = "output/Los Angeles_constrained_theta_200_2020-06-14.rds",
+    rds.name = "output/Los Angeles_constrained_theta_200_2020-06-14.rds",
     con_theta = T
   ),
   KC = list(
     focal.county = "King",
     focal.state = "Washington",
     focal.state_abbr = "WA",
-    rds.name = "output/King_TRUE_FALSE_0_2020-06-12_cont_temp_KC_ind_theta.rds",
+    rds.name = "output/King_independent_theta_200_2020-06-16.rds",
     con_theta = F
   ),
   FC = list(
@@ -39,8 +39,8 @@ counties_list = {list(
     focal.county = "Miami-Dade",
     focal.state = "Florida",
     focal.state_abbr = "FL",
-    # rds.name = "output/Miami-Dade_independent_theta_200_2020-06-15.rds",
-  rds.name = "output/Miami-Dade_constrained_theta_200_2020-06-14.rds",
+  # rds.name = "output/Miami-Dade_independent_theta_200_2020-06-15.rds",
+    rds.name = "output/Miami-Dade_constrained_theta_200_2020-06-14.rds",
     con_theta = T
   )#,
 #  CC = list(
@@ -224,7 +224,6 @@ fig1.3 <- fig1_data %>%
   xlab("") +
   scale_y_continuous(position = "right")
 
-
 fig1.4 <-
   fig1_data %>% 
   filter(date < as.Date("2020-06-08")) %>%
@@ -259,12 +258,12 @@ fig1.4 <-
                      position = "left") #+
   theme(plot.margin = margin(r = 10))
   
-
 # gridExtra::grid.arrange(fig1.1, fig1.2, ncol = 2, widths = c(4, 1.2))
 fig1 <- gridExtra::arrangeGrob(fig1.1, fig1.2, fig1.4, fig1.3, 
                        layout_matrix = matrix(c(1, 1, 2, 3, 4, 4), 
                                               byrow  = T, nrow = 2),
                        widths = c(2.6, 1.25, 1.35), heights = c(2.5, 1.5)) 
+
 gridExtra::grid.arrange(fig1)
 }
 
@@ -436,7 +435,7 @@ fig2_data %>%
 # here's function to calculate SIP prop needed to maintain R=1 with a given tail truncation
 # works with vector catch_eff and beta_catch. output is beta_catch X catch_eff in dimensions
 sip_trunc_combns = function(beta_catch, beta_catch_type = "pct", 
-                            catch_eff, k, beta0, beta_min, fixed_params){
+                            catch_eff, k, beta0, beta_min, fixed_params, desired_R){
   if(beta_catch_type == "pct"){
     upper = qgamma(beta_catch, k, scale = beta0/k)
   } else{
@@ -459,7 +458,7 @@ sip_trunc_combns = function(beta_catch, beta_catch_type = "pct",
   # expected value is weighted sum of truncated and untruncated distributions depdending on efficacy
   out <- -(log(outer(E_trunc, catch_eff, "*") + 
                  matrix(rep(outer(beta0, 1- catch_eff,"*"), length(beta_catch)), 
-                        byrow = T, nrow = length(beta_catch))) + log(d))/log(beta_min)
+                        byrow = T, nrow = length(beta_catch))) + log(d) - log(desired_R))/log(beta_min)
   return(out)
 }
 
@@ -484,7 +483,8 @@ fig3_data <- adply(1:length(counties_list), 1,
                                                 k = fixed_params["beta0_sigma"],
                                                 beta0 = params_row["beta0est"],
                                                 beta_min = params_row["beta_min"],
-                                                fixed_params = c(fixed_params, params_row)) %>% 
+                                                fixed_params = c(fixed_params, params_row),
+                                                desired_R    = 1.5) %>% 
                            magrittr::set_colnames(paste0("catch_eff_", catch_eff_vals)),
                          county = counties_list[[i]]$focal.county,
                          paramset = params_row["paramset"]) %>% return
@@ -507,3 +507,11 @@ fig3_data %>%
   ylab("Proportion sheltering-in-place") + 
   scale_color_manual(values = fig1_colors) +
   facet_wrap(~catch_eff_label)
+
+#####
+## Figure 4: Epidemic rebound when rare ----
+#####  
+
+
+
+
