@@ -10,7 +10,7 @@ counties_list = {list(
     focal.county = "Santa Clara",
     focal.state = "California",
     focal.state_abbr = "CA",
-    rds.name = "./output/Santa Clara_TRUE_FALSE_0_2020-06-15_cont_temp_SC_ind_theta_continue.rds",
+    rds.name = "./output/Santa Clara_independent_theta_200_2020-06-15.rds",
     con_theta = F
   ),
   LA = list(
@@ -18,6 +18,7 @@ counties_list = {list(
     focal.state = "California",
     focal.state_abbr = "CA",
     rds.name = "output/Los Angeles_independent_theta_200_2020-06-15.rds",
+#   rds.name = "output/Los Angeles_constrained_theta_200_2020-06-14.rds",
     con_theta = F
   ),
   KC = list(
@@ -39,16 +40,17 @@ counties_list = {list(
     focal.state = "Florida",
     focal.state_abbr = "FL",
     rds.name = "output/Miami-Dade_independent_theta_200_2020-06-15.rds",
+#   rds.name = "output/Miami-Dade_constrained_theta_200_2020-06-14.rds",
     con_theta = F
-  ),
-  CC = list(
-    focal.county = "Contra Costa",
-    focal.state = "California",
-    focal.state_abbr = "CA",
-    rds.name = "output/Contra Costa_independent_theta_200_2020-06-15.rds",
-    con_theta = F
-  )
-)}[-6]
+  )#,
+#  CC = list(
+#    focal.county = "Contra Costa",
+#    focal.state = "California",
+#    focal.state_abbr = "CA",
+#    rds.name = "output/Contra Costa_independent_theta_200_2020-06-15.rds",
+#    con_theta = F
+#  )
+)}
 int_vars <- list(
   counter.factual    = FALSE,
   int.movement       = "post",
@@ -59,7 +61,8 @@ int_vars <- list(
 )
 # set parameters
 source("COVID_simulate_cont_params.R")
-loglik.max     <- T
+loglik.max     <- F
+loglik.num     <- 10
 loglik.thresh  <- 2
 ci.stoc        <- 0.025
 ci.epidemic    <- T
@@ -96,8 +99,10 @@ fig1_colors = c("#FF0000",
 
 fig1_data$name <- sapply(fig1_data$name, simpleCap)
 
+## LA with same axis
+{
 fig1_data %>% 
-  filter(county != "Los Angeles") %>%
+ # filter(county != "Los Angeles") %>%
   mutate(county = paste0(county, " County,", state)) %>%
   filter(date < as.Date("2020-06-08")) %>%
   filter(date >= as.Date("2020-02-10")) %>%
@@ -133,6 +138,70 @@ fig1_data %>%
   geom_hline(yintercept = 1, linetype = "dashed") +
   scale_color_manual(values = fig1_colors) + 
   ylab("Reff")
+}
+
+## LA with a different axis
+{
+fig1.1 <- fig1_data %>% 
+  filter(county != "Los Angeles") %>%
+  mutate(county = paste0(county, " County,", state)) %>%
+  filter(date < as.Date("2020-06-08")) %>%
+  filter(date >= as.Date("2020-02-10")) %>%
+  filter(name != "Reff") %>%
+  group_by(county) %>% 
+  mutate(nparams = 0.5/length(unique(paramset))) %>% 
+  ggplot(aes(x = date, y = mid, ymin = lwr, ymax = upr, 
+             fill  = county, color = county, 
+             group = interaction(county,paramset))) +
+  geom_ribbon(aes(alpha = I(nparams)), colour = NA) +
+  geom_line() +
+  geom_point(aes(x = date, y = data), 
+             color = "black", size = 0.75) + 
+  scale_y_continuous(trans = "sqrt") + 
+  scale_fill_manual(guide = F, values = fig1_colors) +
+  scale_color_manual(guide = F, values = fig1_colors) +
+  facet_grid(name ~ county, scales = "free_y", switch = "y")  +
+  ylab("") + 
+  theme(
+    strip.background = element_blank()
+    , strip.placement = "outside"
+    , strip.text.x = element_text(size = 11)
+    , strip.text.y = element_text(size = 16)
+    , axis.text.x = element_text(size = 12)
+    , plot.margin = unit(c(0.25,0.25,0.25,0.25), "cm")) +
+  xlab("Date")
+
+fig1.2 <- fig1_data %>% 
+  filter(county == "Los Angeles") %>%
+  mutate(county = paste0(county, " County,", state)) %>%
+  filter(date < as.Date("2020-06-08")) %>%
+  filter(date >= as.Date("2020-02-10")) %>%
+  filter(name != "Reff") %>%
+  group_by(county) %>% 
+  mutate(nparams = 0.5/length(unique(paramset))) %>% 
+  ggplot(aes(x = date, y = mid, ymin = lwr, ymax = upr, 
+             fill  = county, color = county, 
+             group = interaction(county,paramset))) +
+  geom_ribbon(aes(alpha = I(nparams)), colour = NA) +
+  geom_line() +
+  geom_point(aes(x = date, y = data), 
+             color = "black", size = 0.75) + 
+  scale_y_continuous(trans = "sqrt") + 
+  scale_fill_manual(guide = F, values = fig1_colors[5]) +
+  scale_color_manual(guide = F, values = fig1_colors[5]) +
+  facet_grid(name ~ county, scales = "free_y", switch = "y")  +
+  ylab("") + 
+  theme(
+    strip.background = element_blank()
+    , strip.placement = "outside"
+    , strip.text.y = element_blank()
+    , strip.text.x = element_text(size = 11)
+    , axis.text.x = element_text(size = 12)
+    , plot.margin = unit(c(0.25,0.25,0.25,-0.25), "cm")) +
+  xlab("Date")
+
+gridExtra::grid.arrange(fig1.1, fig1.2, ncol = 2, widths = c(4, 1.2))
+}
 
 #####
 ## Figure 2: Interventions ---
