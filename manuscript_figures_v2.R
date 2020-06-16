@@ -512,6 +512,175 @@ fig3_data %>%
 ## Figure 4: Epidemic rebound when rare ----
 #####  
 
+## Have to run figure 3 in advance, which is annoying and likely should be fixed
 
+counties_list <- {
+  list(
+  SC =   list(
+    focal.county = "Santa Clara",
+    focal.state = "California",
+    focal.state_abbr = "CA",
+    rds.name = "output/Santa Clara_independent_theta_200_2020-06-15.rds",
+    con_theta = F
+  )#,
+#  KC = list(
+#    focal.county = "King",
+#    focal.state = "Washington",
+#    focal.state_abbr = "WA",
+#    rds.name = "output/King_independent_theta_200_2020-06-16.rds",
+#    con_theta = F
+#  )
+)
+}
 
+int_vars <- {
+list(
+  lift_all = list(
+  counter.factual    = FALSE,
+  int.movement       = "mid",
+  int.type           = "tail",
+  int.init           = "2020-06-08",
+  int.end            = "2020-08-01", ## Doesnt matter, ignored for all int.type != "tail"
+  sim_title          = "Continue Shelter in Place",
+  thresh_inf.val     = 5,
+  int.catch_eff      = 1.0,
+  int.beta_catch       = 0.10, #0.10,
+  int.beta0_sigma      = 0.16,
+  int.beta0_sigma_post = 0.16,
+  int.beta_catch_post  = 0.05,
+  int.catch_eff_post   = 0.0,
+    ## Needed SIP scaling with "mid" to get R to the desired R
+  int.sip_prop_scaling = check_R0(
+    beta0est     = variable_params$beta0est
+  , beta_min     = variable_params$beta_min
+  , fixed_params = unlist(c(fixed_params, variable_params))
+  , sd_strength  = 1
+  , prop_S       = 1
+  , desired_R    = 1.5) / 0.3463429
+),
+  continue_SIP = list(
+  counter.factual    = FALSE,
+  int.movement       = "mid",
+  int.type           = "tail",
+  int.init           = "2020-06-08",
+  int.end            = "2020-08-01", ## Doesnt matter, ignored for all int.type != "tail"
+  sim_title          = "Minimial Tail Cut",
+  thresh_inf.val     = 5,
+  int.catch_eff      = 1.0,
+  int.beta_catch     = 0.10,
+  int.beta0_sigma    = 0.16,
+  int.beta0_sigma_post = 0.16,
+  int.beta_catch_post  = 0.05,
+  int.catch_eff_post   = 1.0,
+  int.sip_prop_scaling = (fig3_data %>% filter(county == "Santa Clara", beta_catch_pct == 0.95, catch_eff == 1))$sip / 0.3463429                                       
+),
+  inf_iso = list(
+  counter.factual    = FALSE,
+  int.movement       = "mid",
+  int.type           = "tail",
+  int.init           = "2020-06-08",
+  int.end            = "2020-08-01", ## Doesnt matter, ignored for all int.type != "tail"
+  sim_title          = "Large Tail Cut",
+  thresh_inf.val     = 5,
+  int.catch_eff      = 1.0,
+  int.beta_catch     = 0.10,
+  int.beta0_sigma    = 0.16,
+  int.beta0_sigma_post = 0.16,
+  int.beta_catch_post  = 0.10,
+  int.catch_eff_post   = 1.0,
+  int.sip_prop_scaling = (fig3_data %>% filter(county == "Santa Clara", beta_catch_pct == 0.90, catch_eff == 1))$sip / 0.3463429
+)
+)}
 
+source("epidemic_rebound/gamma_rebound_pomp.R")
+source("ggplot_theme.R")
+source("epidemic_rebound/gamma_rebound_params.R")
+
+nsim               <- 500
+thresh_inf.val     <- 10
+sim_length         <- 275     ## How many days to run the simulation
+
+fig4_data <- adply(1:length(int_vars), 1, 
+      function(j) {
+        adply(1:length(counties_list), 1,
+      function(i) {
+        with(c(counties_list[[i]], int_vars[[j]]), {
+        source("epidemic_rebound/gamma_rebound.R", local = T)
+        SEIR.sim.f.t %<>% 
+          full_join(county.data %>%
+                      arrange(date) %>%
+                      mutate(D = cumsum(ifelse(is.na(deaths), 0, deaths))*
+                               ifelse(is.na(deaths), NA, 1)) %>%
+                      select(date, any_of(plot_vars)) %>%
+                      pivot_longer(any_of(plot_vars), values_to = "data")) %>% 
+          mutate(intervention = sim_title,
+                 county = focal.county,
+                 state = focal.state_abbr) 
+    #    return(SEIR.sim.f.ci)
+        return(SEIR.sim.f.t)
+        
+        }
+        )
+      }
+        )
+      }
+        , .id = NULL)
+
+fig4_data$name         <- sapply(fig4_data$name, simpleCap)
+fig4_data$intervention <- factor(fig4_data$intervention, levels = unique(fig4_data$intervention))
+
+fig4_colors <- c("#D67236", "dodgerblue4", "#0b775e", "magenta4")
+fig4_data   <- fig4_data %>% filter(state == "CA")
+
+check_date <- (fig4_data %>% filter(name == "Cases", mid == 0, intervention == "Continue Shelter in Place", date > "2020-05-01") %>%
+  filter(date == min(date)))$date
+
+fig4_data %>% 
+  filter(date >= as.Date("2020-02-10")) %>%
+  ggplot(aes(x = date, y = value
+ #  , ymin = lwr, ymax = upr, fill  = intervention
+    , color = intervention
+    , group = .id)) +
+#  geom_ribbon(data = (fig4_data %>% filter(date >= check_date))
+#   , alpha = 0.50, colour = NA) +
+#  geom_line(data = (fig4_data %>% filter(date >= check_date))
+#   ) + 
+  geom_line(data = (fig4_data %>% filter(date >= check_date, .id != "median"))
+    , aes(group = interaction(.id, intervention))
+    , lwd = 0.25, alpha = 0.15
+   ) +
+  geom_line(data = (fig4_data %>% filter(date >= check_date, .id == "median"))
+   , lwd = 1.5) +
+#  geom_ribbon(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place"))
+#  , alpha = 0.50, colour = NA, fill = "black") +
+#  geom_line(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place"))
+#  , colour = "black") +
+  geom_line(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place", .id != "median"))
+    , lwd = 0.25, alpha = 0.15, colour = "black"
+   ) +
+  geom_line(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place", .id == "median"))
+    , colour = "black"
+    , lwd = 1.5) +
+  geom_vline(xintercept = check_date, linetype = "dashed", lwd = 0.5) + 
+  geom_point(aes(x = date, y = data), 
+             color = "black", size = 1) + 
+  scale_y_continuous(trans = "log10") +
+  scale_fill_manual(values = fig4_colors, name = "Intervention") +
+  scale_color_manual(values = fig4_colors, name = "Intervention") +
+  facet_grid(name ~ county, scales = "free_y", switch = "y")  +
+  ylab("") + 
+  theme(
+    strip.background = element_blank()
+    , legend.position  = c(0.850, 0.885)
+    , legend.background = element_blank()
+    , strip.placement = "outside"
+    , strip.text = element_text(size = 16)
+    , axis.text.x = element_text(size = 14)) +
+  xlab("Date")
+
+droplevels(fig4_data) %>% filter(state == "CA", .id != "median") %>% filter(name == "Cases") %>% filter(day > 260) %>% 
+  group_by(.id, intervention) %>%
+  summarize(new_cases = sum(value)) %>% 
+  filter(new_cases == 0) %>% 
+  group_by(intervention) %>%
+  summarize(prop_extinct = n() / nsim)
