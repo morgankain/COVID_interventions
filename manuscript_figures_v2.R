@@ -17,9 +17,9 @@ counties_list = {list(
     focal.county = "Los Angeles",
     focal.state = "California",
     focal.state_abbr = "CA",
-    rds.name = "output/Los Angeles_independent_theta_200_2020-06-15.rds",
-#   rds.name = "output/Los Angeles_constrained_theta_200_2020-06-14.rds",
-    con_theta = F
+#   rds.name = "output/Los Angeles_independent_theta_200_2020-06-15.rds",
+   rds.name = "output/Los Angeles_constrained_theta_200_2020-06-14.rds",
+    con_theta = T
   ),
   KC = list(
     focal.county = "King",
@@ -39,9 +39,9 @@ counties_list = {list(
     focal.county = "Miami-Dade",
     focal.state = "Florida",
     focal.state_abbr = "FL",
-    rds.name = "output/Miami-Dade_independent_theta_200_2020-06-15.rds",
-#   rds.name = "output/Miami-Dade_constrained_theta_200_2020-06-14.rds",
-    con_theta = F
+#  rds.name = "output/Miami-Dade_independent_theta_200_2020-06-15.rds",
+   rds.name = "output/Miami-Dade_constrained_theta_200_2020-06-14.rds",
+    con_theta = T
   )#,
 #  CC = list(
 #    focal.county = "Contra Costa",
@@ -208,8 +208,8 @@ gridExtra::grid.arrange(fig1.1, fig1.2, ncol = 2, widths = c(4, 1.2))
 #####
 
 counties_list <- {
-  SC = list(
   list(
+  SC =   list(
     focal.county = "Santa Clara",
     focal.state = "California",
     focal.state_abbr = "CA",
@@ -227,8 +227,8 @@ counties_list <- {
 }
 
 int_vars <- {
+list(
   lift_all = list(
-  list(
   counter.factual    = FALSE,
   int.movement       = "pre",
   int.type           = "none",
@@ -273,7 +273,7 @@ loglik.max     <- TRUE
 plot_vars      <- c("cases", "deaths")
 ci.stoch       <- 0.05
 ci.epidemic    <- T
-nsim           <- 20
+nsim           <- 100
 
 fig2_data <- adply(1:length(int_vars), 1, 
       function(j) {
