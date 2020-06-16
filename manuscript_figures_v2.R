@@ -25,7 +25,7 @@ counties_list = {list(
     focal.county = "King",
     focal.state = "Washington",
     focal.state_abbr = "WA",
-    rds.name = "output/King_TRUE_FALSE_0_2020-06-12_cont_temp_KC_ind_theta.rds",
+    rds.name = "output/King_independent_theta_200_2020-06-16.rds",
     con_theta = F
   ),
   FC = list(
@@ -62,7 +62,7 @@ int_vars <- list(
 # set parameters
 source("COVID_simulate_cont_params.R")
 loglik.max     <- F
-loglik.num     <- 5
+loglik.num     <- 10
 loglik.thresh  <- 2
 ci.stoc        <- 0.025
 ci.epidemic    <- T
@@ -162,9 +162,14 @@ fig1.1 <- fig1_data %>%
     , strip.text.y = element_text(size = 16)
     , axis.text.x = element_text(size = 12)
     , axis.title.y = element_text(margin = margin(l = 1))
-    , plot.margin = unit(c(0.25,0.25,0.25,-0.7), "cm")) + 
-    xlab("") 
-  # xlab("Date")
+    , plot.margin = unit(c(0.25,0.25,0.25,0.25), "cm")
+    ) + 
+    xlab("") +
+    labs(tag = "C.") +
+    theme(plot.tag.position = "topleft"
+          , plot.tag = element_text(face = "bold" 
+                                   , margin = margin(b = -16, 
+                                                     r = -45)))
 
 fig1.2 <- fig1_data %>% 
   filter(county == "Los Angeles") %>%
@@ -212,29 +217,13 @@ fig1.3 <- fig1_data %>%
     lead3 = lead(mid, 3)
   ) %>% 
   rowwise() %>% 
-  mutate(mid_mean = mean(c(lag1, lag2, lag3, mid, lead1, lead2, lead3), na.rm = T)) %>% 
+  mutate(mid = mean(c(lag1, lag2, lag3, mid, lead1, lead2, lead3), na.rm = T)) %>% 
   select(-starts_with("lag"), -starts_with("lead")) %>% 
-  ggplot(aes(x = date, y = mid_mean, ymin = lwr, ymax = upr, 
-             fill  = county, color = county, 
-             group = interaction(county,paramset))) +
-  geom_line(alpha = 1) + 
-  scale_color_manual(guide= F, values = fig1_colors[c(1, 2, 5, 3, 4)]) +
-  geom_hline(yintercept  = 1, linetype = "dashed") + 
-  ylab(expression("R"[e])) + 
-  xlab("") +
-  scale_y_continuous(position = "right")
-
-
-fig1.4 <-
-  fig1_data %>% 
-  filter(date < as.Date("2020-06-08")) %>%
-  filter(date >= as.Date("2020-02-10")) %>%
-  filter(name == "Detect") %>%
   mutate(paramset = as.character(paramset)) %>%
   group_by(county, state, date) %>% 
   {rbind(., 
          dplyr::summarise(., 
-                          med = median(mid), 
+                          med = mean(mid), 
                           lwr = min(mid),
                           upr = max(mid),
                           .groups = "drop") %>% 
@@ -243,29 +232,72 @@ fig1.4 <-
                   name = "Detect",
                   intervention = "Reality",
                   data = NA))} %>% 
-  mutate(width = ifelse(paramset == "summary", 2, 0.25),
+  mutate(width = ifelse(paramset == "summary", 1.5, 0.25),
+         alpha = ifelse(paramset == "summary", 1, 0.2)) %>%
+  ggplot(aes(x = date, y = mid, ymin = lwr, ymax = upr, 
+             fill  = county, color = county, 
+             group = interaction(county,paramset))) +
+  geom_ribbon(alpha = 0.25, color = NA) +
+  geom_line(aes(size = I(width), alpha = I(alpha))) +
+  scale_color_manual(guide= F, values = fig1_colors[c(1, 2, 5, 3, 4)]) +
+  scale_fill_manual(guide= F, values = fig1_colors[c(1, 2, 5, 3, 4)]) +
+  geom_hline(yintercept  = 1, linetype = "dashed") + 
+  ylab(expression("R"[e])) + 
+  xlab("") +
+  scale_y_continuous(position = "left") + 
+  ggtitle("A. Reproduction number")+
+  theme(plot.title.position = "plot",
+        plot.title = element_text(face = "bold"))
+
+
+fig1.4 <-
+  fig1_data %>%  
+  filter(date < as.Date("2020-06-08")) %>%
+  filter(date >= as.Date("2020-02-10")) %>%
+  filter(name == "Detect") %>%
+  mutate(paramset = as.character(paramset)) %>%
+  group_by(county, state, date) %>% 
+  {rbind(., 
+         dplyr::summarise(., 
+                          med = mean(mid), 
+                          lwr = min(mid),
+                          upr = max(mid),
+                          .groups = "drop") %>% 
+           rename(mid = med) %>% 
+           mutate(paramset = "summary",
+                  name = "Detect",
+                  intervention = "Reality",
+                  data = NA))} %>% 
+  mutate(width = ifelse(paramset == "summary", 1.5, 0.25),
          alpha = ifelse(paramset == "summary", 1, 0.2)) %>%
   ggplot(aes(x = date, y = mid, ymin = lwr, ymax = upr, 
              group = interaction(county, paramset),
              fill  = county, color = county)) +
-  geom_ribbon(alpha = 0.3) +
+  geom_ribbon(alpha = 0.25, color = NA) +
   geom_line(aes(size = I(width), alpha = I(alpha))) +
   scale_color_manual(guide= F, values = fig1_colors[c(1, 2, 5, 3, 4)]) +
   scale_fill_manual(guide= F, values = fig1_colors[c(1, 2, 5, 3, 4)]) +
   # geom_hline(yintercept  = 1, linetype = "dashed") + 
-  ylab("Symtpomatic\ndetection probability") + 
+  ylab("Detection probability") + 
   xlab("") + 
   scale_y_continuous(labels = scales::percent_format(accuracy = 1),
-                     position = "left") #+
-  theme(plot.margin = margin(r = 10))
+                     position = "right") +
+  ggtitle("B. Syptomatic detection")+
+  theme(plot.title.position = "plot",
+        plot.title = element_text(face = "bold"))
   
 
 # gridExtra::grid.arrange(fig1.1, fig1.2, ncol = 2, widths = c(4, 1.2))
-fig1 <- gridExtra::arrangeGrob(fig1.1, fig1.2, fig1.4, fig1.3, 
-                       layout_matrix = matrix(c(1, 1, 2, 3, 4, 4), 
+fig1 <- gridExtra::arrangeGrob(fig1.1, fig1.2, fig1.3,fig1.4,  
+                       layout_matrix = matrix(c(3, 4, 4, 1, 1, 2), 
                                               byrow  = T, nrow = 2),
-                       widths = c(2.6, 1.25, 1.35), heights = c(2.5, 1.5)) 
-gridExtra::grid.arrange(fig1)
+                       widths = c(2.6, 1.3, 1.3), heights = c(1.5, 2.5)) 
+ggsave("figures/Manuscript2/Figure1.pdf", 
+       fig1, 
+       device = "pdf",
+       width = 12,
+       height = 8)
+
 }
 
 #####
@@ -273,12 +305,19 @@ gridExtra::grid.arrange(fig1)
 #####
 
 counties_list <- {
-  SC = list(
-  list(
-    focal.county = "Santa Clara",
-    focal.state = "California",
-    focal.state_abbr = "CA",
-    rds.name = "./output/Santa Clara_TRUE_FALSE_0_2020-06-12_cont_temp_SC_ind_theta.rds",
+  # SC = list(
+  # list(
+  #   focal.county = "Santa Clara",
+  #   focal.state = "California",
+  #   focal.state_abbr = "CA",
+  #   rds.name = "./output/Santa Clara_TRUE_FALSE_0_2020-06-12_cont_temp_SC_ind_theta.rds",
+  #   con_theta = F
+  # ),
+  list(KC = list(
+    focal.county = "King",
+    focal.state = "Washington",
+    focal.state_abbr = "WA",
+    rds.name = "output/King_independent_theta_200_2020-06-16.rds",
     con_theta = F
   ),
   LA = list(
@@ -463,16 +502,104 @@ sip_trunc_combns = function(beta_catch, beta_catch_type = "pct",
   return(out)
 }
 
+counties_list = {list(
+  SC = list(
+    focal.county = "Santa Clara",
+    focal.state = "California",
+    focal.state_abbr = "CA",
+    rds.name = "./output/Santa Clara_independent_theta_200_2020-06-15.rds",
+    con_theta = F
+  ),
+  LA = list(
+    focal.county = "Los Angeles",
+    focal.state = "California",
+    focal.state_abbr = "CA",
+    # rds.name = "output/Los Angeles_independent_theta_200_2020-06-15.rds",
+    rds.name = "output/Los Angeles_constrained_theta_200_2020-06-14.rds",
+    con_theta = T
+  ),
+  KC = list(
+    focal.county = "King",
+    focal.state = "Washington",
+    focal.state_abbr = "WA",
+    rds.name = "output/King_independent_theta_200_2020-06-16.rds",
+    con_theta = F
+  ),
+  FC = list(
+    focal.county = "Fulton",
+    focal.state = "Georgia",
+    focal.state_abbr = "GA",
+    rds.name = "output/Fulton_independent_theta_200_2020-06-15.rds",
+    con_theta = F
+  ),
+  MD = list(
+    focal.county = "Miami-Dade",
+    focal.state = "Florida",
+    focal.state_abbr = "FL",
+    # rds.name = "output/Miami-Dade_independent_theta_200_2020-06-15.rds",
+    rds.name = "output/Miami-Dade_constrained_theta_200_2020-06-14.rds",
+    con_theta = T
+  )#,
+  #  CC = list(
+  #    focal.county = "Contra Costa",
+  #    focal.state = "California",
+  #    focal.state_abbr = "CA",
+  #    rds.name = "output/Contra Costa_independent_theta_200_2020-06-15.rds",
+  #    con_theta = F
+  #  )
+)}
+
 beta_catch_vals <- seq(0.5, 1, by = 0.01)
-catch_eff_vals <- seq(0.5, 1, by = 0.1)
-log_lik_thresh <- 0
+catch_eff_vals <- seq(0.5, 1, by = 0.25)
+loglik.max     <- F
+loglik.num     <- 10
+loglik.thresh  <- 2
 fig3_data <- adply(1:length(counties_list), 1, 
                    function(i){
                      fixed_params = readRDS(counties_list[[i]]$rds.name)$fixed_params
-                     variable_params = readRDS(counties_list[[i]]$rds.name)$variable_params %>% 
-                       filter(log_lik < 0) %>% 
-                       filter(log_lik >= max(log_lik) - log_lik_thresh) %>%
-                       arrange(desc(log_lik))
+                     variable_params = readRDS(counties_list[[i]]$rds.name)$variable_params 
+                     if (loglik.max) {
+                       variable_params <- variable_params %>% 
+                         filter(log_lik != 0) %>% 
+                         filter(log_lik == max(log_lik))
+                       print(variable_params$paramset)
+                       print(variable_params$log_lik)
+                     } else {
+                       if (is.na(loglik.num)) {
+                         variable_params <- variable_params %>% 
+                           filter(log_lik != 0) %>% 
+                           filter(log_lik > (max(log_lik) - loglik.thresh))  
+                         print(variable_params$paramset)
+                         print(variable_params$log_lik) 
+                       } else {
+                         variable_params <- variable_params %>% 
+                           filter(log_lik != 0) %>% 
+                           arrange(desc(log_lik)) %>%
+                           slice(1:loglik.num)
+                         print(variable_params$paramset)
+                         print(variable_params$log_lik)
+                       }
+                     }
+                     mobility <- with(counties_list[[i]], {
+                       if(focal.county == "Fulton"){
+                       mobility <- readRDS(mobility.file) %>% 
+                         dplyr::filter((county_name == focal.county | county_name == "DeKalb") & (state_abbr == focal.state_abbr)) %>%
+                         dplyr::group_by(datestr) %>%
+                         dplyr::summarize(sip_prop = mean(sip_prop)) %>%
+                         dplyr::select(datestr, sip_prop) %>% 
+                         dplyr::filter(!is.na(sip_prop)) 
+                       } else{
+                         mobility <- readRDS(mobility.file) %>% 
+                           dplyr::filter(county_name == focal.county & state_abbr == focal.state_abbr)  %>%
+                           dplyr::select(datestr, sip_prop) %>% 
+                           dplyr::filter(!is.na(sip_prop)) %>%
+                           mutate(day = as.numeric(datestr - as.Date("2019-12-31")))
+                       }
+                       mobility
+                       })
+                       
+                     sip_start <- arrange(mobility, datestr) %>% head(7) %>% pull(sip_prop) %>% mean
+                     sip_max <- arrange(mobility, datestr) %>% pull(sip_prop) %>% max
                      # now loop over all the top fits
                      adply(1:nrow(variable_params), 1, function(j){
                        params_row = unlist(variable_params[j,])
@@ -488,22 +615,66 @@ fig3_data <- adply(1:length(counties_list), 1,
                            magrittr::set_colnames(paste0("catch_eff_", catch_eff_vals)),
                          county = counties_list[[i]]$focal.county,
                          paramset = params_row["paramset"]) %>% return
-                     }, .id = NULL) %>% return
-                   }, .id = NULL) %>% 
-  # make catch efficiency a column and pivot data longer
-  pivot_longer(starts_with("sip"), names_to = "catch_eff", 
-               names_prefix = "sip.catch_eff_", values_to = "sip")
-
+                     }, .id = NULL) %>%
+                       # make catch efficiency a column and pivot data longer
+                       pivot_longer(starts_with("sip"), names_to = "catch_eff", 
+                                    names_prefix = "sip.catch_eff_", values_to = "sip") %>%
+                       # add two rows with data of sip observed
+                       rbind(data.frame(
+                         beta_catch_pct = 1,
+                         county = counties_list[[i]]$focal.county,
+                         paramset = "data",
+                         sip = c(sip_start, sip_max),
+                         catch_eff = 0
+                       )) %>% 
+                       return
+                   }, .id = NULL) 
 fig3_data %>% 
-  filter(sip > 0) %>%
+  filter(sip > 0.1) %>%
+  group_by(county, catch_eff, beta_catch_pct) %>% 
+  {rbind(.,
+         filter(., paramset != "data") %>% 
+           summarise(., 
+                     lwr = min(sip),
+                     upr = max(sip),
+                     sip = mean(sip)) %>% 
+           mutate(paramset = "summary"))} %>% 
+  ungroup() %>%
   mutate(., catch_eff_label = factor(paste0(as.numeric(catch_eff)*100, "% efficiency"),
-                                     levels = paste0(as.numeric(unique(pull(., catch_eff)))*100, "% efficiency"))) %>%
-  ggplot(aes(x = 1- beta_catch_pct, y = sip, color = county, 
+                                     levels = paste0(as.numeric(unique(pull(., catch_eff)))*100, "% efficiency"))) %>% 
+  {ggplot(data = filter(., paramset == "summary"),
+         mapping = aes(x = 1- beta_catch_pct, y = sip, 
+             ymin = lwr, ymax = upr,
+             color = county, 
+             fill = county, 
              group = interaction(paramset,county))) + 
-  geom_line(alpha =1) +
+  geom_ribbon(alpha = 0.4, color = NA) +
+  geom_line(alpha = 0.75, size = 1.5) + 
+  geom_point(aes(shape = type, size = I(size)), 
+             position = position_dodge(width = 0.05),
+             alpha = 0.75, 
+             data = filter(., paramset == "data") %>% 
+               select(-catch_eff, -catch_eff_label) %>%
+               group_by(county) %>% 
+               mutate(type = ifelse(sip == max(sip), "max", "start")) %>%
+               {right_join(., 
+                           expand.grid(county = pull(., county) %>% unique, 
+                                       catch_eff = catch_eff_vals))}  %>%
+               mutate(., catch_eff_label = factor(paste0(as.numeric(catch_eff)*100, "% efficiency"),
+                                                  levels = paste0(as.numeric(unique(pull(., catch_eff)))*100, "% efficiency"))) %>% 
+               ungroup %>% 
+               mutate(size = ifelse(type == "start", 2, 2))
+             ) +
   scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
   scale_x_continuous(labels = scales::percent_format(accuracy = 1)) +
   xlab("Percentile of superspreading averted") +
   ylab("Proportion sheltering-in-place") + 
   scale_color_manual(values = fig1_colors) +
-  facet_wrap(~catch_eff_label)
+  scale_fill_manual(values = fig1_colors) +
+      scale_shape_manual(guide = F, values = c(19, 17)) + #95)) + 
+  facet_wrap(~catch_eff_label)}
+
+
+
+# %>%
+#   mutate(beta_catch_pct = beta_catch_pct - 0.01*as.numeric(as.factor(county)))
