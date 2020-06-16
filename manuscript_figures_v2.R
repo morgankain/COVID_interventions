@@ -25,7 +25,7 @@ counties_list = {list(
     focal.county = "King",
     focal.state = "Washington",
     focal.state_abbr = "WA",
-    rds.name = "output/King_TRUE_FALSE_0_2020-06-15_cont_temp_KC_ind_theta_continue.rds",
+    rds.name = "output/King_TRUE_FALSE_0_2020-06-12_cont_temp_KC_ind_theta.rds",
     con_theta = F
   ),
   FC = list(
@@ -39,8 +39,8 @@ counties_list = {list(
     focal.county = "Miami-Dade",
     focal.state = "Florida",
     focal.state_abbr = "FL",
-#  rds.name = "output/Miami-Dade_independent_theta_200_2020-06-15.rds",
-   rds.name = "output/Miami-Dade_constrained_theta_200_2020-06-14.rds",
+    # rds.name = "output/Miami-Dade_independent_theta_200_2020-06-15.rds",
+  rds.name = "output/Miami-Dade_constrained_theta_200_2020-06-14.rds",
     con_theta = T
   )#,
 #  CC = list(
@@ -62,12 +62,13 @@ int_vars <- list(
 # set parameters
 source("COVID_simulate_cont_params.R")
 loglik.max     <- F
-loglik.num     <- 10
+loglik.num     <- 5
 loglik.thresh  <- 2
 ci.stoc        <- 0.025
 ci.epidemic    <- T
 nsim           <- 500
 plot_vars      <- c("cases", "deaths")
+plot.median    <- F
 
 # run the simulations for all locations
 fig1_data <- plyr::adply(1:length(counties_list), 1, 
@@ -81,9 +82,12 @@ fig1_data <- plyr::adply(1:length(counties_list), 1,
                                ifelse(is.na(deaths), NA, 1)) %>%
                       select(date, any_of(plot_vars)) %>%
                       pivot_longer(any_of(plot_vars), values_to = "data")) %>% 
-#          rbind(Reff %>% mutate(name = "Reff", mid = Reff, lwr = NA, upr = NA,
-#                                data = NA) %>% 
-#                  select(-Reff)) %>% 
+         rbind(Reff %>% mutate(name = "Reff", mid = Reff, lwr = NA, upr = NA,
+                               data = NA) %>%
+                 select(-Reff)) %>%
+          rbind(detect %>% mutate(name = "detect", mid = detect, lwr = NA, upr = NA,
+                                data = NA) %>%
+                  select(-detect)) %>%
           mutate(intervention = sim_title,
                  county = focal.county,
                  state = focal.state_abbr)
@@ -103,10 +107,10 @@ fig1_data$name <- sapply(fig1_data$name, simpleCap)
 {
 fig1_data %>% 
  # filter(county != "Los Angeles") %>%
-  mutate(county = paste0(county, " County,", state)) %>%
+  mutate(county = paste0(county, " County, ", state)) %>%
   filter(date < as.Date("2020-06-08")) %>%
   filter(date >= as.Date("2020-02-10")) %>%
-  filter(name != "Reff") %>%
+  # filter(!(name %in% c("Reff", "Detect"))) %>%
   group_by(county) %>% 
   mutate(nparams = 0.5/length(unique(paramset))) %>% 
   ggplot(aes(x = date, y = mid, ymin = lwr, ymax = upr, 
@@ -119,7 +123,7 @@ fig1_data %>%
   scale_y_continuous(trans = "sqrt") + 
   scale_fill_manual(guide = F, values = fig1_colors) +
   scale_color_manual(guide = F, values = fig1_colors) +
-  facet_grid(name ~ county, scales = "free_y", switch = "y")  +
+  facet_grid(name ~ county, scales = "free", switch = "y")  +
   ylab("") + 
   theme(
     strip.background = element_blank()
@@ -127,27 +131,16 @@ fig1_data %>%
     , strip.text = element_text(size = 16)
     , axis.text.x = element_text(size = 12)) +
   xlab("Date")
-
-fig1_data %>% 
-  filter(date < as.Date("2020-06-12")) %>%
-  filter(date >= as.Date("2020-02-10")) %>%
-  filter(name == "Reff") %>% 
-  ggplot(aes(x = date, y = mid, color = county,
-             group = interaction(paramset, county))) + 
-  geom_line() + 
-  geom_hline(yintercept = 1, linetype = "dashed") +
-  scale_color_manual(values = fig1_colors) + 
-  ylab("Reff")
 }
 
 ## LA with a different axis
 {
 fig1.1 <- fig1_data %>% 
   filter(county != "Los Angeles") %>%
-  mutate(county = paste0(county, " County,", state)) %>%
+  mutate(county = paste0(county, " County, ", state)) %>%
   filter(date < as.Date("2020-06-08")) %>%
   filter(date >= as.Date("2020-02-10")) %>%
-  filter(name != "Reff") %>%
+  filter(!(name %in% c("Reff", "Detect"))) %>%
   group_by(county) %>% 
   mutate(nparams = 0.5/length(unique(paramset))) %>% 
   ggplot(aes(x = date, y = mid, ymin = lwr, ymax = upr, 
@@ -168,15 +161,17 @@ fig1.1 <- fig1_data %>%
     , strip.text.x = element_text(size = 11)
     , strip.text.y = element_text(size = 16)
     , axis.text.x = element_text(size = 12)
-    , plot.margin = unit(c(0.25,0.25,0.25,0.25), "cm")) +
-  xlab("Date")
+    , axis.title.y = element_text(margin = margin(l = 1))
+    , plot.margin = unit(c(0.25,0.25,0.25,-0.7), "cm")) + 
+    xlab("") 
+  # xlab("Date")
 
 fig1.2 <- fig1_data %>% 
   filter(county == "Los Angeles") %>%
-  mutate(county = paste0(county, " County,", state)) %>%
+  mutate(county = paste0(county, " County, ", state)) %>%
   filter(date < as.Date("2020-06-08")) %>%
   filter(date >= as.Date("2020-02-10")) %>%
-  filter(name != "Reff") %>%
+  filter(!(name %in% c("Reff", "Detect"))) %>%
   group_by(county) %>% 
   mutate(nparams = 0.5/length(unique(paramset))) %>% 
   ggplot(aes(x = date, y = mid, ymin = lwr, ymax = upr, 
@@ -186,7 +181,7 @@ fig1.2 <- fig1_data %>%
   geom_line() +
   geom_point(aes(x = date, y = data), 
              color = "black", size = 0.75) + 
-  scale_y_continuous(trans = "sqrt") + 
+  scale_y_continuous(trans = "sqrt", position = "right") + 
   scale_fill_manual(guide = F, values = fig1_colors[5]) +
   scale_color_manual(guide = F, values = fig1_colors[5]) +
   facet_grid(name ~ county, scales = "free_y", switch = "y")  +
@@ -197,10 +192,80 @@ fig1.2 <- fig1_data %>%
     , strip.text.y = element_blank()
     , strip.text.x = element_text(size = 11)
     , axis.text.x = element_text(size = 12)
-    , plot.margin = unit(c(0.25,0.25,0.25,-0.25), "cm")) +
-  xlab("Date")
+    , plot.margin = unit(c(0.25,0.25,0.25,0), "cm")) +
+  xlab("") 
+  # xlab("Date")
 
-gridExtra::grid.arrange(fig1.1, fig1.2, ncol = 2, widths = c(4, 1.2))
+fig1.3 <- fig1_data %>% 
+  filter(date < as.Date("2020-06-08")) %>%
+  filter(date >= as.Date("2020-02-10")) %>%
+  filter(name == "Reff") %>%
+  # ugly way to calculate 7 day smoothing 
+  arrange(county, paramset, date) %>%
+  group_by(county, paramset) %>%
+  mutate(
+    lag3 = lag(mid, 3),
+    lag2 = lag(mid, 2),
+    lag1 = lag(mid, 1),
+    lead1 = lead(mid, 1),
+    lead2 = lead(mid, 2),
+    lead3 = lead(mid, 3)
+  ) %>% 
+  rowwise() %>% 
+  mutate(mid_mean = mean(c(lag1, lag2, lag3, mid, lead1, lead2, lead3), na.rm = T)) %>% 
+  select(-starts_with("lag"), -starts_with("lead")) %>% 
+  ggplot(aes(x = date, y = mid_mean, ymin = lwr, ymax = upr, 
+             fill  = county, color = county, 
+             group = interaction(county,paramset))) +
+  geom_line(alpha = 1) + 
+  scale_color_manual(guide= F, values = fig1_colors[c(1, 2, 5, 3, 4)]) +
+  geom_hline(yintercept  = 1, linetype = "dashed") + 
+  ylab(expression("R"[e])) + 
+  xlab("") +
+  scale_y_continuous(position = "right")
+
+
+fig1.4 <-
+  fig1_data %>% 
+  filter(date < as.Date("2020-06-08")) %>%
+  filter(date >= as.Date("2020-02-10")) %>%
+  filter(name == "Detect") %>%
+  mutate(paramset = as.character(paramset)) %>%
+  group_by(county, state, date) %>% 
+  {rbind(., 
+         dplyr::summarise(., 
+                          med = median(mid), 
+                          lwr = min(mid),
+                          upr = max(mid),
+                          .groups = "drop") %>% 
+           rename(mid = med) %>% 
+           mutate(paramset = "summary",
+                  name = "Detect",
+                  intervention = "Reality",
+                  data = NA))} %>% 
+  mutate(width = ifelse(paramset == "summary", 2, 0.25),
+         alpha = ifelse(paramset == "summary", 1, 0.2)) %>%
+  ggplot(aes(x = date, y = mid, ymin = lwr, ymax = upr, 
+             group = interaction(county, paramset),
+             fill  = county, color = county)) +
+  geom_ribbon(alpha = 0.3) +
+  geom_line(aes(size = I(width), alpha = I(alpha))) +
+  scale_color_manual(guide= F, values = fig1_colors[c(1, 2, 5, 3, 4)]) +
+  scale_fill_manual(guide= F, values = fig1_colors[c(1, 2, 5, 3, 4)]) +
+  # geom_hline(yintercept  = 1, linetype = "dashed") + 
+  ylab("Symtpomatic\ndetection probability") + 
+  xlab("") + 
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1),
+                     position = "left") #+
+  theme(plot.margin = margin(r = 10))
+  
+
+# gridExtra::grid.arrange(fig1.1, fig1.2, ncol = 2, widths = c(4, 1.2))
+fig1 <- gridExtra::arrangeGrob(fig1.1, fig1.2, fig1.4, fig1.3, 
+                       layout_matrix = matrix(c(1, 1, 2, 3, 4, 4), 
+                                              byrow  = T, nrow = 2),
+                       widths = c(2.6, 1.25, 1.35), heights = c(2.5, 1.5)) 
+gridExtra::grid.arrange(fig1)
 }
 
 #####
@@ -338,6 +403,36 @@ fig2_data %>%
 ## Figure 3: SIP and truncation combinations ----
 #####  
 
+# check calculation for truncated gamma distribution mean
+## truncated gamma distribution 
+# rtgamma = function(n, shape, scale, lower, upper, limits = "pct"){
+#   if(limits == "pct"){
+#     upper <- qgamma(upper, shape, scale = scale)
+#     lower <- qgamma(lower, shape, scale = scale)
+#   }
+#   out <- rgamma(n, shape, scale = scale)
+#   trunc <- which(out < lower | out > upper)
+#   while(length(trunc) > 0){
+#     out[trunc] <- rgamma(length(trunc), shape, scale = scale)
+#     trunc <- which(out < lower | out > upper)
+#   }
+#   return(out)
+# }
+# 
+# test <- adply(seq(1, 5, by = 0.1), 1, 
+#               function(beta0){
+#                 k = 0.16
+#                 upper = 3
+#                 sim_est = rtgamma(10000, 
+#                                   shape = k,
+#                                   scale = beta0/k, 
+#                                   0, upper, limits = "abs") %>% mean
+#                 alg_est = beta0/k*pgamma(upper*k/beta0, k+1)*gamma(k+1)/(pgamma(upper*k/beta0, k)*gamma(k))
+#                 return(data.frame(beta0 = beta0, sim = sim_est, alg = alg_est))
+#               })
+# plot(test$sim, test$alg)
+# abline(a = 0, b = 1, col = "red", lty = "dashed")
+
 # here's function to calculate SIP prop needed to maintain R=1 with a given tail truncation
 # works with vector catch_eff and beta_catch. output is beta_catch X catch_eff in dimensions
 sip_trunc_combns = function(beta_catch, beta_catch_type = "pct", 
@@ -360,7 +455,8 @@ sip_trunc_combns = function(beta_catch, beta_catch_type = "pct",
   
   # calculate expected value of truncated gamma dist when truncation with 100% efficacy
   E_trunc <- beta0/k*pgamma(upper*k/beta0, k+1)*gamma(k+1)/(pgamma(upper*k/beta0, k)*gamma(k))
-  # out <- (log(catch_eff*E_trunc + (1- catch_eff)*beta0) + log(d))/-log(beta_min)
+  
+  # expected value is weighted sum of truncated and untruncated distributions depdending on efficacy
   out <- -(log(outer(E_trunc, catch_eff, "*") + 
                  matrix(rep(outer(beta0, 1- catch_eff,"*"), length(beta_catch)), 
                         byrow = T, nrow = length(beta_catch))) + log(d))/log(beta_min)
