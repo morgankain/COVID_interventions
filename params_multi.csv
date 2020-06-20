@@ -1,0 +1,17 @@
+Parameter,est,lwr,upr,details
+Ca,0.6,0.4,0.8,Relative infectiousness of asymptomatic infected individuals
+Cp,1,,,Relative infectiousness of preymptomatic infected individuals
+Cs,1,,,Relative infectiousness of severely symptomatic infected individuals
+Cm,1,,,Relative infectiousness of mildly symptomatic infected individuals
+alpha,0.43,0.3,0.5,Proportion of infections that are asymptomatic
+gamma,3.5,,,Incubation period
+lambda_a,7,,,Infectious period for asymptomatic infections
+lambda_s,5.5,,,Infectious period for severely symptomatic infections
+lambda_m,5.5,,,Infectious period for mildly symptomatic infections
+lambda_p,1.5,,,Infectious period for presymptomatic infections
+delta,0.2,0.1,0.3,Fatality rate among hospitalizations
+mu,0.950,0.925,0.975,Proportion of symptomatic infections that require hospitalization
+rho_r,15,,, duration of hospital stay of those that recover from infection
+rho_d,13.3,13,20, duration of hospital stay of those that die from infection
+import_rate,1/4,,,Importation rate of infections
+beta0_k,0.16,,,Overdispersion parameter of secondary cases
