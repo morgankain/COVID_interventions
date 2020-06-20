@@ -1,4 +1,4 @@
-fixed_params        <- fixed_params[-c(1, 5, 11, 12)]
+fixed_params        <- fixed_params[-c(1, 5, 11, 12, 13)]
 
 set.seed(1022)
 
@@ -13,6 +13,7 @@ variable_params <- sobolDesign(
   , alpha       = params[params$Parameter == "alpha", ]$lwr
   , delta       = params[params$Parameter == "delta", ]$lwr
   , mu          = params[params$Parameter == "mu", ]$lwr
+  , rho_d       = 1/20
   )
 , upper = c(
     E0          = ifelse(!fit.E0
@@ -23,6 +24,7 @@ variable_params <- sobolDesign(
   , alpha       = params[params$Parameter == "alpha", ]$upr
   , delta       = params[params$Parameter == "delta", ]$upr
   , mu          = params[params$Parameter == "mu", ]$upr
+  , rho_d       = 1/12
 )
 , nseq  = nparams
 ) %>% mutate(
@@ -43,10 +45,12 @@ variable_params <- variable_params %>%
   , log_lik_se     = 0
   , beta0est       = 0
   , E_init         = 0
-  , detect_t0      = 0
-  , detect_t1      = 0
-  , detect_max     = 0
+  , detect_k       = 0
+  , detect_mid     = 0
   , theta          = 0
   , theta2         = 0
   , beta_min       = 0
   ) 
+
+nparams           <- nrow(variable_params)
+
