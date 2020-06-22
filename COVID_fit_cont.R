@@ -12,32 +12,36 @@
 set.seed(10001)               ## Set seed to recreate fits
 fitting           <- TRUE     ## Small change in pomp objects if fitting or simulating
 fit.minus         <- 0        ## Use data until X days prior to the present
-more.params.uncer <- FALSE    ## Fit with more (FALSE) or fewer (TRUE) point estimates for a number of parameters
-fit.E0            <- TRUE     ## Also fit initial number of infected individuals that starts the epidemic?
 usable.cores      <- 3        ## Number of cores to use to fit
 fit.with          <- "D_C"    ## Fit with D (deaths) or H (hospitalizations) -- Need your own data for H -- or both deaths and cases (D_C).
-fit_to_sip        <- TRUE     ## Fit beta0 and shelter in place strength simultaneously?
-meas.nb           <- TRUE     ## Negative binomial measurement process?
 import_cases      <- FALSE    ## Use importation of cases?
+dt                <- 1/6      ## time step used
+con_theta         <- FALSE    ## Use constrained thetas? 
+determ_beta0      <- FALSE    ## Use deterministic beta0?
+
 ## mif2 fitting parameters. 
 n.mif_runs        <- 3        ## number of repeated fits (6 used in manuscript, 2 suggested to debug/check code)
-n.mif_length      <- 20       ## number of steps (100 used in manuscript, 20 suggested to debug/check code)
-n.mif_particles   <- 300      ## number of particles (3000 used in manuscript, 3000 suggested to debug/check code)
+n.mif_length      <- 50       ## number of steps (100 used in manuscript, 20 suggested to debug/check code)
+n.mif_particles   <- 500      ## number of particles (3000 used in manuscript, 3000 suggested to debug/check code)
+n.mif_particles_LL<- 5000     ## number of particles for calculating LL (XXXX used in manuscript, 5000 suggested to debug/check code)
 n.mif_rw.sd       <- 0.02     ## particle perturbation (0.02 used in manuscript, 0.02 suggested to debug/check code)
 nparams           <- 20       ## number of parameter sobol samples (200 used in manuscript, 5 suggested to debug/check code)
 nsim              <- 200      ## number of stochastic epidemic simulations for each fitted beta0 for dynamics (300 used in manuscript, 150 suggested to debug/check code)
 sim.length        <- 200 
 
-## Extra params to explore for mutli data stream fitting process
-detect.logis      <- TRUE
-fixed.E0          <- FALSE
+sim.plot          <- TRUE
+ci.epidemic       <- TRUE
 
+# location of interest
 focal.county      <- "Fulton" 
 focal.state_abbr  <- "GA"
+focal.state       <- "Georgia"
+
+mobility.file     <- "unfolded_Jun15.rds"
 
 ## Required packages to run this code
 needed_packages <- c(
-    "pomp"
+  "pomp"
   , "plyr"
   , "dplyr"
   , "ggplot2"
@@ -49,44 +53,43 @@ needed_packages <- c(
   , "doParallel"
   , "data.table"
   , "doRNG")
-
 ## load packages. Install all packages that return "FALSE"
 lapply(needed_packages, require, character.only = TRUE)
+
+# set number of boxes to use for multi compartment classes
+nE  <- 3 # must be >= 2
+nIa <- 7
+nIp <- 2 # must be >= 2
+nIm <- nIs <- 5 # must be >= 2
+source("COVID_pomp_gammabeta.R")
 
 ## Be very careful here, adjust according to your machine's capabilities
   registerDoParallel(cores = usable.cores)
 # registerDoParallel(cores = (Sys.getenv("SLURM_NTASKS_PER_NODE")))
 
-source("COVID_pomp_gammabeta.R")
-
-if (fit.with == "D_C" | fit.with == "D") {
 ## Scrape death data from the NYT github repo to stay up to date or load a previously saved dataset
-#deaths <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
-deaths  <- read.csv("us-counties.txt")
-deaths  <- deaths %>% mutate(date = as.Date(date)) %>% dplyr::filter(county == focal.county)
-deaths  <- deaths %>% dplyr::filter(date < max(date) - fit.minus)
+# deaths <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
 
 if (focal.county == "Fulton") {
-deaths <- deaths %>% filter(state == "Georgia")
-}
-} else if (fit.with == "H") {
-## Not supported right now for SCC, ony currently have data for Contra Costa County.
- ## To use H, supply your own data and change the path
-hospit     <- read.csv("contra_costa/ccc_data.csv")
-hospit     <- hospit %>% 
-  mutate(date = as.Date(REPORT_DATE)) %>% 
-  filter(CURRENT_HOSPITALIZED != "NULL") %>% 
-  mutate(ch = as.numeric(as.character(CURRENT_HOSPITALIZED))) %>% 
-  dplyr::select(date, ch)
-hospit    <- hospit %>% dplyr::filter(date < max(date) - fit.minus)  
+
+deaths <- read.csv("us-counties.txt") %>%
+  mutate(date = as.Date(date)) %>%
+  dplyr::filter((county == focal.county | county == "DeKalb") & state == focal.state) %>%
+  group_by(date) %>% summarize(cases = sum(cases), deaths = sum(deaths)) %>%
+  mutate(county = focal.county, state = focal.state)
+
+} else {
+  
+deaths  <- read.csv("us-counties.txt") %>% 
+  mutate(date = as.Date(date)) %>% 
+  dplyr::filter(county == focal.county) %>% 
+  dplyr::filter(date < max(date) - fit.minus) %>% 
+  filter(state == focal.state)
+  
 }
 
-## Bring in parameters. Two sets used here depending on the desired level of uncertainty and number of parameters to sample over
-if (!more.params.uncer) {
-params <- read.csv("params.csv", stringsAsFactors = FALSE)
-} else {
-params <- read.csv("params_wide.csv", stringsAsFactors = FALSE) 
-}
+## Bring in parameters
+params <- read.csv("params_multi.csv", stringsAsFactors = FALSE)
 params <- params %>% mutate(Value = sapply(est, function(x) eval(parse(text = x))))
 
 fixed_params        <- params$Value
@@ -98,14 +101,17 @@ location_params     <- read.csv("location_params.csv", stringsAsFactors = FALSE)
 location_params     <- location_params %>% filter(location == focal.county)
 
 ## Combine all parameters
-fixed_params        <- c(fixed_params
-  , N = location_params[location_params$Parameter == "N", ]$est)
+if (focal.county == "Fulton") {
+fixed_params        <- c(fixed_params, N = location_params[location_params$Parameter == "N", ]$est + 691893)
+} else {
+fixed_params        <- c(fixed_params, N = location_params[location_params$Parameter == "N", ]$est) 
+}
+ 
+if(determ_beta0) {
+  fixed_params["beta0_k"] <- 0
+}
 
 source("variable_params_less_cont.R")
-# source("sherlock/variable_params_less_cont_testrun.R")
-
-# Test later dates
-# variable_params$sim_start <- variable_params$sim_start + 20
 
 ## Run parameters
 sim_start  <- variable_params$sim_start
@@ -119,18 +125,12 @@ dimnames(param_array)[[3]] <- c(
 , "log_lik_es"
 , "beta0est"
 , "E_init"
-, {
-  if (detect.logis) {
- c("detect_k", "detect_mid") 
-  } else {
- c("detect_t0", "detect_t1") 
-  }
-}
-, c("detect_max"
+, "detect_k"
+, "detect_mid" 
+, "detect_max"
 , "theta"
 , "theta2"
 , "beta_min"
-)
   )  
 
 startvals <- array(
@@ -139,45 +139,27 @@ startvals <- array(
 dimnames(startvals)[[1]] <- c(
   "beta0"
 , "E_init"
-, {
-  if (detect.logis) {
- c("detect_k", "detect_mid") 
-  } else {
- c("detect_t0", "detect_t1") 
-  }
-}
-, c("detect_max"
+, "detect_k"
+, "detect_mid"
+, "detect_max"
 , "theta"
 , "theta2"
 , "beta_min"  
 )
-)
 
-Reff <- matrix(data = 0, nrow = nrow(variable_params), ncol = sim.length)
+Reff   <- data.frame(paramset = 0, date = 0, Reff = 0)  ; Reff <- Reff[-1, ]
+betat  <- data.frame(paramset = 0, date = 0, betat = 0) ; betat <- betat[-1, ]
+detect <- data.frame(paramset = 0, date = 0, detect = 0); detect <- detect[-1, ]
 
 for (i in 1:nrow(variable_params)) {
-  
-## Adjust data for parameter choices and the start date for the specific parameter set
-if (fit.with == "D" | fit.with == "D_C") {
-  
+
   ## Adjust the data for the current start date
 county.data <- deaths %>% 
   mutate(day = as.numeric(date - variable_params[i, ]$sim_start)) %>% 
   dplyr::filter(day > 0) %>%
   dplyr::select(day, date, deaths, cases) %>% 
   mutate(deaths = deaths - lag(deaths),
-         cases = cases - lag(cases)) %>% 
-    # three day moving median
-  mutate(deaths = mutate(., 
-                         deaths_lag = lag(deaths),
-                         deaths_lead = lead(deaths)) %>% 
-           dplyr::select(contains("deaths")) %>%
-           purrr::pmap_dbl(~median(c(...)))) %>% 
-  mutate(cases = mutate(., 
-                         cases_lag = lag(cases),
-                         cases_lead = lead(cases)) %>% 
-           dplyr::select(contains("cases")) %>%
-           purrr::pmap_dbl(~median(c(...)))) %>%
+         cases = cases - lag(cases)) %>%
   dplyr::filter(!is.na(deaths), !is.na(cases))
 
 county.data <- rbind(
@@ -190,30 +172,49 @@ county.data <- rbind(
 , county.data 
   )
 
-} else if (fit.with == "H") {
-  
-## Adjust the data for the current start date
-county.data <- hospit %>% mutate(day = as.numeric(date - variable_params[i, ]$sim_start)) 
-names(county.data)[2] <- "hosp"  
-
-}
-  
-mobility <- readRDS("unfolded_Jun03.rds") %>% 
-  dplyr::filter(county_name == focal.county & state_abbr == focal.state_abbr)  %>%
+if (focal.county == "Fulton") {
+  mobility <- readRDS("unfolded_Jun15.rds") %>% 
+  dplyr::filter((county_name == focal.county | county_name == "DeKalb") & (state_abbr == focal.state_abbr)) %>%
+  dplyr::group_by(datestr) %>%
+  dplyr::summarize(sip_prop = mean(sip_prop)) %>%
   dplyr::select(datestr, sip_prop) %>% 
-  dplyr::filter(!is.na(sip_prop)) %>%
-  mutate(day = as.numeric(datestr - as.Date("2019-12-31"))) %>% 
+  filter(sip_prop != 0) %>% 
+  {full_join(., # join with full list of dates so NAs will occur for missing days
+             data.frame(datestr = seq(pull(., datestr) %>% min, 
+                                      pull(., datestr) %>% max, 
+                                      by = "day")))} %>% 
+  mutate(day = as.numeric(datestr - variable_params[i, ]$sim_start)) %>% 
   arrange(day) %>% 
   # three day moving median
   mutate(sip_prop = mutate(., 
                          sip_prop_lag = lag(sip_prop),
                          sip_prop_lead = lead(sip_prop)) %>% 
            select(contains("sip_prop")) %>%
-           purrr::pmap_dbl(~median(c(...)))) %>% 
+           purrr::pmap_dbl(~median(c(...), na.rm = T))) %>% 
   dplyr::filter(datestr >= variable_params[i, ]$sim_start) %>%
-  mutate(day = day - as.numeric((variable_params[i, ]$sim_start - as.Date("2019-12-31")))) %>%
   dplyr::filter(!is.na(sip_prop)) %>% 
   dplyr::filter(day > 0)
+} else {
+ mobility <- readRDS(mobility.file) %>% 
+  dplyr::filter(county_name == focal.county & state_abbr == focal.state_abbr) %>%
+  dplyr::select(datestr, sip_prop) %>% 
+  filter(sip_prop != 0) %>% 
+  {full_join(., # join with full list of dates so NAs will occur for missing days
+             data.frame(datestr = seq(pull(., datestr) %>% min, 
+                                      pull(., datestr) %>% max, 
+                                      by = "day")))} %>% 
+  mutate(day = as.numeric(datestr - variable_params[i, ]$sim_start)) %>% 
+  arrange(day) %>% 
+  # three day moving median
+  mutate(sip_prop = mutate(., 
+                         sip_prop_lag = lag(sip_prop),
+                         sip_prop_lead = lead(sip_prop)) %>% 
+           select(contains("sip_prop")) %>%
+           purrr::pmap_dbl(~median(c(...), na.rm = T))) %>% 
+  dplyr::filter(datestr >= variable_params[i, ]$sim_start) %>%
+  dplyr::filter(!is.na(sip_prop)) %>% 
+  dplyr::filter(day > 0)  
+}
 
 if (min(mobility$day) > 1) {
 mobility <- rbind(
@@ -225,76 +226,44 @@ mobility <- rbind(
 , mobility
   )  
 }
- 
-mobility <- mobility %>% filter(sip_prop != 0)
 
 ## Remove dates after one week after movement data ends
 county.data <- county.data %>% dplyr::filter(date < (max(mobility$datestr) + 7))
+zero.cases  <- which(county.data$cases < 0)
+zero.deaths <- which(county.data$deaths < 0)
+if (length(zero.cases) > 0) {
+county.data[zero.cases, ]$cases <- 0
+}
+if (length(zero.deaths) > 0) {
+county.data[zero.deaths, ]$deaths <- 0
+}
 
-if (detect.logis) {
 mob.covtab <- covariate_table(
     sip_prop     = mobility$sip_prop
  ,  order        = "constant"
  ,  times        = mobility$day
- ,  intervention  = rep(0, nrow(mobility))
- ,  detect_t0     = min(county.data[!is.na(county.data$cases), ]$day) - 1
+ ,  intervention = rep(0, nrow(mobility))
     )
-} else {
-mob.covtab <- covariate_table(
-    sip_prop     = mobility$sip_prop
- ,  order        = "constant"
- ,  times        = mobility$day
- ,  intervention  = rep(0, nrow(mobility))
- ,  detect_t0     = min(county.data[!is.na(county.data$cases), ]$day) - 1
-    )  
-}
 
-if (detect.logis) {
 covid_mobility <- pomp(
    data       = county.data
  , times      = "day"
  , t0         = 1
  , covar      = mob.covtab
- , rprocess   = euler(sir_step_mobility, delta.t = 1/6)
- , rmeasure   = rmeas_multi_logis
- , dmeasure   = dmeas_multi_logis
+ , rprocess   = euler(sir_step_mobility, delta.t = dt)
+ , rmeasure   = {if(con_theta){rmeas_multi_logis_con}else{rmeas_multi_logis_ind}}
+ , dmeasure   = {if(con_theta){dmeas_multi_logis_con}else{dmeas_multi_logis_ind}}
  , rinit      = sir_init
- , partrans   = par_trans
+ , partrans   = {if(con_theta){par_trans_con}else{par_trans_ind}}
  , accumvars  = accum_names
  , paramnames = param_names
  , statenames = state_names
+ , globals    = globs
 )  
-} else {
-covid_mobility <- pomp(
-   data       = county.data
- , times      = "day"
- , t0         = 1
- , covar      = mob.covtab
- , rprocess   = euler(sir_step_mobility, delta.t = 1/6)
- , rmeasure   = rmeas_multi_pwl
- , dmeasure   = dmeas_multi_pwl
- , rinit      = sir_init
- , partrans   = par_trans
- , accumvars  = accum_names
- , paramnames = param_names
- , statenames = state_names
-)  
-}
-
   
-## Extra params for the new model:
- ## 1) beta0_sigma can't really be fit, so assume for now
- ## 2) fit with no intervention and then simulate later with an intervention
- ## From work on the distribution of individual, algebra converting between the individual negative binomial dispersion
- ## and the population level gamma variance avialable in the supp of our upcoming paper
-fixed_params["beta0_sigma"] <- 0.16
-fixed_params["beta_catch"]  <- 1
-fixed_params["beta_red"]    <- 1 
-
 if (variable_params[i, ]$beta0est == 0) {
 
   ## Fit runs in parallel based on number of cores
-if (detect.logis) {
 checktime <- system.time({
 ## Run mifs_local one time as a "burn-in" run (using MCMC terms...)
 registerDoRNG(610408799)
@@ -304,10 +273,10 @@ library(pomp)
 library(dplyr)
   
 start_vals <- c(
-      beta0       = rlnorm(1, log(0.7), 0.3)
-    , E_init      = rpois(1, 2) + 1
-    , detect_k    = rlnorm(1, log(0.1), 0.2)
-    , detect_mid  = rlnorm(1, log(60), 0.2)
+      beta0        = rlnorm(1, log(3.5), 0.3)
+    , E_init       = rpois(1, 2) + 1
+    , detect_k     = rlnorm(1, log(0.1), 0.2)
+    , detect_mid   = rlnorm(1, log(60), 0.2)
     , detect_max   = runif(1, 0.1, 0.7)
     , theta        = rlnorm(1, log(1), 0.4)
     , theta2       = rlnorm(1, log(1), 0.4)
@@ -318,11 +287,28 @@ mifs_temp <- covid_mobility %>%
   mif2(
     t0      = 1
   , params  = c(
-    c(fixed_params
+    c(fixed_params %>% t() %>% 
+        as.data.frame() %>% 
+        mutate(d = variable_params[i, "alpha"] * lambda_a + 
+                       (1 - variable_params[i, "alpha"]) * variable_params[i, "mu"] * (lambda_p + lambda_m) + 
+                       (1 -variable_params[i, "alpha"])*(1 - variable_params[i, "mu"])*(lambda_p + lambda_s)
+                   ) %>%
+        # convert periods to rates
+        mutate(
+               gamma    = -1/(nE*dt)*log(1-nE*dt/gamma),
+               lambda_a = -1/(nIa*dt)*log(1-nIa*dt/lambda_a),
+               lambda_p = -1/(nIp*dt)*log(1-nIp*dt/lambda_p), 
+               lambda_m = -1/(nIm*dt)*log(1-nIm*dt/lambda_m),
+               lambda_s = -1/(nIs*dt)*log(1-nIs*dt/lambda_s),
+               rho_r    = -1/dt*log(1-dt/rho_r),
+          ) %>% 
+        unlist
     , Ca    = variable_params[i, ]$Ca
     , alpha = variable_params[i, ]$alpha
     , delta = variable_params[i, ]$delta
     , mu    = variable_params[i, ]$mu
+    , rho_d = {-1/dt*log(1-dt/variable_params[i, "rho_d"])}
+    , detect_t0 = min(county.data[!is.na(county.data$cases), ]$day) - 1
       )
   , {
 ## random start for each run
@@ -340,7 +326,7 @@ mifs_temp <- covid_mobility %>%
   )
   , Np     = n.mif_particles
   , Nmif   = n.mif_length
-  , cooling.fraction.50 = 0.75
+  , cooling.fraction.50 = 0.50
   , rw.sd  = rw.sd(
       beta0       = 0.02
     , E_init      = ivp(0.02)
@@ -352,101 +338,15 @@ mifs_temp <- covid_mobility %>%
     , beta_min    = 0.02
   )
         ) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.75) %>%
   mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.50) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.50) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.50) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.30) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.30) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.30) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.10) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.10) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.10)
+  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.50)
   
-# ll <- replicate(10, mifs_temp %>% pfilter(Np = 50000) %>% logLik())
-ll <- replicate(10, mifs_temp %>% pfilter(Np = 5000) %>% logLik())
+ll <- replicate(10, mifs_temp %>% pfilter(Np = n.mif_particles_LL) %>% logLik())
 ll <- logmeanexp(ll, se = TRUE)
 return(list(mifs_temp, ll, start_vals))
 
 }
 })
-} else {
-checktime <- system.time({
-## Run mifs_local one time as a "burn-in" run (using MCMC terms...)
-registerDoRNG(610408799)
-mifs_local <- foreach(j = 1:n.mif_runs, .combine = c) %dopar%  {
-    
-library(pomp)
-library(dplyr)
-  
-start_vals <- c(
-      beta0        = rlnorm(1, log(0.7), 0.3)
-    , E_init       = rpois(1, 2) + 1
-#    , detect_t0    = rlnorm(1, log(25), 0.2)
-    , detect_t1    = rlnorm(1, log(60), 0.2)
-    , detect_max   = runif(1, 0.1, 0.7)
-    , theta        = rlnorm(1, log(1), 0.4)
-    , theta2       = rlnorm(1, log(1), 0.4)
-    , beta_min     = runif(1, 0.3, 0.7) 
-)
-
-mifs_temp <- covid_mobility %>%
-  mif2(
-    t0      = 1
-  , params  = c(
-    c(fixed_params
-    , Ca    = variable_params[i, ]$Ca
-    , alpha = variable_params[i, ]$alpha
-    , delta = variable_params[i, ]$delta
-    , mu    = variable_params[i, ]$mu
-      )
-  , {
-## random start for each run
-    c(
-      start_vals["beta0"]
-    , start_vals["E_init"]
-#    , start_vals["detect_t0"]
-    , start_vals["detect_t1"]
-    , start_vals["detect_max"]
-    , start_vals["theta"]
-    , start_vals["theta2"]
-    , start_vals["beta_min"]
-      )
-  }
-  )
-  , Np     = n.mif_particles
-  , Nmif   = n.mif_length
-  , cooling.fraction.50 = 0.75
-  , rw.sd  = rw.sd(
-      beta0       = 0.02
-    , E_init      = ivp(0.02)
-    , detect_max  = 0.02
-#    , detect_t0   = 0.02
-    , detect_t1   = 0.02
-    , theta       = 0.02
-    , theta2      = 0.02
-    , beta_min    = 0.02
-  )
-        ) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.75) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.50) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.50) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.50) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.30) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.30) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.30) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.10) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.10) %>%
-  mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.10)
-  
-# ll <- replicate(10, mifs_temp %>% pfilter(Np = 50000) %>% logLik())
-ll <- replicate(10, mifs_temp %>% pfilter(Np = 5000) %>% logLik())
-ll <- logmeanexp(ll, se = TRUE)
-return(list(mifs_temp, ll, start_vals))
-
-}
-})  
-}
 
 mifs.sv           <- mifs_local[seq(3, (n.mif_runs * 3), by = 3)]
 startvals[, , i]  <- sapply(mifs.sv, c, simplify = "array")
@@ -461,18 +361,13 @@ loglik.se[j] <- mifs.ll[[j]][2]
 }
 
 mifs_local <- mifs_local[seq(1, (n.mif_runs * 3), by = 3)]
-best.fit   <- which(loglik.est == max(loglik.est))
+best.fit   <- which(loglik.est == max(loglik.est, na.rm = T))
 
 variable_params[i, "beta0est"]   <- coef(mifs_local[[best.fit]])["beta0"]
 variable_params[i, "E_init"]     <- coef(mifs_local[[best.fit]])["E_init"]
 variable_params[i, "detect_max"] <- coef(mifs_local[[best.fit]])["detect_max"]
-if (detect.logis) {
-variable_params[i, "detect_k"]  <- coef(mifs_local[[best.fit]])["detect_k"]
-variable_params[i, "detect_mid"]  <- coef(mifs_local[[best.fit]])["detect_mid"]  
-} else {
-variable_params[i, "detect_t0"]  <- coef(mifs_local[[best.fit]])["detect_t0"]
-variable_params[i, "detect_t1"]  <- coef(mifs_local[[best.fit]])["detect_t1"]  
-}
+variable_params[i, "detect_k"]   <- coef(mifs_local[[best.fit]])["detect_k"]
+variable_params[i, "detect_mid"] <- coef(mifs_local[[best.fit]])["detect_mid"]  
 variable_params[i, "theta"]      <- coef(mifs_local[[best.fit]])["theta"]
 variable_params[i, "theta2"]     <- coef(mifs_local[[best.fit]])["theta2"]
 variable_params[i, "beta_min"]   <- coef(mifs_local[[best.fit]])["beta_min"]
@@ -481,13 +376,8 @@ all.params <- sapply(mifs_local, coef, simplify = "array")
 
 param_array[i, , "beta0est"]   <- all.params[which(dimnames(all.params)[[1]] == "beta0"), ]
 param_array[i, , "E_init"]     <- all.params[which(dimnames(all.params)[[1]] == "E_init"), ]
-if (detect.logis) {
-param_array[i, , "detect_k"]  <- all.params[which(dimnames(all.params)[[1]] == "detect_k"), ]
-param_array[i, , "detect_mid"]  <- all.params[which(dimnames(all.params)[[1]] == "detect_mid"), ]  
-} else {
-param_array[i, , "detect_t0"]  <- all.params[which(dimnames(all.params)[[1]] == "detect_t0"), ]
-param_array[i, , "detect_t1"]  <- all.params[which(dimnames(all.params)[[1]] == "detect_t1"), ]  
-}
+param_array[i, , "detect_k"]   <- all.params[which(dimnames(all.params)[[1]] == "detect_k"), ]
+param_array[i, , "detect_mid"] <- all.params[which(dimnames(all.params)[[1]] == "detect_mid"), ]  
 param_array[i, , "detect_max"] <- all.params[which(dimnames(all.params)[[1]] == "detect_max"), ]
 param_array[i, , "theta"]      <- all.params[which(dimnames(all.params)[[1]] == "theta"), ]
 param_array[i, , "theta2"]     <- all.params[which(dimnames(all.params)[[1]] == "theta2"), ]
@@ -500,14 +390,25 @@ param_array[i, , "log_lik"]        <- loglik.est
 }
 
 ## Simulate from fits
-if (detect.logis) {
-
 SEIR.sim <- do.call(
   pomp::simulate
   , list(
-    object         = covid_mobility
-    , times        = mob.covtab@times
-    , params = c(fixed_params
+    object   = covid_mobility
+    , times  = mob.covtab@times
+    , params = c(fixed_params %>% t() %>% 
+                   as.data.frame() %>% 
+                   mutate(d  = variable_params[i, "alpha"] * lambda_a + 
+                       (1 - variable_params[i, "alpha"]) * variable_params[i, "mu"] * (lambda_p + lambda_m) + 
+                       (1 - variable_params[i, "alpha"])*(1 - variable_params[i, "mu"])*(lambda_p + lambda_s)
+                   ) %>%  
+                   # convert periods to rates
+                   mutate(gamma    = -1/(nE*dt)*log(1-nE*dt/gamma),
+                          lambda_a = -1/(nIa*dt)*log(1-nIa*dt/lambda_a),
+                          lambda_p = -1/(nIp*dt)*log(1-nIp*dt/lambda_p), 
+                          lambda_m = -1/(nIm*dt)*log(1-nIm*dt/lambda_m),
+                          lambda_s = -1/(nIs*dt)*log(1-nIs*dt/lambda_s),
+                          rho_r    = -1/dt*log(1-dt/rho_r)) %>%
+                   unlist
       , c(
         beta0      = variable_params[i, "beta0est"]
       , E_init     = variable_params[i, "E_init"]
@@ -522,52 +423,35 @@ SEIR.sim <- do.call(
       , delta      = variable_params[i, "delta"]
       , mu         = variable_params[i, "mu"]
       , E_init     = variable_params[i, "E_init"]
+      , rho_d      = {-1/dt*log(1-dt/variable_params[i, "rho_d"])}
+      , detect_t0  = min(county.data[!is.na(county.data$cases), ]$day) - 1
         ))
     , nsim         = nsim
     , format       = "d"
     , include.data = F
-    , seed         = 1001)) %>% {
-      rbind(.,
-         group_by(., day) %>%
-           dplyr::select(-.id) %>%
-           summarise_all(median) %>%
-                    mutate(.id = "median"))
-    }
+    , seed         = 1001))
 
-} else {
-  
-SEIR.sim <- do.call(
-  pomp::simulate
-  , list(
-    object         = covid_mobility
-    , times        = mob.covtab@times
-    , params = c(fixed_params
-      , c(
-        beta0      = variable_params[i, "beta0est"]
-      , E_init     = variable_params[i, "E_init"]
-      , detect_max = variable_params[i, "detect_max"]
-      , detect_t0 = variable_params[i, "detect_t0"]
-      , detect_t1   = variable_params[i, "detect_t1"]
-      , theta      = variable_params[i, "theta"]
-      , theta2     = variable_params[i, "theta2"]
-      , beta_min   = variable_params[i, "beta_min"]
-      , Ca         = variable_params[i, "Ca"]
-      , alpha      = variable_params[i, "alpha"]
-      , delta      = variable_params[i, "delta"]
-      , mu         = variable_params[i, "mu"]
-      , E_init     = variable_params[i, "E_init"]
-        ))
-    , nsim         = nsim
-    , format       = "d"
-    , include.data = F
-    , seed         = 1001)) %>% {
-      rbind(.,
-         group_by(., day) %>%
-           dplyr::select(-.id) %>%
-           summarise_all(median) %>%
-                    mutate(.id = "median"))
-    }
-  
+SEIR.sim <- SEIR.sim %>%
+  mutate(
+      date     = round(as.Date(day, origin = variable_params[i, ]$sim_start))
+    , paramset = variable_params[i, ]$paramset)
+
+if (ci.epidemic) {
+  epi_ids <- SEIR.sim %>% 
+    group_by(.id) %>% 
+    summarise(total_infect = max(D + R)) %>% 
+    filter(total_infect > 10*ceiling(variable_params[i, "E_init"])) %>% 
+    pull(.id)
+  print(paste0("limiting to epidemics, including ", length(epi_ids), " simulations"))
+  SEIR.sim %<>% filter(.id %in% epi_ids)
+}
+
+SEIR.sim %<>% {
+  rbind(.,
+        group_by(., day) %>%
+          dplyr::select(-.id) %>%
+          summarise_all(median) %>%
+          mutate(.id = "median"))
 }
 
 SEIR.sim.s <- SEIR.sim %>% 
@@ -575,22 +459,59 @@ SEIR.sim.s <- SEIR.sim %>%
   group_by(day) %>%
   summarize(S = mean(S), D = mean(D))
 
-if (detect.logis) {
-#betat    <- variable_params[i, "beta0est"] * (1 - variable_params[i, "beta_min"] * mob.covtab@table[2, ])  
-betat     <- variable_params[i, "beta0est"] * exp(log(variable_params[i, "beta_min"])*mob.covtab@table[2, ])
-} else {
-#betat    <- variable_params[i, "beta0est"] * (1 - variable_params[i, "beta_min"] * mob.covtab@table[2, ])  
-betat     <- variable_params[i, "beta0est"] * exp(log(variable_params[i, "beta_min"])*mob.covtab@table[2, ])
-}
+betat.t      <- variable_params[i, "beta0est"] * exp(log(variable_params[i, "beta_min"])*mob.covtab@table[which(dimnames(mob.covtab@table)[[1]] == "sip_prop"), ])
 
 Reff.t       <- with(variable_params[i, ], covid_R0(
-   beta0est      = betat
+   beta0est      = betat.t
  , fixed_params  = c(fixed_params, unlist(variable_params[i, ]))
  , sd_strength   = 1
- , prop_S        = SEIR.sim.s$S / (location_params[location_params$Parameter == "N", ]$est - SEIR.sim.s$D)
+ , prop_S        = if(focal.county == "Fulton") {SEIR.sim.s$S / (location_params[location_params$Parameter == "N", ]$est + 691893 - SEIR.sim.s$D)
+   } else {SEIR.sim.s$S / (location_params[location_params$Parameter == "N", ]$est - SEIR.sim.s$D)}
   )
   )
-Reff[i, 1:length(Reff.t)]  <- Reff.t
+
+detect.t <- c(rep(0, min(county.data[!is.na(county.data$cases), ]$day) - 1)
+              , (variable_params[i, "detect_max"] / 
+                   (1 + exp(-variable_params[i, "detect_k"] * (mob.covtab@times - variable_params[i, "detect_mid"])))
+              )[-seq(1, min(county.data[!is.na(county.data$cases), ]$day) - 1)]
+)
+
+betat.t <- data.frame(
+  paramset = variable_params[i, ]$paramset
+  , date     = seq(variable_params[i, ]$sim_start
+                   , variable_params[i, ]$sim_start + (length(mob.covtab@table[which(dimnames(mob.covtab@table)[[1]] == "sip_prop"), ]) - 1), by = 1)
+  , betat    = betat.t
+)
+
+Reff.t <- data.frame(
+  paramset = variable_params[i, ]$paramset
+  , date     = seq(variable_params[i, ]$sim_start
+                   , variable_params[i, ]$sim_start + (length(mob.covtab@table[which(dimnames(mob.covtab@table)[[1]] == "sip_prop"), ]) - 1), by = 1)
+  , Reff     = Reff.t
+)
+
+detect.t <- data.frame(
+  paramset = variable_params[i, ]$paramset
+  , date     = seq(variable_params[i, ]$sim_start
+                   , variable_params[i, ]$sim_start + (length(mob.covtab@table[which(dimnames(mob.covtab@table)[[1]] == "sip_prop"), ]) - 1), by = 1)
+  , detect   = detect.t
+)
+
+betat  <- rbind(betat, betat.t)
+Reff   <- rbind(Reff, Reff.t)
+detect <- rbind(detect, detect.t)
+
+## Stich together output
+if (i == 1) {
+  SEIR.sim.f <- SEIR.sim  
+} else {
+  SEIR.sim.f <- rbind(SEIR.sim.f, SEIR.sim) 
+}  
+
+## Keep track of progress
+if (((i / 20) %% 1) == 0) {
+  print(paste(round(i / nrow(variable_params), 2)*100, "% Complete", sep = ""))
+}
 
 ## Save an Rds periodically
 saveRDS(
@@ -602,9 +523,165 @@ saveRDS(
   , param_array      = param_array
    ), paste(
      paste("output/"
-       , paste(focal.county, fit_to_sip, more.params.uncer, fit.minus, Sys.Date(), "cont", "temp", sep = "_")
+       , paste(focal.county, fit.minus, {if(con_theta){"con_theta"}else{"ind_theta"}}, Sys.Date(), "cont", "temp", sep = "_")
          , sep = "")
      , "Rds", sep = "."))
+
+}
+
+if (sim.plot) {
+
+{
+  SEIR.sim.f.c.a <- SEIR.sim.f %>% dplyr::select(date, day, .id, cases, paramset)
+  SEIR.sim.f.d.a <- SEIR.sim.f %>% dplyr::select(date, day, .id, deaths, paramset)
+  SEIR.sim.f.D.a <- SEIR.sim.f %>% dplyr::select(date, day, .id, D, paramset)
+  
+  SEIR.sim.f.c <- SEIR.sim.f %>% 
+    group_by(date, paramset) %>% 
+    summarize(
+      #    lwr_c = quantile(cases, c(0.100))
+      #  , mid_c = quantile(cases, c(0.500))
+      #  , upr_c = quantile(cases, c(0.900))
+        lwr_c = quantile(cases, c(0.050))
+      , mid_c = quantile(cases, c(0.500))
+      , upr_c = quantile(cases, c(0.950))
+    )
+  
+  SEIR.sim.f.d <- SEIR.sim.f %>% 
+    group_by(date, paramset) %>% 
+    summarize(
+      lwr_d = quantile(deaths, c(0.050))
+      , mid_d = quantile(deaths, c(0.500))
+      , upr_d = quantile(deaths, c(0.950))
+    )
+  
+  SEIR.sim.f.D <- SEIR.sim.f %>% 
+    group_by(date, paramset) %>% 
+    summarize(
+      lwr_D = quantile(D, c(0.050))
+      , mid_D = quantile(D, c(0.500))
+      , upr_D = quantile(D, c(0.950))
+    )
+  
+  # unique(SEIR.sim.f.d$paramset)
+  
+}
+SEIR.sim.f.d.a <- SEIR.sim.f.d.a %>% filter(date < "2020-06-18")
+SEIR.sim.f.D.a <- SEIR.sim.f.D.a %>% filter(date < "2020-06-18")
+SEIR.sim.f.c.a <- SEIR.sim.f.c.a %>% filter(date < "2020-06-18")
+Reff         <- Reff %>% filter(date < "2020-06-18")
+detect       <- detect %>% filter(date < "2020-06-18")
+{
+  gg1 <- ggplot(SEIR.sim.f.d.a) + 
+    #  geom_ribbon(aes(
+    #    x = date
+    #  , ymin = lwr_d
+    #  , ymax = upr_d
+    #  , group = paramset), alpha = 0.05) +
+    geom_line(data = (SEIR.sim.f.d.a %>% filter(.id != "median"))
+              , aes(
+                x = date
+                , y = deaths
+                , group = interaction(paramset, .id))
+              , alpha = 0.15, lwd = .2) + 
+    geom_line(data = (SEIR.sim.f.d.a %>% filter(.id == "median"))
+              , aes(
+                x = date
+                , y = deaths
+                , group = paramset)
+              , alpha = 1.0, lwd = 1.0) + 
+    geom_point(data = county.data
+               , aes(
+                 x = date
+                 , y = deaths), colour = "dodgerblue4", lwd = 2) + 
+    scale_y_continuous(trans = "log10") +
+    scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
+    theme(
+      axis.text.x = element_text(size = 10)
+      , legend.title = element_text(size = 12)
+      , plot.title = element_text(size = 12)) +
+    xlab("Date") + ylab("Daily Deaths")
+  
+  gg5 <- ggplot(SEIR.sim.f.D) + 
+    #  geom_ribbon(aes(
+    #    x = date
+    #  , ymin = lwr_D
+    #  , ymax = upr_D
+    #  , group = paramset), alpha = 0.05) +
+    geom_line(data = (SEIR.sim.f.D.a %>% filter(.id != "median"))
+              , aes(
+                x = date
+                , y = D
+                , group = interaction(paramset, .id))
+              , alpha = 0.35, lwd = .2) + 
+    geom_line(data = (SEIR.sim.f.D.a %>% filter(.id == "median"))
+              , aes(
+                x = date
+                , y = D
+                , group = paramset)
+              , alpha = 1.0, lwd = 1.0) + 
+    geom_point(data = deaths
+               , aes(
+                 x = date
+                 , y = deaths), colour = "dodgerblue4", lwd = 2) + 
+    scale_y_continuous(trans = "log10") +
+    scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
+    theme(
+      axis.text.x = element_text(size = 10)
+      , legend.title = element_text(size = 12)
+      , plot.title = element_text(size = 12)) +
+    xlab("Date") + ylab("Total Deaths")
+  
+  gg2 <- ggplot(SEIR.sim.f.c) + 
+    #  geom_ribbon(aes(
+    #    x = date
+    #  , ymin = lwr_c
+    #  , ymax = upr_c
+    #  , group = paramset), alpha = 0.05) +
+    geom_line(data = (SEIR.sim.f.c.a %>% filter(.id != "median"))
+              , aes(
+                x = date
+                , y = cases
+                , group = interaction(paramset, .id))
+              , alpha = 0.15, lwd = .2) + 
+    geom_line(data = (SEIR.sim.f.c.a %>% filter(.id == "median"))
+              , aes(
+                x = date
+                , y = cases
+                , group = paramset)
+              , alpha = 1.0, lwd = 1.0) + 
+    geom_point(data = county.data
+               , aes(
+                 x = date
+                 , y = cases), colour = "firebrick4", lwd = 2) + 
+    scale_y_continuous(trans = "log10") +
+    scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
+    theme(
+      axis.text.x = element_text(size = 10)
+      , legend.title = element_text(size = 12)
+      , plot.title = element_text(size = 12)) +
+    xlab("Date") + ylab("Observed Cases") 
+  
+  gg3 <- ggplot(data = Reff, aes(x = date, y = Reff)) + 
+    geom_line(aes(group = paramset), alpha = 0.5) +
+    theme(
+      axis.text.x = element_text(size = 10)
+      , legend.title = element_text(size = 12)
+      , plot.title = element_text(size = 12)) +
+    xlab("Date") + ylab("Reff") +
+    scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
+    geom_hline(yintercept = 1, linetype = "dashed", lwd = 0.5)
+  
+  gg4 <- ggplot(data = detect, aes(x = date, y = detect)) + 
+    geom_line(aes(group = paramset), alpha = 0.5) +
+    theme(
+      axis.text.x = element_text(size = 10)
+      , legend.title = element_text(size = 12)
+      , plot.title = element_text(size = 12)) +
+    scale_x_date(labels = date_format("%b"), date_breaks = "2 month") +
+    xlab("Date") + ylab("Case detection proportion")
+}
+gridExtra::grid.arrange(gg1, gg5, gg2, gg3, gg4, ncol = 1)
 
 }
 
@@ -618,6 +695,7 @@ saveRDS(
   , param_array      = param_array
    ), paste(
      paste("output/"
-       , paste(focal.county, fit_to_sip, more.params.uncer, fit.minus, Sys.Date(), "cont", "final", sep = "_")
+       , paste(focal.county, fit.minus, {if(con_theta){"con_theta"}else{"ind_theta"}}, Sys.Date(), "cont", "final", sep = "_")
          , sep = "")
      , "Rds", sep = "."))
+
