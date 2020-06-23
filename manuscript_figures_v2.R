@@ -7,41 +7,41 @@ source("ggplot_theme.R")
 
 counties_list = {list(
   SC = list(
-    focal.county = "Santa Clara",
-    focal.state = "California",
-    focal.state_abbr = "CA",
-    rds.name = "./output/Santa Clara_independent_theta_200_2020-06-15.rds",
-    con_theta = F
+    focal.county = "Santa Clara"
+  , focal.state  = "California"
+  , focal.state_abbr = "CA"
+  , rds.name = "./output/Santa Clara_0_ind_theta_2020-06-23_cont_final.rds"
+  , con_theta = F
   ),
   LA = list(
     focal.county = "Los Angeles",
-    focal.state = "California",
+    focal.state  = "California",
     focal.state_abbr = "CA",
-#   rds.name = "output/Los Angeles_independent_theta_200_2020-06-15.rds",
-    rds.name = "output/Los Angeles_constrained_theta_200_2020-06-14.rds",
-    con_theta = T
+    rds.name = "output/Los Angeles_0_ind_theta_2020-06-23_cont_final.rds",
+#   rds.name = "output/Los Angeles_0_con_theta_2020-06-23_cont_final.rds",
+    con_theta = F
   ),
   KC = list(
     focal.county = "King",
-    focal.state = "Washington",
+    focal.state  = "Washington",
     focal.state_abbr = "WA",
-    rds.name = "output/King_independent_theta_200_2020-06-16.rds",
+    rds.name = "output/King_0_ind_theta_2020-06-23_cont_final.rds",
     con_theta = F
   ),
   FC = list(
     focal.county = "Fulton",
-    focal.state = "Georgia",
+    focal.state  = "Georgia",
     focal.state_abbr = "GA",
-    rds.name = "output/Fulton_independent_theta_200_2020-06-15.rds",
+    rds.name = "output/Fulton_0_ind_theta_2020-06-23_cont_final.rds",
     con_theta = F
   ),
   MD = list(
     focal.county = "Miami-Dade",
-    focal.state = "Florida",
+    focal.state  = "Florida",
     focal.state_abbr = "FL",
-  # rds.name = "output/Miami-Dade_independent_theta_200_2020-06-15.rds",
-    rds.name = "output/Miami-Dade_constrained_theta_200_2020-06-14.rds",
-    con_theta = T
+    rds.name = "output/Miami-Dade_0_ind_theta_2020-06-23_cont_final.rds",
+  # rds.name = "output/Miami-Dade_0_con_theta_2020-06-23_cont_final.rds",
+    con_theta = F
   )#,
 #  CC = list(
 #    focal.county = "Contra Costa",
@@ -52,43 +52,40 @@ counties_list = {list(
 #  )
 )}
 int_vars <- list(
-  counter.factual    = FALSE,
-  int.movement       = "post",
-  int.type           = "none",
-  int.init           = "2020-06-08",
-  int.end            = "2020-08-01", ## Doesnt matter, ignored for all int.type != "tail"
-  sim_title          = "Reality"                                        
+   counter.factual    = FALSE
+ , int.movement       = "post"
+ , int.type           = "none"
+ , int.init           = "2020-07-01"
+ , int.end            = "2020-09-01" ## Doesnt matter, ignored for all int.type != "tail"
+ , sim_title          = "Reality"                                        
 )
 # set parameters
 source("COVID_simulate_cont_params.R")
-loglik.max     <- F
+loglik.max     <- T
 loglik.num     <- 10
 loglik.thresh  <- 2
 ci.stoc        <- 0.025
 ci.epidemic    <- T
 nsim           <- 500
 plot_vars      <- c("cases", "deaths")
-plot.median    <- F
+plot.median    <- T
 
 # run the simulations for all locations
 fig1_data <- plyr::adply(1:length(counties_list), 1, 
       function(i){
         with(c(counties_list[[i]], int_vars), {
         source("./COVID_simulate_cont.R", local = T)
-        SEIR.sim.f.ci %<>% 
+          SEIR.sim.f.ci %<>% 
           full_join(county.data %>%
                       arrange(date) %>%
                       mutate(D = cumsum(ifelse(is.na(deaths), 0, deaths))*
                                ifelse(is.na(deaths), NA, 1)) %>%
                       select(date, any_of(plot_vars)) %>%
-                      pivot_longer(any_of(plot_vars), values_to = "data")) %>% 
-         rbind(Reff %>% mutate(name = "Reff", mid = Reff, lwr = NA, upr = NA,
-                               data = NA) %>%
-                 select(-Reff)) %>%
-          rbind(detect %>% mutate(name = "detect", mid = detect, lwr = NA, upr = NA,
-                                data = NA) %>%
-                  select(-detect)) %>%
-          mutate(intervention = sim_title,
+                      pivot_longer(any_of(plot_vars), values_to = "data")) %>%
+            as.data.frame() %>% 
+            rbind(., (Reff %>% mutate(name = "Reff", lwr = NA, mid = Reff, upr = NA, data = NA) %>% select(-Reff) %>% dplyr::select(date, paramset, everything()))) %>%
+            rbind(., (detect %>% mutate(name = "detect", lwr = NA, mid = detect, upr = NA, data = NA) %>% select(-detect) %>% dplyr::select(date, paramset, everything()))) %>% 
+            mutate(intervention = sim_title,
                  county = focal.county,
                  state = focal.state_abbr)
         return(SEIR.sim.f.ci)

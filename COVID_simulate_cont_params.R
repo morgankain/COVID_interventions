@@ -2,23 +2,27 @@
 ## Parameters
 ####
 
-mobility.file      <- "mobility/unfolded_Jun05.rds"  ## Mobility data
+mobility.file      <- "mobility/unfolded_Jun15.rds"  ## Mobility data
 
 fitting            <- FALSE   ## Small change in pomp objects if fitting or simulating
 use.rds            <- TRUE    ## Run from a previously stored RDS
 more.params.uncer  <- FALSE   ## Fit with more (FALSE) or fewer (TRUE) point estimates for a number of parameters
-nsim               <- 10      ## Number of epidemic simulations for each parameter set
+nsim               <- 100     ## Number of epidemic simulations for each parameter set
 fit.E0             <- TRUE    ## Was E0 also fit?
 fixed.E0           <- !fit.E0 ## Accidental extra param...
 usable.cores       <- 1       ## Number of cores to use to fit, for simulation irrelevant
 
-int.beta0_sigma    <- 0.16    ## Heterogeneity k for the Neg Bin that explains variation in individual infectiveness
+determ_beta0       <- TRUE    ## Use deterministic beta0?
+int.beta0_k        <- 0.16    ## Heterogeneity k for the Neg Bin that explains variation in individual infectiveness
+dt                 <- 1/6      ## time step used in fractions of a day
+ 
+date_origin        <- as.Date("2019-12-31")
 
 sir_init.mid       <- FALSE         ## Starts the epidemic from some non-zero timepoint
 sir_init.mid.t     <- "2020-05-28"  ## Date to simulate forward from
 
 ## Sim and plotting details
-sim_length         <- 200     ## How many days to run the simulation
+sim_length         <- 260     ## How many days to run the simulation
 state.plot         <- "D"     ## State variable for plotting (Hospit [H], Death [D], or Cases [C])
 plot.log10         <- TRUE    ## Plot on a log10 scale or not
 plot.median        <- TRUE    ## Use the median? or the mean?
@@ -36,10 +40,9 @@ meas.nb            <- TRUE    ## Negative binomial measurement process?
 import_cases       <- FALSE   ## Use importation of cases?
 fit.minus          <- 0       ## Use data until X days prior to the present
 
-detect.logis       <- TRUE    ## Use logistic detection function. Don't change this, the other option is crap
-
 ci.stoc            <- 0.1     ## Size of the CI to use (0.1 means 80% CI)
 ci.epidemic        <- TRUE    ## whether to limit to simulations where epidmeics occurs. epidemic defined by > 2 * E_init eventually are in the recovered class
+ci.epidemic_cut    <- 100     ## Criteria of throwing away a stochastic realization as not resulting in an epidemic (total # infected)
 plot_vars          <- c("cases", "D")
 
 ## Need to specify, but ignored for all scenarios that isn't the tail chopping intervention
@@ -50,6 +53,10 @@ iso_mild_level      <- 0.2
 iso_severe_level    <- 0.2
 
 int.continue        <- TRUE
-
 ci.epidemic         <- TRUE    ## Remove all epidemic simulations that dont take off
 
+# set number of boxes to use for multi compartment classes
+nE  <- 3 # must be >= 2
+nIa <- 7
+nIp <- 2 # must be >= 2
+nIm <- nIs <- 5 # must be >= 2
