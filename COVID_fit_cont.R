@@ -10,12 +10,12 @@
 ## NOTE: This version fits to continuous mobility data. The data we are using is private. Please email us or use your own form of contious mobility data.
 
 set.seed(10001)               ## Set seed to recreate fits
-fitting           <- TRUE     ## Small change in pomp objects if fitting or simulating
+# fitting           <- TRUE     ## Small change in pomp objects if fitting or simulating
 fit.minus         <- 0        ## Use data until X days prior to the present
 usable.cores      <- 3        ## Number of cores to use to fit
 fit.with          <- "D_C"    ## Fit with D (deaths) or H (hospitalizations) -- Need your own data for H -- or both deaths and cases (D_C).
-import_cases      <- FALSE    ## Use importation of cases?
-dt                <- 1/6      ## time step used
+import_cases      <- TRUE    ## Use importation of cases?
+dt                <- 1/6      ## time step used in fractions of a day
 con_theta         <- FALSE    ## Use constrained thetas? 
 determ_beta0      <- FALSE    ## Use deterministic beta0?
 
@@ -38,7 +38,7 @@ focal.state_abbr  <- "GA"
 focal.state       <- "Georgia"
 
 mobility.file     <- "unfolded_Jun15.rds"
-
+date_origin = as.Date("2019-12-31")
 ## Required packages to run this code
 needed_packages <- c(
   "pomp"
@@ -69,6 +69,7 @@ source("COVID_pomp_gammabeta.R")
 
 ## Scrape death data from the NYT github repo to stay up to date or load a previously saved dataset
 # deaths <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
+# write.csv(deaths, "us-counties.txt")
 
 if (focal.county == "Fulton") {
 
@@ -82,7 +83,7 @@ deaths <- read.csv("us-counties.txt") %>%
   
 deaths  <- read.csv("us-counties.txt") %>% 
   mutate(date = as.Date(date)) %>% 
-  dplyr::filter(county == focal.county) %>% 
+  dplyr::filter(county == focal.county & state == focal.state) %>% 
   dplyr::filter(date < max(date) - fit.minus) %>% 
   filter(state == focal.state)
   
@@ -113,9 +114,106 @@ if(determ_beta0) {
 
 source("variable_params_less_cont.R")
 
+# bring in mobility data and add days relative to date_origin, with date_origin = 0, units in days
+if (focal.county == "Fulton") {
+  mobility <- readRDS(mobility.file) %>% 
+    dplyr::filter((county_name == focal.county | county_name == "DeKalb") & (state_abbr == focal.state_abbr)) %>%
+    dplyr::group_by(datestr) %>%
+    dplyr::summarize(sip_prop = mean(sip_prop), .groups = "drop") 
+} else {
+  mobility <- readRDS(mobility.file) %>% 
+    dplyr::filter(county_name == focal.county & state_abbr == focal.state_abbr)
+}
+
+# clean up mobility data by taking 3 day moving median and adding days since date_origin
+mobility %<>% 
+  dplyr::select(datestr, sip_prop) %>% 
+  filter(sip_prop != 0) %>% 
+  {full_join(., # join with full list of dates so NAs will occur for missing days
+             data.frame(datestr = seq(pull(., datestr) %>% min, 
+                                      pull(., datestr) %>% max, 
+                                      by = "day")))} %>% 
+  mutate(day = as.numeric(datestr - date_origin)) %>% 
+  arrange(day) %>% 
+  # three day moving median
+  mutate(sip_prop = mutate(., 
+                           sip_prop_lag = lag(sip_prop),
+                           sip_prop_lead = lead(sip_prop)) %>% 
+           select(contains("sip_prop")) %>%
+           purrr::pmap_dbl(~median(c(...), na.rm = T))) %>% 
+  dplyr::filter(!is.na(sip_prop)) 
+
+# backfill mobility to date_origin
+if (min(mobility$day) > 1) {
+  mobility <- rbind(
+    data.frame(
+      datestr  = seq.Date(date_origin + 1, 
+                          min(mobility$datestr) - 1,
+                          "day")
+      , sip_prop = mean(mobility$sip_prop[1:10])
+    ) %>% mutate(day = as.numeric(datestr - date_origin)) 
+    , mobility
+  )  
+}
+
+## Adjust the cases/deaths data to anchor dates from date_origin
+county.data <- deaths %>% 
+  mutate(day = as.numeric(date - date_origin)) %>% 
+  dplyr::select(day, date, deaths, cases) %>% 
+  arrange(date) %>%
+  # convert to daily deaths and cases
+  mutate(deaths = deaths - lag(deaths),
+         cases = cases - lag(cases)) %>%
+  # convert negatve cases and deaths to zeros
+  dplyr::rowwise() %>%
+  mutate(cases = max(0, cases),
+         deaths = max(0, deaths)) %>%
+  ungroup() %>%
+  dplyr::filter(!is.na(deaths), !is.na(cases)) %>%
+  # fill with NAs from the latest considered sim start date to the data, 
+  # NAs are to prevent any oddities with the accumulator variables
+  # if the last sim_start date considered occurs when or after the data start, problems will still occur
+  {rbind(
+    data.frame(
+      date   = seq.Date(variable_params[, "sim_start"] %>% max, 
+                        min(pull(., "date")) - 1,
+                        "day")
+      , deaths = NA
+      , cases  = NA
+    ) %>% 
+      mutate(day = as.numeric(date - date_origin))
+    , .
+  )} %>%
+  ## Remove dates after one week after movement data ends
+  dplyr::filter(date < (max(mobility$datestr) + 7))
+
+# create mobility covariate table
+mob.covtab <- covariate_table(
+  sip_prop     = mobility$sip_prop
+  ,  order        = "constant"
+  ,  times        = mobility$day
+  ,  intervention = rep(0, nrow(mobility))
+)
+
+covid_mobility <- pomp(
+  data         = county.data %>% select(day, cases, deaths)
+  , times      = "day"
+  , t0         = 1 # this will need to be adjusted for each fit
+  , covar      = mob.covtab
+  , rprocess   = euler(sir_step_mobility, delta.t = dt)
+  , rmeasure   = {if(con_theta){rmeas_multi_logis_con}else{rmeas_multi_logis_ind}}
+  , dmeasure   = {if(con_theta){dmeas_multi_logis_con}else{dmeas_multi_logis_ind}}
+  , rinit      = sir_init
+  , partrans   = {if(con_theta){par_trans_con}else{par_trans_ind}}
+  , accumvars  = accum_names
+  , paramnames = param_names
+  , statenames = state_names
+  , globals    = globs
+)  
+
 ## Run parameters
-sim_start  <- variable_params$sim_start
-sim_end    <- sim_start + sim.length
+# sim_start  <- variable_params$sim_start
+# sim_end    <- sim_start + sim.length
 
 param_array <- array(
   data = 0
@@ -152,114 +250,6 @@ betat  <- data.frame(paramset = 0, date = 0, betat = 0) ; betat <- betat[-1, ]
 detect <- data.frame(paramset = 0, date = 0, detect = 0); detect <- detect[-1, ]
 
 for (i in 1:nrow(variable_params)) {
-
-  ## Adjust the data for the current start date
-county.data <- deaths %>% 
-  mutate(day = as.numeric(date - variable_params[i, ]$sim_start)) %>% 
-  dplyr::filter(day > 0) %>%
-  dplyr::select(day, date, deaths, cases) %>% 
-  mutate(deaths = deaths - lag(deaths),
-         cases = cases - lag(cases)) %>%
-  dplyr::filter(!is.na(deaths), !is.na(cases))
-
-county.data <- rbind(
-  data.frame(
-    day    = seq(1:(min(county.data$day) - 1))
-  , date   = as.Date(seq(1:(min(county.data$day) - 1)), origin = variable_params[i, "sim_start"])
-  , deaths = NA
-  , cases  = NA
-  )
-, county.data 
-  )
-
-if (focal.county == "Fulton") {
-  mobility <- readRDS("unfolded_Jun15.rds") %>% 
-  dplyr::filter((county_name == focal.county | county_name == "DeKalb") & (state_abbr == focal.state_abbr)) %>%
-  dplyr::group_by(datestr) %>%
-  dplyr::summarize(sip_prop = mean(sip_prop)) %>%
-  dplyr::select(datestr, sip_prop) %>% 
-  filter(sip_prop != 0) %>% 
-  {full_join(., # join with full list of dates so NAs will occur for missing days
-             data.frame(datestr = seq(pull(., datestr) %>% min, 
-                                      pull(., datestr) %>% max, 
-                                      by = "day")))} %>% 
-  mutate(day = as.numeric(datestr - variable_params[i, ]$sim_start)) %>% 
-  arrange(day) %>% 
-  # three day moving median
-  mutate(sip_prop = mutate(., 
-                         sip_prop_lag = lag(sip_prop),
-                         sip_prop_lead = lead(sip_prop)) %>% 
-           select(contains("sip_prop")) %>%
-           purrr::pmap_dbl(~median(c(...), na.rm = T))) %>% 
-  dplyr::filter(datestr >= variable_params[i, ]$sim_start) %>%
-  dplyr::filter(!is.na(sip_prop)) %>% 
-  dplyr::filter(day > 0)
-} else {
- mobility <- readRDS(mobility.file) %>% 
-  dplyr::filter(county_name == focal.county & state_abbr == focal.state_abbr) %>%
-  dplyr::select(datestr, sip_prop) %>% 
-  filter(sip_prop != 0) %>% 
-  {full_join(., # join with full list of dates so NAs will occur for missing days
-             data.frame(datestr = seq(pull(., datestr) %>% min, 
-                                      pull(., datestr) %>% max, 
-                                      by = "day")))} %>% 
-  mutate(day = as.numeric(datestr - variable_params[i, ]$sim_start)) %>% 
-  arrange(day) %>% 
-  # three day moving median
-  mutate(sip_prop = mutate(., 
-                         sip_prop_lag = lag(sip_prop),
-                         sip_prop_lead = lead(sip_prop)) %>% 
-           select(contains("sip_prop")) %>%
-           purrr::pmap_dbl(~median(c(...), na.rm = T))) %>% 
-  dplyr::filter(datestr >= variable_params[i, ]$sim_start) %>%
-  dplyr::filter(!is.na(sip_prop)) %>% 
-  dplyr::filter(day > 0)  
-}
-
-if (min(mobility$day) > 1) {
-mobility <- rbind(
-  data.frame(
-    datestr  = as.Date(seq(1:(min(mobility$day) - 1)), origin = variable_params[i, ]$sim_start)
-  , sip_prop = mean(mobility$sip_prop[1:10])
-  , day      = seq(1:(min(mobility$day) - 1))
-  )
-, mobility
-  )  
-}
-
-## Remove dates after one week after movement data ends
-county.data <- county.data %>% dplyr::filter(date < (max(mobility$datestr) + 7))
-zero.cases  <- which(county.data$cases < 0)
-zero.deaths <- which(county.data$deaths < 0)
-if (length(zero.cases) > 0) {
-county.data[zero.cases, ]$cases <- 0
-}
-if (length(zero.deaths) > 0) {
-county.data[zero.deaths, ]$deaths <- 0
-}
-
-mob.covtab <- covariate_table(
-    sip_prop     = mobility$sip_prop
- ,  order        = "constant"
- ,  times        = mobility$day
- ,  intervention = rep(0, nrow(mobility))
-    )
-
-covid_mobility <- pomp(
-   data       = county.data
- , times      = "day"
- , t0         = 1
- , covar      = mob.covtab
- , rprocess   = euler(sir_step_mobility, delta.t = dt)
- , rmeasure   = {if(con_theta){rmeas_multi_logis_con}else{rmeas_multi_logis_ind}}
- , dmeasure   = {if(con_theta){dmeas_multi_logis_con}else{dmeas_multi_logis_ind}}
- , rinit      = sir_init
- , partrans   = {if(con_theta){par_trans_con}else{par_trans_ind}}
- , accumvars  = accum_names
- , paramnames = param_names
- , statenames = state_names
- , globals    = globs
-)  
   
 if (variable_params[i, ]$beta0est == 0) {
 
@@ -285,7 +275,7 @@ start_vals <- c(
 
 mifs_temp <- covid_mobility %>%
   mif2(
-    t0      = 1
+    t0      = as.numeric(variable_params[i, "sim_start"] - date_origin)
   , params  = c(
     c(fixed_params %>% t() %>% 
         as.data.frame() %>% 
@@ -328,14 +318,14 @@ mifs_temp <- covid_mobility %>%
   , Nmif   = n.mif_length
   , cooling.fraction.50 = 0.50
   , rw.sd  = rw.sd(
-      beta0       = 0.02
-    , E_init      = ivp(0.02)
-    , detect_max  = 0.02
-    , detect_mid  = 0.02
-    , detect_k    = 0.02
-    , theta       = 0.02
-    , theta2      = 0.02
-    , beta_min    = 0.02
+      beta0       = n.mif_rw.sd
+    , E_init      = ivp(n.mif_rw.sd)
+    , detect_max  = n.mif_rw.sd
+    , detect_mid  = n.mif_rw.sd
+    , detect_k    = n.mif_rw.sd
+    , theta       = n.mif_rw.sd
+    , theta2      = n.mif_rw.sd
+    , beta_min    = n.mif_rw.sd
   )
         ) %>%
   mif2(Nmif = n.mif_length, cooling.fraction.50 = 0.50) %>%
@@ -393,39 +383,10 @@ param_array[i, , "log_lik"]        <- loglik.est
 SEIR.sim <- do.call(
   pomp::simulate
   , list(
-    object   = covid_mobility
-    , times  = mob.covtab@times
-    , params = c(fixed_params %>% t() %>% 
-                   as.data.frame() %>% 
-                   mutate(d  = variable_params[i, "alpha"] * lambda_a + 
-                       (1 - variable_params[i, "alpha"]) * variable_params[i, "mu"] * (lambda_p + lambda_m) + 
-                       (1 - variable_params[i, "alpha"])*(1 - variable_params[i, "mu"])*(lambda_p + lambda_s)
-                   ) %>%  
-                   # convert periods to rates
-                   mutate(gamma    = -1/(nE*dt)*log(1-nE*dt/gamma),
-                          lambda_a = -1/(nIa*dt)*log(1-nIa*dt/lambda_a),
-                          lambda_p = -1/(nIp*dt)*log(1-nIp*dt/lambda_p), 
-                          lambda_m = -1/(nIm*dt)*log(1-nIm*dt/lambda_m),
-                          lambda_s = -1/(nIs*dt)*log(1-nIs*dt/lambda_s),
-                          rho_r    = -1/dt*log(1-dt/rho_r)) %>%
-                   unlist
-      , c(
-        beta0      = variable_params[i, "beta0est"]
-      , E_init     = variable_params[i, "E_init"]
-      , detect_max = variable_params[i, "detect_max"]
-      , detect_mid = variable_params[i, "detect_mid"]
-      , detect_k   = variable_params[i, "detect_k"]
-      , theta      = variable_params[i, "theta"]
-      , theta2     = variable_params[i, "theta2"]
-      , beta_min   = variable_params[i, "beta_min"]
-      , Ca         = variable_params[i, "Ca"]
-      , alpha      = variable_params[i, "alpha"]
-      , delta      = variable_params[i, "delta"]
-      , mu         = variable_params[i, "mu"]
-      , E_init     = variable_params[i, "E_init"]
-      , rho_d      = {-1/dt*log(1-dt/variable_params[i, "rho_d"])}
-      , detect_t0  = min(county.data[!is.na(county.data$cases), ]$day) - 1
-        ))
+    object         = covid_mobility
+    , t0           = as.numeric(variable_params[i, "sim_start"] - date_origin)
+    , times        = county.data$day
+    , params       = coef(mifs_local[[best.fit]])
     , nsim         = nsim
     , format       = "d"
     , include.data = F
@@ -433,7 +394,7 @@ SEIR.sim <- do.call(
 
 SEIR.sim <- SEIR.sim %>%
   mutate(
-      date     = round(as.Date(day, origin = variable_params[i, ]$sim_start))
+      date     = date_origin + day
     , paramset = variable_params[i, ]$paramset)
 
 if (ci.epidemic) {
@@ -446,6 +407,10 @@ if (ci.epidemic) {
   SEIR.sim %<>% filter(.id %in% epi_ids)
 }
 
+SEIR.sim.s <- SEIR.sim %>% 
+  group_by(day) %>%
+  summarize(S = mean(S), D = mean(D))
+
 SEIR.sim %<>% {
   rbind(.,
         group_by(., day) %>%
@@ -454,52 +419,47 @@ SEIR.sim %<>% {
           mutate(.id = "median"))
 }
 
-SEIR.sim.s <- SEIR.sim %>% 
-  dplyr::filter(.id != "median") %>%
-  group_by(day) %>%
-  summarize(S = mean(S), D = mean(D))
-
-betat.t      <- variable_params[i, "beta0est"] * exp(log(variable_params[i, "beta_min"])*mob.covtab@table[which(dimnames(mob.covtab@table)[[1]] == "sip_prop"), ])
+betat.t      <- variable_params[i, "beta0est"] * exp(log(variable_params[i, "beta_min"])*mob.covtab@table[which(dimnames(mob.covtab@table)[[1]] == "sip_prop"), which(mob.covtab@times >= min(county.data$day))])
 
 Reff.t       <- with(variable_params[i, ], covid_R0(
    beta0est      = betat.t
  , fixed_params  = c(fixed_params, unlist(variable_params[i, ]))
  , sd_strength   = 1
- , prop_S        = if(focal.county == "Fulton") {SEIR.sim.s$S / (location_params[location_params$Parameter == "N", ]$est + 691893 - SEIR.sim.s$D)
-   } else {SEIR.sim.s$S / (location_params[location_params$Parameter == "N", ]$est - SEIR.sim.s$D)}
+ , prop_S        = SEIR.sim.s %>% 
+   mutate(prop_S = S / (fixed_params["N"] - D)) %>% 
+   filter(day <= max(mob.covtab@times)) %>% # limit to same times as mob.covtab
+   pull(prop_S)
   )
   )
 
-detect.t <- c(rep(0, min(county.data[!is.na(county.data$cases), ]$day) - 1)
-              , (variable_params[i, "detect_max"] / 
-                   (1 + exp(-variable_params[i, "detect_k"] * (mob.covtab@times - variable_params[i, "detect_mid"])))
-              )[-seq(1, min(county.data[!is.na(county.data$cases), ]$day) - 1)]
-)
-
+# detect.t <- c(rep(0, min(county.data[!is.na(county.data$cases), ]$day) - 1)
+#               , (variable_params[i, "detect_max"] / 
+#                    (1 + exp(-variable_params[i, "detect_k"] * (mob.covtab@times - variable_params[i, "detect_mid"])))
+#               )[-seq(1, min(county.data[!is.na(county.data$cases), ]$day) - 1)]
+# )
+# 
 betat.t <- data.frame(
-  paramset = variable_params[i, ]$paramset
-  , date     = seq(variable_params[i, ]$sim_start
-                   , variable_params[i, ]$sim_start + (length(mob.covtab@table[which(dimnames(mob.covtab@table)[[1]] == "sip_prop"), ]) - 1), by = 1)
+  paramset   = variable_params[i, ]$paramset
+  , date     = mob.covtab@times[which(mob.covtab@times >= min(county.data$day))] + date_origin
   , betat    = betat.t
 )
 
 Reff.t <- data.frame(
-  paramset = variable_params[i, ]$paramset
-  , date     = seq(variable_params[i, ]$sim_start
-                   , variable_params[i, ]$sim_start + (length(mob.covtab@table[which(dimnames(mob.covtab@table)[[1]] == "sip_prop"), ]) - 1), by = 1)
+  paramset    = variable_params[i, ]$paramset
+  , date     = mob.covtab@times[which(mob.covtab@times >= min(county.data$day))] + date_origin
   , Reff     = Reff.t
 )
 
-detect.t <- data.frame(
-  paramset = variable_params[i, ]$paramset
-  , date     = seq(variable_params[i, ]$sim_start
-                   , variable_params[i, ]$sim_start + (length(mob.covtab@table[which(dimnames(mob.covtab@table)[[1]] == "sip_prop"), ]) - 1), by = 1)
-  , detect   = detect.t
-)
-
+# detect.t <- data.frame(
+#   paramset = variable_params[i, ]$paramset
+#   , date     = seq(variable_params[i, ]$sim_start
+#                    , variable_params[i, ]$sim_start + (length(mob.covtab@table[which(dimnames(mob.covtab@table)[[1]] == "sip_prop"), ]) - 1), by = 1)
+#   , detect   = detect.t
+# )
+# 
 betat  <- rbind(betat, betat.t)
 Reff   <- rbind(Reff, Reff.t)
-detect <- rbind(detect, detect.t)
+# detect <- rbind(detect, detect.t)
 
 ## Stich together output
 if (i == 1) {
