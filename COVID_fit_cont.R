@@ -13,12 +13,11 @@ set.seed(10001)               ## Set seed to recreate fits
 # fitting         <- TRUE     ## Small change in pomp objects if fitting or simulating
 fit.minus         <- 0        ## Use data until X days prior to the present
 usable.cores      <- 3        ## Number of cores to use to fit
-fit.with          <- "D_C"    ## Fit with D (deaths) or H (hospitalizations) -- Need your own data for H -- or both deaths and cases (D_C).
-import_cases      <- TRUE    ## Use importation of cases?
+import_cases      <- TRUE     ## Use importation of cases?
 dt                <- 1/6      ## time step used in fractions of a day
 con_theta         <- FALSE    ## Use constrained thetas? 
 determ_beta0      <- TRUE     ## Use deterministic beta0?
-ci.epidemic_cut   <- 100     ## Criteria of throwing away a stochastic realization as not resulting in an epidemic (total # infected)
+ci.epidemic_cut   <- 100      ## Criteria of throwing away a stochastic realization as not resulting in an epidemic (total # infected)
 
 ## mif2 fitting parameters. 
 n.mif_runs        <- 6        ## number of repeated fits (6 used in manuscript, 2 suggested to debug/check code)
@@ -198,29 +197,20 @@ county.data <- deaths %>%
   ## Remove dates after one week after movement data ends
   }} %>% dplyr::filter(date < (max(mobility$datestr) + 7))
   
-zero.cases  <- which(county.data$cases < 0)
-zero.deaths <- which(county.data$deaths < 0)
-if (length(zero.cases) > 0) {
-county.data[zero.cases, ]$cases <- 0
-}
-if (length(zero.deaths) > 0) {
-county.data[zero.deaths, ]$deaths <- 0
-}
-
 # create mobility covariate table
 mob.covtab <- covariate_table(
-  sip_prop     = mobility$sip_prop
+  sip_prop       = mobility$sip_prop
   , order        = "constant"
   , times        = mobility$day
   , intervention = rep(0, nrow(mobility))
-  , iso_mild_level = NA
+  , iso_mild_level   = NA
   , iso_severe_level = NA
 )
 
 covid_mobility <- pomp(
   data         = county.data %>% select(day, cases, deaths)
   , times      = "day"
-  , t0         = 1 # this will need to be adjusted for each fit
+  , t0         = 1
   , covar      = mob.covtab
   , rprocess   = euler(sir_step_mobility, delta.t = dt)
   , rmeasure   = {if(con_theta){rmeas_multi_logis_con}else{rmeas_multi_logis_ind}}
@@ -232,10 +222,6 @@ covid_mobility <- pomp(
   , statenames = state_names
   , globals    = globs
 )  
-
-## Run parameters
-# sim_start  <- variable_params$sim_start
-# sim_end    <- sim_start + sim.length
 
 param_array <- array(
   data = 0
