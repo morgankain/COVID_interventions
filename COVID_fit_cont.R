@@ -27,15 +27,15 @@ n.mif_particles_LL<- 5000     ## number of particles for calculating LL (XXXX us
 n.mif_rw.sd       <- 0.02     ## particle perturbation (0.02 used in manuscript, 0.02 suggested to debug/check code)
 nparams           <- 20       ## number of parameter sobol samples (200 used in manuscript, 5 suggested to debug/check code)
 nsim              <- 200      ## number of stochastic epidemic simulations for each fitted beta0 for dynamics (300 used in manuscript, 150 suggested to debug/check code)
-sim.length        <- 200 
+# sim.length        <- 200 
 
 sim.plot          <- TRUE
 ci.epidemic       <- TRUE
 
 # location of interest
-focal.county      <- "Fulton" 
-focal.state_abbr  <- "GA"
-focal.state       <- "Georgia"
+focal.county      <- "Santa Clara" 
+focal.state_abbr  <- "CA"
+focal.state       <- "California"
 
 mobility.file     <- "unfolded_Jun15.rds"
 date_origin = as.Date("2019-12-31")
@@ -173,7 +173,7 @@ county.data <- deaths %>%
   # fill with NAs from the latest considered sim start date to the data, 
   # NAs are to prevent any oddities with the accumulator variables
   # if the last sim_start date considered occurs when or after the data start, problems will still occur
-  {rbind(
+  {if(max(variable_params[, "sim_start"]) < min(pull(., "date"))) {rbind(
     data.frame(
       date   = seq.Date(variable_params[, "sim_start"] %>% max, 
                         min(pull(., "date")) - 1,
@@ -183,7 +183,14 @@ county.data <- deaths %>%
     ) %>% 
       mutate(day = as.numeric(date - date_origin))
     , .
-  )} %>%
+  )} else{ # if the data start before the last sim start date, trim the data to the last sim start and add one row of NAs to deal with accumulator variable
+    filter(., date >=  variable_params[, "sim_start"] %>% max) %>% 
+      {rbind(data.frame(date = min(pull(., "date")) - 1,
+                       deaths = NA, 
+                       cases = NA) %>% 
+               mutate(day = as.numeric(date - date_origin)),
+             .)}
+  }} %>%
   ## Remove dates after one week after movement data ends
   dplyr::filter(date < (max(mobility$datestr) + 7))
 
