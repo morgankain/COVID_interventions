@@ -50,7 +50,7 @@ sir_step_mobility <- Csnippet("
                      if((beta0_k > 0) & (I > 0)){
                        betat = rgammawn(sqrt(beta0 / (beta0_k * I)), beta0*dt/d) * exp(log(beta_min)*sip_prop);
                      } else {
-                       betat = beta0*exp(log(beta_min)*sip_prop);
+                       betat = beta0*dt/d*exp(log(beta_min)*sip_prop);
                      } 
 
                      // transition out of S to E
