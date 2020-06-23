@@ -344,7 +344,7 @@ mob.covtab <- covariate_table(
 }
 
 covid_mobility <- pomp(
-   data       = county.data
+   data       = county.data %>% select(day, cases, deaths)
  , times      = "day"
  , t0         = 1
  , covar      = mob.covtab
@@ -368,7 +368,9 @@ SEIR.sim <- do.call(
   pomp::simulate
   , list(
     object   = covid_mobility
-    , times  = mob.covtab@times
+    , t0     = 1
+     , times  = 1:sim_length
+  #  , times  = c(county.data$day, max(county.data$day):(max(county.data$day) + sim_length - length(county.data$day)))
     , params = c(fixed_params %>% t() %>% 
                    as.data.frame() %>% 
                    mutate(d  = variable_params[i, "alpha"] * lambda_a + 
