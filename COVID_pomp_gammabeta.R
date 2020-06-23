@@ -1,7 +1,7 @@
 # incremental step ----
 sir_step_mobility <- Csnippet("
                      // adjust betat for social distancing interventions
-                //     double betat;
+                //   double betat;
                      double *E = &E1;  // Set up E boxes
                      double *Ia = &Ia1;  // Set up Ia boxes
                      double *Ip = &Ip1;  // Set up Ip boxes
@@ -19,6 +19,10 @@ sir_step_mobility <- Csnippet("
                      // adjust contact rates if isolation of symptomatic cases is in place
                      double iso_m = 1;
                      double iso_s = 1;
+                     if (intervention == 2) {
+                      iso_m = iso_mild_level;
+                      iso_s = iso_severe_level;
+                     }
 
                      // Sum up individuals in Ia boxes
                      double sIa = 0;
@@ -44,15 +48,20 @@ sir_step_mobility <- Csnippet("
                        sIs += Is[i];      
                      }
                      
-                     // sample random betat if stochastic
-                       double I = sIa + sIp + sIm + sIs;
-                //     double d = alpha*lambda_a + (1 - alpha)*mu*(1/lambda_p + 1/lambda_m) + (1 - alpha)*(1 - mu)*(1/lambda_p + 1/lambda_s);  // calculate average duration of infection
-                     if((beta0_k > 0) & (I > 0)){
-                       betat = rgammawn(sqrt(beta0 / (beta0_k * I)), beta0*dt/d) * exp(log(beta_min)*sip_prop);
+                    double I = sIa + sIp + sIm + sIs;
+                    int n_beta = round(fmax(I, 1));
+                    
+                     if ((beta0_k > 0) & (I > 0)) {
+                      if ((catch_eff > 0) & intervention == 1) {
+ //                     betat = rtgamma_eff(n_beta, sqrt(beta0 / beta0_k), beta0*dt/d, beta_catch, catch_eff)*exp(log(beta_min)*sip_prop);
+                        betat = rgammawn(sqrt(beta0 / (beta0_k * I)), beta0*dt/d) * exp(log(beta_min)*sip_prop); 
+                      } else {
+                        betat = rgammawn(sqrt(beta0 / (beta0_k * I)), beta0*dt/d) * exp(log(beta_min)*sip_prop);                
+                      }
                      } else {
-                       betat = beta0*exp(log(beta_min)*sip_prop);
+                       betat = beta0*dt/d*exp(log(beta_min)*sip_prop);
                      } 
-
+                     
                      // transition out of S to E
                      double dSE = rbinom(S, 1-exp(-betat*(Ca*sIa/N + Cp*sIp/N + iso_m*Cm*sIm/N + iso_s*Cs*sIs/N))); 
                      
@@ -163,25 +172,6 @@ sir_step_mobility <- Csnippet("
                      D_new += dHdD; // daily fatalities
                      ")
 
-# initializers ----
-# sir_init_mid <- Csnippet("
-#                      S = S0;
-#                      E = ceil(E_init);
-#                      Ia = Ia0;
-#                      Ip = Ip0;
-#                      Is = Is0;
-#                      Im = Im0;
-#                      I = Ia + Ip + Is + Im;
-#                      I_new_sympt = 0;
-#                      Hr = Hr0;
-#                      Hd = Hd0;
-#                      R = R0;
-#                      D = D0;
-#                      D_new = 0;
-#                      ")
-# 
-# mid_init_param_names <- c("S0", "Ia0", "Ip0", "Is0", "Im0", "Hr0", "Hd0", "R0", "D0")
-
 sir_init <- Csnippet("
                      double E0 = ceil(E_init);
                      S = N-E0;
@@ -217,7 +207,6 @@ int nIa = ", nIa, ";  // Number of Ia boxes
 int nIp = ", nIp, ";  // Number of Ip boxes
 int nIm = ", nIm, ";  // Number of Im boxes
 int nIs = ", nIs, ";  // Number of Is boxes
-
 static R_INLINE void rtgamma_eff(int N, double sigma, double mu, 
                                  double trim, double eff, double *out){
   for(int i = 0; i < N; ++i) {
@@ -307,7 +296,6 @@ par_trans_ind <- parameter_trans(
           , "E_init", "theta", "theta2", "detect_k", "detect_mid")
   , logit = c("beta_min", "detect_max")) 
 
-
 param_names <- c(
    "beta0"
   , "Ca", "Cp", "Cs", "Cm"
@@ -330,6 +318,8 @@ param_names <- c(
   , "detect_max"
   , "detect_t0"
   , "d"
+  , "beta_catch"
+  , "catch_eff"
 )
   
 state_names = c(

@@ -17,10 +17,11 @@ fit.with          <- "D_C"    ## Fit with D (deaths) or H (hospitalizations) -- 
 import_cases      <- FALSE    ## Use importation of cases?
 dt                <- 1/6      ## time step used
 con_theta         <- FALSE    ## Use constrained thetas? 
-determ_beta0      <- FALSE    ## Use deterministic beta0?
+determ_beta0      <- TRUE     ## Use deterministic beta0?
+ci.epidemic_cut   <- 100     ## Criteria of throwing away a stochastic realization as not resulting in an epidemic (total # infected)
 
 ## mif2 fitting parameters. 
-n.mif_runs        <- 3        ## number of repeated fits (6 used in manuscript, 2 suggested to debug/check code)
+n.mif_runs        <- 6        ## number of repeated fits (6 used in manuscript, 2 suggested to debug/check code)
 n.mif_length      <- 50       ## number of steps (100 used in manuscript, 20 suggested to debug/check code)
 n.mif_particles   <- 500      ## number of particles (3000 used in manuscript, 3000 suggested to debug/check code)
 n.mif_particles_LL<- 5000     ## number of particles for calculating LL (XXXX used in manuscript, 5000 suggested to debug/check code)
@@ -65,10 +66,6 @@ source("COVID_pomp_gammabeta.R")
 
 ## Be very careful here, adjust according to your machine's capabilities
   registerDoParallel(cores = usable.cores)
-# registerDoParallel(cores = (Sys.getenv("SLURM_NTASKS_PER_NODE")))
-
-## Scrape death data from the NYT github repo to stay up to date or load a previously saved dataset
-# deaths <- fread("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")
 
 if (focal.county == "Fulton") {
 
@@ -243,6 +240,8 @@ mob.covtab <- covariate_table(
  ,  order        = "constant"
  ,  times        = mobility$day
  ,  intervention = rep(0, nrow(mobility))
+ ,  iso_mild_level = NA
+ ,  iso_severe_level = NA
     )
 
 covid_mobility <- pomp(
@@ -440,7 +439,7 @@ if (ci.epidemic) {
   epi_ids <- SEIR.sim %>% 
     group_by(.id) %>% 
     summarise(total_infect = max(D + R)) %>% 
-    filter(total_infect > 10*ceiling(variable_params[i, "E_init"])) %>% 
+    filter(total_infect > ci.epidemic_cut*ceiling(variable_params[i, "E_init"])) %>% 
     pull(.id)
   print(paste0("limiting to epidemics, including ", length(epi_ids), " simulations"))
   SEIR.sim %<>% filter(.id %in% epi_ids)
@@ -580,10 +579,10 @@ detect       <- detect %>% filter(date < "2020-06-18")
     #  , group = paramset), alpha = 0.05) +
     geom_line(data = (SEIR.sim.f.d.a %>% filter(.id != "median"))
               , aes(
-                x = date
+                  x = date
                 , y = deaths
                 , group = interaction(paramset, .id))
-              , alpha = 0.15, lwd = .2) + 
+              , alpha = 0.05, lwd = .2) + 
     geom_line(data = (SEIR.sim.f.d.a %>% filter(.id == "median"))
               , aes(
                 x = date
@@ -613,7 +612,7 @@ detect       <- detect %>% filter(date < "2020-06-18")
                 x = date
                 , y = D
                 , group = interaction(paramset, .id))
-              , alpha = 0.35, lwd = .2) + 
+              , alpha = 0.05, lwd = .2) + 
     geom_line(data = (SEIR.sim.f.D.a %>% filter(.id == "median"))
               , aes(
                 x = date
@@ -643,7 +642,7 @@ detect       <- detect %>% filter(date < "2020-06-18")
                 x = date
                 , y = cases
                 , group = interaction(paramset, .id))
-              , alpha = 0.15, lwd = .2) + 
+              , alpha = 0.05, lwd = .2) + 
     geom_line(data = (SEIR.sim.f.c.a %>% filter(.id == "median"))
               , aes(
                 x = date
