@@ -39,7 +39,7 @@ focal.state_abbr  <- "CA"
 focal.state       <- "California"
 
 mobility.file     <- "unfolded_Jun15.rds"
-date_origin = as.Date("2019-12-31")
+date_origin       <- as.Date("2019-12-31")
 ## Required packages to run this code
 needed_packages <- c(
   "pomp"
@@ -114,6 +114,10 @@ if(determ_beta0) {
 }
 
 source("variable_params_less_cont.R")
+
+## Extra needed params
+fixed_params["beta_catch"] <- NA
+fixed_params["catch_eff"]  <- NA
 
 # bring in mobility data and add days relative to date_origin, with date_origin = 0, units in days
 if (focal.county == "Fulton") {
@@ -191,16 +195,26 @@ county.data <- deaths %>%
                        cases = NA) %>% 
                mutate(day = as.numeric(date - date_origin)),
              .)}
-  }} %>%
   ## Remove dates after one week after movement data ends
-  dplyr::filter(date < (max(mobility$datestr) + 7))
+  }} %>% dplyr::filter(date < (max(mobility$datestr) + 7))
+  
+zero.cases  <- which(county.data$cases < 0)
+zero.deaths <- which(county.data$deaths < 0)
+if (length(zero.cases) > 0) {
+county.data[zero.cases, ]$cases <- 0
+}
+if (length(zero.deaths) > 0) {
+county.data[zero.deaths, ]$deaths <- 0
+}
 
 # create mobility covariate table
 mob.covtab <- covariate_table(
   sip_prop     = mobility$sip_prop
-  ,  order        = "constant"
-  ,  times        = mobility$day
-  ,  intervention = rep(0, nrow(mobility))
+  , order        = "constant"
+  , times        = mobility$day
+  , intervention = rep(0, nrow(mobility))
+  , iso_mild_level = NA
+  , iso_severe_level = NA
 )
 
 covid_mobility <- pomp(
@@ -259,116 +273,6 @@ detect <- data.frame(paramset = 0, date = 0, detect = 0); detect <- detect[-1, ]
 
 for (i in 1:nrow(variable_params)) {
 
-  ## Adjust the data for the current start date
-county.data <- deaths %>% 
-  mutate(day = as.numeric(date - variable_params[i, ]$sim_start)) %>% 
-  dplyr::filter(day > 0) %>%
-  dplyr::select(day, date, deaths, cases) %>% 
-  mutate(deaths = deaths - lag(deaths),
-         cases = cases - lag(cases)) %>%
-  dplyr::filter(!is.na(deaths), !is.na(cases))
-
-county.data <- rbind(
-  data.frame(
-    day    = seq(1:(min(county.data$day) - 1))
-  , date   = as.Date(seq(1:(min(county.data$day) - 1)), origin = variable_params[i, "sim_start"])
-  , deaths = NA
-  , cases  = NA
-  )
-, county.data 
-  )
-
-if (focal.county == "Fulton") {
-  mobility <- readRDS("unfolded_Jun15.rds") %>% 
-  dplyr::filter((county_name == focal.county | county_name == "DeKalb") & (state_abbr == focal.state_abbr)) %>%
-  dplyr::group_by(datestr) %>%
-  dplyr::summarize(sip_prop = mean(sip_prop)) %>%
-  dplyr::select(datestr, sip_prop) %>% 
-  filter(sip_prop != 0) %>% 
-  {full_join(., # join with full list of dates so NAs will occur for missing days
-             data.frame(datestr = seq(pull(., datestr) %>% min, 
-                                      pull(., datestr) %>% max, 
-                                      by = "day")))} %>% 
-  mutate(day = as.numeric(datestr - variable_params[i, ]$sim_start)) %>% 
-  arrange(day) %>% 
-  # three day moving median
-  mutate(sip_prop = mutate(., 
-                         sip_prop_lag = lag(sip_prop),
-                         sip_prop_lead = lead(sip_prop)) %>% 
-           select(contains("sip_prop")) %>%
-           purrr::pmap_dbl(~median(c(...), na.rm = T))) %>% 
-  dplyr::filter(datestr >= variable_params[i, ]$sim_start) %>%
-  dplyr::filter(!is.na(sip_prop)) %>% 
-  dplyr::filter(day > 0)
-} else {
- mobility <- readRDS(mobility.file) %>% 
-  dplyr::filter(county_name == focal.county & state_abbr == focal.state_abbr) %>%
-  dplyr::select(datestr, sip_prop) %>% 
-  filter(sip_prop != 0) %>% 
-  {full_join(., # join with full list of dates so NAs will occur for missing days
-             data.frame(datestr = seq(pull(., datestr) %>% min, 
-                                      pull(., datestr) %>% max, 
-                                      by = "day")))} %>% 
-  mutate(day = as.numeric(datestr - variable_params[i, ]$sim_start)) %>% 
-  arrange(day) %>% 
-  # three day moving median
-  mutate(sip_prop = mutate(., 
-                         sip_prop_lag = lag(sip_prop),
-                         sip_prop_lead = lead(sip_prop)) %>% 
-           select(contains("sip_prop")) %>%
-           purrr::pmap_dbl(~median(c(...), na.rm = T))) %>% 
-  dplyr::filter(datestr >= variable_params[i, ]$sim_start) %>%
-  dplyr::filter(!is.na(sip_prop)) %>% 
-  dplyr::filter(day > 0)  
-}
-
-if (min(mobility$day) > 1) {
-mobility <- rbind(
-  data.frame(
-    datestr  = as.Date(seq(1:(min(mobility$day) - 1)), origin = variable_params[i, ]$sim_start)
-  , sip_prop = mean(mobility$sip_prop[1:10])
-  , day      = seq(1:(min(mobility$day) - 1))
-  )
-, mobility
-  )  
-}
-
-## Remove dates after one week after movement data ends
-county.data <- county.data %>% dplyr::filter(date < (max(mobility$datestr) + 7))
-zero.cases  <- which(county.data$cases < 0)
-zero.deaths <- which(county.data$deaths < 0)
-if (length(zero.cases) > 0) {
-county.data[zero.cases, ]$cases <- 0
-}
-if (length(zero.deaths) > 0) {
-county.data[zero.deaths, ]$deaths <- 0
-}
-
-mob.covtab <- covariate_table(
-    sip_prop     = mobility$sip_prop
- ,  order        = "constant"
- ,  times        = mobility$day
- ,  intervention = rep(0, nrow(mobility))
- ,  iso_mild_level = NA
- ,  iso_severe_level = NA
-    )
-
-covid_mobility <- pomp(
-   data       = county.data
- , times      = "day"
- , t0         = 1
- , covar      = mob.covtab
- , rprocess   = euler(sir_step_mobility, delta.t = dt)
- , rmeasure   = {if(con_theta){rmeas_multi_logis_con}else{rmeas_multi_logis_ind}}
- , dmeasure   = {if(con_theta){dmeas_multi_logis_con}else{dmeas_multi_logis_ind}}
- , rinit      = sir_init
- , partrans   = {if(con_theta){par_trans_con}else{par_trans_ind}}
- , accumvars  = accum_names
- , paramnames = param_names
- , statenames = state_names
- , globals    = globs
-)  
-
 if (variable_params[i, ]$beta0est == 0) {
 
   ## Fit runs in parallel based on number of cores
@@ -387,7 +291,7 @@ start_vals <- c(
     , detect_mid   = rlnorm(1, log(60), 0.2)
     , detect_max   = runif(1, 0.1, 0.7)
     , theta        = rlnorm(1, log(1), 0.4)
-    , theta2       = rlnorm(1, log(1), 0.4)
+    , theta2       = ifelse(con_theta, runif(1, 0.1, 0.9) , rlnorm(1, log(1), 0.4))
     , beta_min     = runif(1, 0.3, 0.7) 
 )
 
