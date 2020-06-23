@@ -53,8 +53,8 @@ sir_step_mobility <- Csnippet("
                     
                      if ((beta0_k > 0) & (I > 0)) {
                       if ((catch_eff > 0) & intervention == 1) {
- //                     betat = rtgamma_eff(n_beta, sqrt(beta0 / beta0_k), beta0*dt/d, beta_catch, catch_eff)*exp(log(beta_min)*sip_prop);
-                        betat = rgammawn(sqrt(beta0 / (beta0_k * I)), beta0*dt/d) * exp(log(beta_min)*sip_prop); 
+                        betat = rtgamma_eff(n_beta, sqrt(beta0 / beta0_k), beta0*dt/d, beta_catch, catch_eff)*exp(log(beta_min)*sip_prop);
+                        // betat = rgammawn(sqrt(beta0 / (beta0_k * I)), beta0*dt/d) * exp(log(beta_min)*sip_prop); 
                       } else {
                         betat = rgammawn(sqrt(beta0 / (beta0_k * I)), beta0*dt/d) * exp(log(beta_min)*sip_prop);                
                       }
@@ -207,19 +207,26 @@ int nIa = ", nIa, ";  // Number of Ia boxes
 int nIp = ", nIp, ";  // Number of Ip boxes
 int nIm = ", nIm, ";  // Number of Im boxes
 int nIs = ", nIs, ";  // Number of Is boxes
-static R_INLINE void rtgamma_eff(int N, double sigma, double mu, 
-                                 double trim, double eff, double *out){
+
+static double rtgamma_eff(int N, double sigma, double mu, 
+                                 double trim, double eff){
+  double out = 0; 
   for(int i = 0; i < N; ++i) {
-    out[i] = rgammawn(sigma, mu);
-    double treat = runif(0, 1);
-    if(treat <= eff & out[i] > trim){ // if its above the cutoff and we're effective, resample
-      while(out[i] > trim){
-        out[i] = rgammawn(sigma, mu);
+    double ind = rgammawn(sigma, mu);
+    if(runif(0, 1) <= eff){ // if we're effective
+      while(ind > trim){ // and its above the cutoff, resample
+        ind = rgammawn(sigma, mu);
       }
     }
+    out += ind;
   }
-}")
+  return out/N;
+}
+
+")
   )
+
+
 
 # measures ----
 rmeas_multi_logis_con <- Csnippet("double tol = 1e-16;
