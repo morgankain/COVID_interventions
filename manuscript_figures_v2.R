@@ -10,14 +10,14 @@ counties_list = {list(
     focal.county = "Santa Clara"
   , focal.state  = "California"
   , focal.state_abbr = "CA"
-  , rds.name = "./output/Santa Clara_0_ind_theta_2020-06-23_cont_final.rds"
+  , rds.name = "./output/Santa Clara_0_2020-06-24_cont_round2.rds"
   , con_theta = F
   ),
   LA = list(
     focal.county = "Los Angeles",
     focal.state  = "California",
     focal.state_abbr = "CA",
-    rds.name = "output/Los Angeles_0_ind_theta_2020-06-23_cont_final.rds",
+    rds.name = "output/Los Angeles_0_2020-06-24_cont_round2.rds",
 #   rds.name = "output/Los Angeles_0_con_theta_2020-06-23_cont_final.rds",
     con_theta = F
   ),
@@ -25,21 +25,21 @@ counties_list = {list(
     focal.county = "King",
     focal.state  = "Washington",
     focal.state_abbr = "WA",
-    rds.name = "output/King_0_ind_theta_2020-06-23_cont_final.rds",
+    rds.name = "output/King_0_2020-06-24_cont_round2.rds",
     con_theta = F
   ),
   FC = list(
     focal.county = "Fulton",
     focal.state  = "Georgia",
     focal.state_abbr = "GA",
-    rds.name = "output/Fulton_0_ind_theta_2020-06-23_cont_final.rds",
+    rds.name = "output/Fulton_0_2020-06-24_cont_round2",
     con_theta = F
   ),
   MD = list(
     focal.county = "Miami-Dade",
     focal.state  = "Florida",
     focal.state_abbr = "FL",
-    rds.name = "output/Miami-Dade_0_ind_theta_2020-06-23_cont_final.rds",
+    rds.name = "output/Miami-Dade_0_2020-06-24_cont_round2.rds",
   # rds.name = "output/Miami-Dade_0_con_theta_2020-06-23_cont_final.rds",
     con_theta = F
   )#,
@@ -723,11 +723,11 @@ fig3_data %>%
 counties_list <- {
   list(
   SC =   list(
-    focal.county = "Santa Clara",
-    focal.state = "California",
-    focal.state_abbr = "CA",
-    rds.name = "output/Santa Clara_independent_theta_200_2020-06-15.rds",
-    con_theta = F
+    focal.county     = "Santa Clara"
+  , focal.state      = "California"
+  , focal.state_abbr = "CA"
+  , rds.name         = "output/Santa Clara_0_2020-06-24_cont_final.rds"
+  , con_theta        = F
   )#,
 #  KC = list(
 #    focal.county = "King",
@@ -742,64 +742,54 @@ counties_list <- {
 int_vars <- {
 list(
   lift_all = list(
-  counter.factual    = FALSE,
-  int.movement       = "mid",
-  int.type           = "tail",
-  int.init           = "2020-06-08",
-  int.end            = "2020-08-01", ## Doesnt matter, ignored for all int.type != "tail"
-  sim_title          = "Continue Shelter in Place",
-  thresh_inf.val     = 1,
-  int.catch_eff      = 1.0,
-  int.beta_catch       = 0.10, #0.10,
-  int.beta0_sigma      = 0.16,
-  int.beta0_sigma_post = 0.16, #0.16,
-  int.beta_catch_post  = 0.05,
-  int.catch_eff_post   = 0.0,
-    ## Needed SIP scaling with "mid" to get R to the desired R
-  int.sip_prop_scaling = check_R0(
-    beta0est     = variable_params$beta0est
-  , beta_min     = variable_params$beta_min
-  , fixed_params = unlist(c(fixed_params, variable_params))
-  , sd_strength  = 1
-  , prop_S       = 1
-  , desired_R    = 2.0) / 0.3463429
+   counter.factual      = FALSE
+ , int.movement         = "mid"
+ , int.type             = "tail"
+ , int.init             = "2020-07-01"
+ , int.end              = "2020-08-01"
+ , sim_title            = "Continue Shelter in Place"
+ , thresh_inf.val       = 1
+ , int.catch_eff        = 1.0
+ , int.beta_catch       = 0.05
+ , int.beta0_k          = 0.16
+ , int.beta0_k_post     = 0.16
+ , int.beta_catch_post  = 0.05
+ , int.catch_eff_post   = 0.00
  ),
   continue_SIP = list(
-  counter.factual    = FALSE,
-  int.movement       = "mid",
-  int.type           = "tail",
-  int.init           = "2020-06-08",
-  int.end            = "2020-08-01", ## Doesnt matter, ignored for all int.type != "tail"
-  sim_title          = "Minimial Tail Cut",
-  thresh_inf.val     = 1,
-  int.catch_eff      = 1.0,
-  int.beta_catch     = 0.10,
-  int.beta0_sigma    = 0.16,
-  int.beta0_sigma_post = 0.16,
-  int.beta_catch_post  = 0.05,
-  int.catch_eff_post   = 1.0,
-  int.sip_prop_scaling = (fig3_data %>% filter(county == "Santa Clara", beta_catch_pct == 0.95, catch_eff == 1.0))$sip / 0.3463429                                       
+   counter.factual      = FALSE
+ , int.movement         = "mid"
+ , int.type             = "tail"
+ , int.init             = "2020-07-01"
+ , int.end              = "2020-08-01"
+ , sim_title            = "Continue Shelter in Place"
+ , thresh_inf.val       = 1
+ , int.catch_eff        = 1.0
+ , int.beta_catch       = 0.05
+ , int.beta0_k          = 0.16
+ , int.beta0_k_post     = 0.16
+ , int.beta_catch_post  = 0.05
+ , int.catch_eff_post   = 1.00
 ),
   inf_iso = list(
-  counter.factual    = FALSE,
-  int.movement       = "mid",
-  int.type           = "tail",
-  int.init           = "2020-06-08",
-  int.end            = "2020-08-01", ## Doesnt matter, ignored for all int.type != "tail"
-  sim_title          = "Large Tail Cut",
-  thresh_inf.val     = 1,
-  int.catch_eff      = 1.0,
-  int.beta_catch     = 0.10,
-  int.beta0_sigma    = 0.16,
-  int.beta0_sigma_post = 0.16,
-  int.beta_catch_post  = 0.14,
-  int.catch_eff_post   = 0.8,
-  int.sip_prop_scaling = (fig3_data %>% filter(county == "Santa Clara", beta_catch_pct == 0.86, catch_eff == 0.8))$sip / 0.3463429
+   counter.factual      = FALSE
+ , int.movement         = "mid"
+ , int.type             = "tail"
+ , int.init             = "2020-07-01"
+ , int.end              = "2020-08-01"
+ , sim_title            = "Continue Shelter in Place"
+ , thresh_inf.val       = 1
+ , int.catch_eff        = 1.0
+ , int.beta_catch       = 0.05
+ , int.beta0_k          = 0.16
+ , int.beta0_k_post     = 0.16
+ , int.beta_catch_post  = 0.10
+ , int.catch_eff_post   = 1.00
 )
 )}
 
-source("epidemic_rebound/gamma_rebound_pomp.R")
 source("ggplot_theme.R")
+source("epidemic_rebound/gamma_rebound_pomp2.R")
 source("epidemic_rebound/gamma_rebound_params.R")
 
 nsim           <- 100
@@ -823,7 +813,6 @@ fig4_data <- adply(1:length(int_vars), 1,
           mutate(intervention = sim_title,
                  county = focal.county,
                  state = focal.state_abbr) 
-     #   return(SEIR.sim.f.ci)
          return(SEIR.sim.f.t)
         
         }
@@ -839,12 +828,19 @@ fig4_data$intervention <- factor(fig4_data$intervention, levels = unique(fig4_da
 fig4_colors <- c("#D67236", "dodgerblue4", "#0b775e", "magenta4")
 fig4_data   <- fig4_data %>% filter(state == "CA")
 
-check_date <- (fig4_data %>% filter(name == "I", .id == "median", intervention == "Continue Shelter in Place", date > "2020-05-01") %>% 
+check_date <- (fig4_data %>% filter(
+   name != "betat"
+ , .id == "median"
+ , intervention == "Continue Shelter in Place"
+ , date > "2020-05-01"
+  ) %>% 
     filter(value == min(value)) %>% 
     filter(date == min(date)))$date
 
 ## For just I plot
-fig4_data <- fig4_data %>% filter(date >= as.Date("2020-07-10")) %>% filter(name == "I")
+fig4_data <- fig4_data %>% 
+ # filter(date >= as.Date("2020-07-10")) %>%
+  filter(name != "betat")
 
 fig4_data %>%
   ggplot(aes(x = date, y = value
@@ -875,11 +871,11 @@ fig4_data %>%
   geom_vline(xintercept = check_date, linetype = "dashed", lwd = 0.5) + 
   geom_point(aes(x = date, y = data), 
              color = "black", size = 1) + 
-  scale_y_continuous(trans = "log10") +
   scale_fill_manual(values = fig4_colors, name = "Intervention") +
   scale_color_manual(values = fig4_colors, name = "Intervention") +
   facet_grid(name ~ county, scales = "free_y", switch = "y")  +
   ylab("") + 
+  scale_y_log10() + 
   theme(
     strip.background = element_blank()
     , legend.position  = c(0.850, 0.885)
