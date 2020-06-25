@@ -20,29 +20,10 @@ registerDoParallel(cores = usable.cores)
 ## Bring in pomp objects. 
 # source("COVID_pomp_gammabeta.R", local = T)
 # all we need from this is the R0 calculation, and we don't want to read in anything else, so lets just grab those lines
-# read_start = grep("covid_R0", readLines("COVID_pomp_gammabeta.R"))
-# read_end = grep("}", readLines("COVID_pomp_gammabeta.R"))
-# read_end = read_end[which(read_end > read_start)] %>% min
-# source(textConnection(paste(scan("COVID_pomp_gammabeta.R", what=character(), 
-#                                  sep = '\n', skip=read_start-1, nlines=read_end-read_start+1),
-#                             collapse='\n')))
-# not currently working, lets just plop the function here for now
-
-covid_R0   <- function (beta0est, fixed_params, sd_strength, prop_S) {
-  ## transmission rate
-  R <- beta0est * prop_S * sd_strength * (
-    # infectiousness of average infection
-    fixed_params["alpha"] * fixed_params["Ca"] +
-      (1 - fixed_params["alpha"]) * fixed_params["mu"] * 
-      ((fixed_params["lambda_p"]/(fixed_params["lambda_p"] + fixed_params["lambda_m"])) * fixed_params["Cp"] +
-         (fixed_params["lambda_m"]/(fixed_params["lambda_p"] + fixed_params["lambda_m"])) * fixed_params["Cm"]) +
-      (1 - fixed_params["alpha"]) * (1 - fixed_params["mu"]) * 
-      ((fixed_params["lambda_p"]/(fixed_params["lambda_p"] + fixed_params["lambda_s"])) * fixed_params["Cp"] + 
-         (fixed_params["lambda_s"]/(fixed_params["lambda_p"] + fixed_params["lambda_s"])) * fixed_params["Cs"]) 
-  ) 
-  unlist(R)
-}
-
+read_start = grep("covid_R0", readLines("COVID_pomp_gammabeta.R"))
+read_end = grep("}", readLines("COVID_pomp_gammabeta.R"))
+read_end = read_end[which(read_end > read_start)] %>% min
+source(textConnection(readLines("COVID_pomp_gammabeta.R")[read_start:read_end]))
 
 ## Load the previously saved fits
  ## If COVID_fit_cont.R was just run, use parameters already stored in the global env 
