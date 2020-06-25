@@ -6,27 +6,17 @@ mobility.file      <- "mobility/unfolded_Jun15.rds"  ## Mobility data
 
 fitting            <- FALSE   ## Small change in pomp objects if fitting or simulating
 use.rds            <- TRUE    ## Run from a previously stored RDS
-more.params.uncer  <- FALSE   ## Fit with more (FALSE) or fewer (TRUE) point estimates for a number of parameters
-nsim               <- 100     ## Number of epidemic simulations for each parameter set
-fit.E0             <- TRUE    ## Was E0 also fit?
-fixed.E0           <- !fit.E0 ## Accidental extra param...
 usable.cores       <- 1       ## Number of cores to use to fit, for simulation irrelevant
 
-determ_beta0       <- TRUE    ## Use deterministic beta0?
-int.beta0_k        <- 0.16    ## Heterogeneity k for the Neg Bin that explains variation in individual infectiveness
-dt                 <- 1/6      ## time step used in fractions of a day
- 
-date_origin        <- as.Date("2019-12-31")
+# date_origin        <- as.Date("2019-12-31")
 
 sir_init.mid       <- FALSE         ## Starts the epidemic from some non-zero timepoint
 sir_init.mid.t     <- "2020-05-28"  ## Date to simulate forward from
 
 ## Sim and plotting details
-sim_length         <- 260     ## How many days to run the simulation
-state.plot         <- "D"     ## State variable for plotting (Hospit [H], Death [D], or Cases [C])
+nsim               <- 100     ## Number of epidemic simulations for each parameter set
 plot.log10         <- TRUE    ## Plot on a log10 scale or not
 plot.median        <- TRUE    ## Use the median? or the mean?
-print.plot         <- FALSE
 
 loglik.max         <- TRUE    ## Use just the maximum likelihood fit for one trajectory (TRUE) or many as specified by loglik.thresh
 loglik.thresh      <- 2       ## Keep parameter sets with a likelihood within top X loglik units
@@ -45,18 +35,16 @@ ci.epidemic        <- TRUE    ## whether to limit to simulations where epidmeics
 ci.epidemic_cut    <- 100     ## Criteria of throwing away a stochastic realization as not resulting in an epidemic (total # infected)
 plot_vars          <- c("cases", "D")
 
-## Need to specify, but ignored for all scenarios that isn't the tail chopping intervention
-int.beta_catch      <- 0.05            ## beta0 values caught by intervention; alternatively, specify by top percent of distribution to trim
+## Intervention details
+counter.factual     <-  FALSE
+sim_end             <- "2020-12-31"     ## How many days to run the simulation
+int.init            <- c("2020-07-01", "2020-08-01") # need to be chronologically in order, any after sim_end get cut
+int.type            <- c("none", "none") # options are none, tail, inf_iso; starts at corresponding int.init
+int.movement        <- c("post", "post", "post") # movement returned to after data ends, then movement for each intervention period
+
+iso_mild_level      <- 1 #0.2
+iso_severe_level    <- 1 #0.2
+int.beta_catch      <- 0.0            ## beta0 values caught by intervention; alternatively, specify by top percent of distribution to trim
 int.beta_catch_type <- "pct"           ## if pct, treated as percentile, otherwise, as absoulte value
-int.catch_eff       <-  1              ## effectiveness at catching beta0 values above the beta_catch (0 - 1)
-iso_mild_level      <- 0.2
-iso_severe_level    <- 0.2
-
-int.continue        <- TRUE
-ci.epidemic         <- TRUE    ## Remove all epidemic simulations that dont take off
-
-# set number of boxes to use for multi compartment classes
-nE  <- 3 # must be >= 2
-nIa <- 7
-nIp <- 2 # must be >= 2
-nIm <- nIs <- 5 # must be >= 2
+int.catch_eff       <-  0              ## effectiveness at catching beta0 values above the beta_catch (0 - 1)
+int.beta0_k         <- 0.16    ## Heterogeneity k for the Neg Bin that explains variation in individual infectiveness
