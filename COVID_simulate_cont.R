@@ -214,7 +214,6 @@ for (i in 1:nrow(variable_params)) {
   } else{
     beta_catch_val = max(int.beta_catch, 0.001) # crude way to ensure int.beta_catch > 0, note that even this nonzero low beta_catch will be problematic but will eventually finish
   }
-  print(beta_catch_val)
   
 checktime <- system.time({
 
@@ -267,14 +266,30 @@ SEIR.sim %<>% {
 SEIR.sim.s <- SEIR.sim %>% 
   dplyr::filter(.id != "median") %>%
   group_by(day) %>%
-  summarise(S = mean(S), D = mean(D), .groups = "drop")
+  summarise(S = mean(S), D = mean(D), .groups = "drop") %>%
+  mutate(date = day + date_origin)
 
-# betat.t <- data.frame(
-#   paramset = i
-#   , date     = mob.covtab@times + date_origin
-#   , betat    = variable_params[i, "beta0"] * exp(log(variable_params[i, "beta_min"])*mob.covtab@table[which(dimnames(mob.covtab@table)[[1]] == "sip_prop"), ])
-# )
-# 
+betat.t <- data.frame(
+  paramset = i
+  , date     = mob.covtab@times + date_origin
+  , betat    = variable_params[i, "beta0"] * exp(log(variable_params[i, "beta_min"])*mob.covtab@table[which(dimnames(mob.covtab@table)[[1]] == "sip_prop"), ])
+)
+
+# not the cleanest, but join the sim summary and betat to get the dates aligned first, then calculate Reff
+Reff.t <- full_join(SEIR.sim.s, betat.t) %>% arrange(day) %>% 
+  filter(!is.na(S), !is.na(D), !is.na(betat)) %>% 
+  {data.frame(
+      paramset = i
+      , date     = pull(., date)
+      , Reff     = covid_R0(
+        beta0est      = pull(., betat)
+        , fixed_params  = unlist(variable_params[i, ])
+        , sd_strength   = 1
+        , prop_S        = pull(.,S) / (variable_params[i, "N"] - pull(.,D))
+      )
+    )
+    }
+
 # Reff.t <- data.frame(
 #   paramset = i
 #   , date     = mob.covtab@times + date_origin
@@ -285,23 +300,23 @@ SEIR.sim.s <- SEIR.sim %>%
 #     , prop_S        = SEIR.sim.s$S / (variable_params[i, "N"] - SEIR.sim.s$D)
 #   )
 # )
-# 
-# # detect.t <- c(rep(0, min(county.data[!is.na(county.data$cases), ]$day) - 1)
-# #               , (variable_params[i, "detect_max"] / 
-# #                    (1 + exp(-variable_params[i, "detect_k"] * (mob.covtab@times - variable_params[i, "detect_mid"])))
-# #               )[-seq(1, min(county.data[!is.na(county.data$cases), ]$day) - 1)]
-# # )
-# detect.t <- data.frame(
-#   paramset = i
-#   , date     = mob.covtab@times + date_origin
-#   , detect   = c(rep(0, min(pomp_data[!is.na(pomp_data$cases), "day"]) - 1)
-#                  , (variable_params[i, "detect_max"] /
-#                       (1 + exp(-variable_params[i, "detect_k"] * (mob.covtab@times - variable_params[i, "detect_mid"])))
-#                  )[-seq(1, min(pomp_data[!is.na(pomp_data$cases), ]$day) - 1)]))
-# 
-# betat  <- rbind(betat, betat.t)
-# Reff   <- rbind(Reff, Reff.t)
-# detect <- rbind(detect, detect.t)
+
+# detect.t <- c(rep(0, min(county.data[!is.na(county.data$cases), ]$day) - 1)
+#               , (variable_params[i, "detect_max"] /
+#                    (1 + exp(-variable_params[i, "detect_k"] * (mob.covtab@times - variable_params[i, "detect_mid"])))
+#               )[-seq(1, min(county.data[!is.na(county.data$cases), ]$day) - 1)]
+# )
+detect.t <- data.frame(
+  paramset = i
+  , date     = mob.covtab@times + date_origin
+  , detect   = c(rep(0, min(pomp_data[!is.na(pomp_data$cases), "day"]) - 1)
+                 , (variable_params[i, "detect_max"] /
+                      (1 + exp(-variable_params[i, "detect_k"] * (mob.covtab@times - variable_params[i, "detect_mid"])))
+                 )[-seq(1, min(pomp_data[!is.na(pomp_data$cases), ]$day) - 1)]))
+
+betat  <- rbind(betat, betat.t)
+Reff   <- rbind(Reff, Reff.t)
+detect <- rbind(detect, detect.t)
 
 ## Stich together output
 if (i == 1) {

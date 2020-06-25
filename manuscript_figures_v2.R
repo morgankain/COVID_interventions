@@ -12,7 +12,6 @@ counties_list = {list(
   # CC = list(rds.name = "output/Chester_0_2020-06-24_cont_round2.Rds")
 )}
 
-
 #####
 ## Figure 1: model fits ----
 #####
@@ -26,10 +25,8 @@ int_vars <- list(
  , sim_title          = "Reality"                                        
 )
 
-# set parameters
-
-sim_vars = list(loglik.max =  T,
-                loglik.num = 5,
+sim_vars = list(loglik.max     =  T,
+                loglik.num     = 5,
                 ci.stoc        = 0.025,
                 ci.epidemic    = T,
                 nsim           = 500,
@@ -50,9 +47,9 @@ fig1_data <- plyr::ldply(counties_list,
                              date = day + date_origin) %>%
                       select(date, any_of(plot_vars)) %>%
                       pivot_longer(any_of(plot_vars), values_to = "data")) %>%
-            # as.data.frame() %>%
-            # rbind(., (Reff %>% mutate(name = "Reff", lwr = NA, mid = Reff, upr = NA, data = NA) %>% select(-Reff) %>% dplyr::select(date, paramset, everything()))) %>%
-            # rbind(., (detect %>% mutate(name = "detect", lwr = NA, mid = detect, upr = NA, data = NA) %>% select(-detect) %>% dplyr::select(date, paramset, everything()))) %>%
+            as.data.frame() %>%
+            rbind(., (Reff %>% mutate(name = "Reff", lwr = NA, mid = Reff, upr = NA, data = NA) %>% select(-Reff) %>% dplyr::select(date, paramset, everything()))) %>%
+            rbind(., (detect %>% mutate(name = "detect", lwr = NA, mid = detect, upr = NA, data = NA) %>% select(-detect) %>% dplyr::select(date, paramset, everything()))) %>%
             mutate(intervention = sim_title,
                  county = variable_params[1, "county"] %>% as.character,
                  state = variable_params[1, "state"] %>% as.character)
