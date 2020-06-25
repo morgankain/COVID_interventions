@@ -51,8 +51,10 @@ fig1_data <- plyr::ldply(counties_list,
                       select(date, any_of(plot_vars)) %>%
                       pivot_longer(any_of(plot_vars), values_to = "data")) %>%
             as.data.frame() %>%
-            rbind(., (Reff %>% mutate(name = "Reff", lwr = NA, mid = Reff, upr = NA, .groups = NA, data = NA) %>% select(-Reff) %>% dplyr::select(date, paramset, everything()))) %>%
-            rbind(., (detect %>% mutate(name = "detect", lwr = NA, mid = detect, upr = NA, .groups = NA, data = NA) %>% select(-detect) %>% dplyr::select(date, paramset, everything()))) %>%
+            rbind(., (Reff %>% mutate(name = "Reff", lwr = NA, mid = Reff, upr = NA, .groups = NA, data = NA) %>%
+                select(-Reff) %>% dplyr::select(date, paramset, everything()))) %>%
+            rbind(., (detect %>% mutate(name = "detect", lwr = NA, mid = detect, upr = NA, .groups = NA, data = NA) %>% 
+                select(-detect) %>% dplyr::select(date, paramset, everything()))) %>%
             mutate(intervention = sim_title,
                  county = variable_params[1, "county"] %>% as.character,
                  state  = variable_params[1, "state"] %>% as.character)
@@ -117,23 +119,23 @@ list(
 , int.movement       = c("post", "post")
 , int.type           = "none"
 , int.init           = "2020-07-01"
-, sim_end            = "2020-07-31"
-, sim_title          = "Lift"                                    
+, sim_end            = "2020-08-31"
+, sim_title          = "Continue SIP"                                    
 ),
   continue_SIP = list(
   counter.factual    = FALSE
 , int.movement       = c("post", "pre")
 , int.type           = "none"
 , int.init           = "2020-07-01"
-, sim_end            = "2020-07-31"
-, sim_title          = "Continue SIP"                                        
+, sim_end            = "2020-08-31"
+, sim_title          = "Lift"                                        
 ),
   inf_iso = list(
   counter.factual    = FALSE
 , int.movement       = c("post", "mid")
 , int.type           = "inf_iso"
 , int.init           = "2020-07-01"
-, sim_end            = "2020-07-31"
+, sim_end            = "2020-08-31"
 , sim_title          = "Isolate"
 , iso_mild_level     = 0.1
 , iso_severe_level   = 0.1
@@ -143,31 +145,31 @@ list(
 , int.movement        = c("post", "mid")
 , int.type            = "tail"
 , int.init            = "2020-07-01"
-, sim_end             = "2020-07-31"
-, sim_title           = "Superspreading_0.01_1"
+, sim_end             = "2020-08-31"
+, sim_title           = "Superspreading_1%Tail_75%Eff"
 , int.beta_catch      = 0.01
 , int.beta_catch_type = "pct"
-, int.catch_eff       = 1.0
+, int.catch_eff       = 0.75
 ),
   tail_chop2 = list(
   counter.factual     = FALSE
 , int.movement        = c("post", "mid")
 , int.type            = "tail"
 , int.init            = "2020-07-01"
-, sim_end             = "2020-07-31"
-, sim_title           = "Superspreading_0.02_1"
+, sim_end             = "2020-08-31"
+, sim_title           = "Superspreading_2%Tail_50%Eff"
 , int.beta_catch      = 0.02
 , int.beta_catch_type = "pct"
-, int.catch_eff       = 1.0
+, int.catch_eff       = 0.50
 ),
   tail_chop3 = list(
   counter.factual     = FALSE
 , int.movement        = c("post", "mid")
 , int.type            = "tail"
 , int.init            = "2020-07-01"
-, sim_end             = "2020-07-31"
-, sim_title           = "Superspreading_0.05_1"
-, int.beta_catch      = 0.05
+, sim_end             = "2020-08-31"
+, sim_title           = "Superspreading_1%Tail_100%Eff"
+, int.beta_catch      = 0.01
 , int.beta_catch_type = "pct"
 , int.catch_eff       = 1.0
 )
@@ -177,14 +179,15 @@ list(
 sim_vars <- list(
  loglik.max       = TRUE
 , plot_vars       = c("cases", "deaths")
-, ci.stoc         = 0.025
+, ci.stoc         = 0.10
 , ci.epidemic     = T
 , ci.epidemic_cut = 500
-, nsim            = 200
+, nsim            = 100
+, plot.median     = F
   )
 
 fig2_data <- ldply(int_vars, function(j) {
-  ldply(counties_list[c("KC", "MD")], function (i) {
+  ldply(counties_list[c("KC", "LA")], function (i) {
     source("COVID_simulate_cont_params.R", local = T)
     with(c(i, j, sim_vars), {
       print(int.beta_catch)
@@ -209,29 +212,45 @@ fig2_data <- ldply(int_vars, function(j) {
 }
 , .id = NULL)
 
-fig2_colors <- c("#D67236", "dodgerblue4", "#0b775e", "magenta4")#, "magenta2")
+fig2_colors <- c("#D67236", "dodgerblue4", "#0b775e", "magenta4")
+fig2_data$name <- sapply(fig2_data$name, simpleCap)
 
 fig2_data %>% 
   filter(date >= as.Date("2020-02-10")) %>%
-  filter(intervention %in% c("Continue SIP",
-                             "Isolate",
-                             "Lift",
-                             "Superspreading_0.01_1"#,
-                             # "Superspreading_0.02_1"#,
-                             # "Superspreading_0.05_1"
+  filter(intervention %in% c(
+    "Continue SIP"
+  , "Isolate"
+  , "Lift"
+  , "Superspreading_1%Tail_75%Eff"
+# , "Superspreading_2%Tail_50%Eff"
+# , "Superspreading_1%Tail_100%Eff"
                              )) %>% 
-  # mutate(intervention = mapvalues(intervention,
-  #                                 from = c("Continue SIP",
-  #                                          "Isolate",
-  #                                          "Lift",
-  #                                          "Superspreading_0.01_1"),
-  #                                 to = c(
-  #                                   "Continue Shelter in Place"
-  #                                   , "Infected Isolation"
-  #                                   , "Lift all Interventions"
-  #                                   , "Superspreading Averted\n(1% Removed with 100% Effectiveness)"
-  #                                 ))) %>%
-  {ggplot(aes(x = date, y = mid, 
+   mutate(intervention = mapvalues(intervention,
+                                   from = c("Continue SIP",
+                                            "Isolate",
+                                            "Lift",
+                                            "Superspreading_1%Tail_75%Eff"),
+                                    to  = c(
+                                       "Continue shelter in place"
+                                     , "Infected isolation"
+                                     , "Lift all interventions"
+                                     , "Superspreading Averted(Top 1% of\ndistribution removed with 75% effectiveness)"
+                                   ))) %>%
+   mutate(county = mapvalues(county,
+                                   from = c("King",
+                                            "Los Angeles"
+                                     ),
+                                    to  = c(
+                                       "Seattle, WA"
+                                     , "Los Angeles, CA"
+                                   ))) %>% 
+   mutate(intervention = factor(intervention, levels = c(
+     "Lift all interventions"
+   , "Continue shelter in place"
+   , "Infected isolation"
+   , "Superspreading Averted(Top 1% of\ndistribution removed with 75% effectiveness)"
+     ))) %>% {
+    ggplot(aes(x = date, y = mid, 
               ymin = lwr, ymax = upr, 
               fill  = intervention, color = intervention),
           data = .) +
@@ -240,23 +259,25 @@ fig2_data %>%
                   , alpha = 0.50, colour = NA) +
   geom_line(data = (filter(., date >= as.Date("2020-07-01")))) +
   geom_ribbon(data = (filter(., date <= as.Date("2020-07-01")
-                             , intervention == "Lift"))
+                             , intervention == "Lift all interventions"))
   , alpha = 0.50, colour = NA, fill = "black") +
   geom_line(data = (filter(., date <= as.Date("2020-07-01")
-   , intervention == "Lift"
-    # , intervention == "Superspreading Averted_A"
+   , intervention == "Lift all interventions"
     ))
   , colour = "black") +
   geom_vline(xintercept = as.Date("2020-07-01"), linetype = "dashed", lwd = 0.5) + 
   geom_point(aes(x = date, y = data), 
              color = "black", size = 1) + 
   scale_y_continuous(trans = "log10", labels = trans_format('log10', math_format(10^.x))) +
-  scale_fill_manual(values = fig2_colors, name = "Intervention") +
-  scale_color_manual(values = fig2_colors, name = "Intervention") +
+  scale_fill_manual(values = fig2_colors[c(2,1,3,4)]
+    , name = "Intervention") +
+  scale_color_manual(values = fig2_colors[c(2,1,3,4)]
+    , name = "Intervention") +
   ylab("") + 
   theme(
     strip.background = element_blank()
-    , legend.position  = c(0.100, 0.925)
+    , legend.position  = c(0.670, 0.905)
+    , legend.text = element_text(size = 12)
     , legend.background = element_blank()
     , strip.placement = "outside"
     , strip.text = element_text(size = 16)
