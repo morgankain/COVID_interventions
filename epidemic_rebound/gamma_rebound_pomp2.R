@@ -242,6 +242,7 @@ sir_init <- Csnippet("
                      R = 0;
                      D = 0;
                      D_new = 0;
+                     thresh_crossed = 0;
                      ")
 
 rmeas_multi_logis_con <- Csnippet("double tol = 1e-16;
@@ -364,7 +365,7 @@ state_names = c(
 
 accum_names <- c("D_new", "I_new_sympt")
 
-check_R0 <- function (beta0est, beta_min, fixed_params, sd_strength, prop_S, desired_R) {
+check_R0   <- function (beta0est, beta_min, fixed_params, sd_strength, prop_S, desired_R) {
   
   inf <- fixed_params["alpha"] * fixed_params["Ca"] +
      (1 - fixed_params["alpha"]) * fixed_params["mu"] * 
