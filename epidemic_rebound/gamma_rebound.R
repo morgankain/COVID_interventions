@@ -57,19 +57,26 @@ mob.covtab <- covariate_table(
 ## Set up intervention scenario
 ####
 
-int.begin    <- as.numeric((as.Date(int.init) - date_origin))
-int.duration <- min(as.Date(int.end), variable_params[i, ]$sim_start + sim_length) - as.Date(int.init)
-
-int.phase1 <- nrow(mobility) + (int.begin - nrow(mobility))
-int.phase2 <- as.numeric(int.duration)
-int.phase3 <- sim_length - int.phase1 - int.phase2
-
 ## Covariate table with all of the intervention scenarios
 source("epidemic_rebound/gamma_rebound_covar.R", local = T)
 
 }
 
-covid_mobility_sim <- pomp(covid_mobility, covar = mob.covtab)
+covid_mobility <- pomp(
+  data         = county.data %>% select(day, cases, deaths)
+  , times      = "day"
+  , t0         = 1
+  , covar      = mob.covtab
+  , rprocess   = euler(sir_step_mobility, delta.t = dt)
+  , rmeasure   = {if(con_theta){rmeas_multi_logis_con}else{rmeas_multi_logis_ind}}
+  , dmeasure   = {if(con_theta){dmeas_multi_logis_con}else{dmeas_multi_logis_ind}}
+  , rinit      = sir_init
+  , partrans   = {if(con_theta){par_trans_con}else{par_trans_ind}}
+  , accumvars  = accum_names
+  , paramnames = param_names
+  , statenames = state_names
+  , globals    = globs
+)  
 
 ## Second bit of the intervention will affect these parameters:
 variable_params[i, "beta0_k"]      <- int.beta0_k  ## heterogeneity value
@@ -112,7 +119,7 @@ sim_times <- seq(as.numeric(variable_params[i,]$sim_start - date_origin), max(mo
     SEIR.sim <- do.call(
       pomp::simulate
       , list(
-        object   = covid_mobility_sim
+        object   = covid_mobility
         , t0     = as.numeric(variable_params[i,]$sim_start - date_origin)
         , times  = sim_times
         , params = c(variable_params[i,] %>% unlist %>% 
@@ -122,7 +129,7 @@ sim_times <- seq(as.numeric(variable_params[i,]$sim_start - date_origin), max(mo
         , nsim         = nsim
         , format       = "d"
         , include.data = F
-        , seed         = 1001))
+        , seed         = 1002))
   
 })[3]
 
@@ -204,8 +211,6 @@ if (((i / 20) %% 1) == 0) {
 }
 
 }
-
-SEIR.sim.f <- SEIR.sim.f %>% filter(date < min(variable_params$sim_start + sim_length))
 
 ####
 ## Summary for plotting

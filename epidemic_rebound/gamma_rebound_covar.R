@@ -48,6 +48,8 @@ sim_end  <- as.Date(sim_end)
                                          to   = c(0, 1, 2))), int.phases)   
       , iso_mild_level_post   = iso_mild_level_post
       , iso_severe_level_post = iso_severe_level_post
+      , check_int             = c(rep(1, int.phases[1]), rep(0, int.phases[2] + int.phases[3]))
+      , thresh_inf            = thresh_inf.val
       )
     
     

@@ -50,8 +50,8 @@ sir_step_mobility <- Csnippet("
                        sIs += Is[i];      
                      }
                      
-                    double I = sIa + sIp + sIm + sIs;
-                    int n_beta = round(fmax(I, 1));
+                     double I = sIa + sIp + sIm + sIs;
+                     int n_beta = round(fmax(I, 1));
                     
                       if (thresh_crossed == 0) {
                     
@@ -348,7 +348,7 @@ param_names <- c(
   , "sip_prop_post"
 )
 
-state_names = c(
+state_names <- c(
   "S" 
   , paste0('E',1:nE)
   , paste0('Ia',1:nIa)
