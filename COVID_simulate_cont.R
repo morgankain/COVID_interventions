@@ -368,9 +368,9 @@ SEIR.sim <- do.call(
   pomp::simulate
   , list(
     object   = covid_mobility
-    , t0     = 1
-     , times  = 1:sim_length
-  #  , times  = c(county.data$day, max(county.data$day):(max(county.data$day) + sim_length - length(county.data$day)))
+    , t0     = as.numeric(sim_parms$sim_start - date_origin)
+  # , times  = 1:sim_length
+    , times  = c(county.data$day, max(county.data$day):(max(county.data$day) + sim_length - length(county.data$day)))
     , params = c(fixed_params %>% t() %>% 
                    as.data.frame() %>% 
                    mutate(d  = variable_params[i, "alpha"] * lambda_a + 
@@ -445,7 +445,7 @@ Reff.t       <- with(variable_params[i, ], covid_R0(
    beta0est      = betat.t
  , fixed_params  = c(fixed_params, unlist(variable_params[i, ]))
  , sd_strength   = 1
- , prop_S        = SEIR.sim.s$S / (fixed_params[["N"]] - SEIR.sim.s$D)
+ , prop_S        = SEIR.sim.s$S / (variable_params[i, "N"] - SEIR.sim.s$D)
   )
   )
 
