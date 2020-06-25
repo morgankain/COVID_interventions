@@ -549,11 +549,12 @@ list(
   just_sip = list(
    counter.factual      = FALSE
  , int.movement         = c("post", "mid")
- , int.type             = "none"
+ , int.type             = "tail"
  , int.init             = "2020-07-01"
- , int.end              = "2020-09-01"
- , sim_title            = "Continue Shelter in Place"
- , thresh_inf.val       = 1
+ , sim.end              = "2020-12-01"
+ , sim_title            = "Just Shelter in Place"
+ , thresh_inf.val       = 5
+ , int.beta_catch_type  = "pct"
  , int.catch_eff        = 0.75
  , int.beta_catch       = 0.005
  , int.beta0_k          = 0.16
@@ -566,9 +567,9 @@ list(
  , int.movement         = c("post", "mid")
  , int.type             = "tail"
  , int.init             = "2020-07-01"
- , int.end              = "2020-09-01"
+ , sim.end              = "2020-12-01"
  , sim_title            = "Minor tail chop"
- , thresh_inf.val       = 1
+ , thresh_inf.val       = 5
  , int.catch_eff        = 0.75
  , int.beta_catch       = 0.005
  , int.beta0_k          = 0.16
@@ -581,9 +582,9 @@ list(
  , int.movement         = c("post", "mid")
  , int.type             = "tail"
  , int.init             = "2020-07-01"
- , int.end              = "2020-09-01"
+ , sim.end              = "2020-12-01"
  , sim_title            = "Major tail chop"
- , thresh_inf.val       = 1
+ , thresh_inf.val       = 5
  , int.catch_eff        = 0.75
  , int.beta_catch       = 0.005
  , int.beta0_k          = 0.16
@@ -597,9 +598,7 @@ source("ggplot_theme.R")
 source("epidemic_rebound/gamma_rebound_pomp2.R")
 source("epidemic_rebound/gamma_rebound_params.R")
 
-nsim           <- 200
-thresh_inf.val <- 2
-sim_length     <- 400     ## How many days to run the simulation
+nsim           <- 100
 plot_vars      <- c("cases", "deaths")
 ci.stoch       <- 0.1
 
@@ -609,7 +608,7 @@ fig4_data <- adply(1:length(int_vars), 1,
       function(i) {
         with(c(counties_list[[i]], int_vars[[j]]), {
         source("epidemic_rebound/gamma_rebound.R", local = T)
-        SEIR.sim.f.t %<>% 
+        SEIR.sim.f.ci %<>% 
           full_join(county.data %>%
                       arrange(date) %>%
                       mutate(D = cumsum(ifelse(is.na(deaths), 0, deaths))*
@@ -619,7 +618,7 @@ fig4_data <- adply(1:length(int_vars), 1,
           mutate(intervention = sim_title,
                  county       = focal.county,
                  state        = focal.state_abbr) 
-         return(SEIR.sim.f.t)
+         return(SEIR.sim.f.ci)
         
         }
         )
@@ -628,13 +627,12 @@ fig4_data <- adply(1:length(int_vars), 1,
       }
         , .id = NULL)
 
-# fig4_data <- SEIR.sim.f.t
+# fig4_data <- SEIR.sim.f.ci
 
 fig4_data$name         <- sapply(fig4_data$name, simpleCap)
 fig4_data$intervention <- factor(fig4_data$intervention, levels = unique(fig4_data$intervention))
 
 fig4_colors <- c("#D67236", "dodgerblue4", "#0b775e", "magenta4")
-# fig4_data   <- fig4_data %>% filter(state == "CA")
 
 check_date <- (fig4_data %>% filter(
   .id           == "median"
@@ -709,8 +707,7 @@ droplevels(fig4_data) %>% filter(state == "CA", .id != "median") %>% filter(name
     , est = quantile(value, 0.500) 
     , upr = quantile(value, 0.975))
 
-fig4_data %>%
-  filter(name == "Cases") %>%
+fig4_data %>% filter(name == "Cases") %>% filter(date >= check_date) %>%
   ggplot(aes(x = date
     # , y = value
     , y = mid
@@ -718,10 +715,9 @@ fig4_data %>%
     , color = intervention
    # , group = .id
     )) +
-  geom_ribbon(data = (fig4_data %>% filter(date >= check_date))
-   , alpha = 0.50, colour = NA) +
-  geom_line(data = (fig4_data %>% filter(date >= check_date))
-   ) + 
+  geom_ribbon(
+  #  data = (fig4_data %>% filter(date >= check_date))
+    alpha = 0.50, colour = NA) +
 #  geom_line(data = (fig4_data %>% filter(date >= check_date, .id != "median"))
 #    , aes(group = interaction(.id, intervention))
 #    , lwd = 0.25, alpha = 0.40
@@ -729,17 +725,19 @@ fig4_data %>%
 #  geom_line(data = (fig4_data %>% filter(date >= check_date, .id == "median"))
 #    , aes(group = interaction(.id, intervention))
 #   , lwd = 1.5) +
-  geom_ribbon(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place"))
-  , alpha = 0.50, colour = NA, fill = "black") +
-  geom_line(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place"))
-  , colour = "black") +
+  geom_ribbon(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place", name == "Cases"))
+   , aes(
+      ymin = lwr, ymax = upr
+   )
+   , alpha = 0.50, colour = NA, fill = "black") +
+# geom_line(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place")), colour = "black") +
 #  geom_line(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place", .id != "median"))
 #    , lwd = 0.25, alpha = 0.40, colour = "black"
 #   ) +
 #  geom_line(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place", .id == "median"))
 #    , colour = "black"
 #    , lwd = 1.5) +
-  geom_vline(xintercept = check_date, linetype = "dashed", lwd = 0.5) + 
+# geom_vline(xintercept = check_date, linetype = "dashed", lwd = 0.5) + 
 # geom_point(aes(x = date, y = data), color = "black", size = 1) + 
 #  scale_y_continuous(trans = "log10") +
   scale_fill_manual(values = fig4_colors, name = "Intervention") +
