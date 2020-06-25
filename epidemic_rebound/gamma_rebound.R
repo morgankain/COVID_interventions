@@ -6,60 +6,11 @@ source("epidemic_rebound/gamma_rebound_setup.R", local = T)
 ## Simulate: loop over rows of variable_params
 ####
 
-Reff   <- data.frame(paramset = 0, date = 0, Reff = 0)  ; Reff <- Reff[-1, ]
-betat  <- data.frame(paramset = 0, date = 0, betat = 0) ; betat <- betat[-1, ]
-detect <- data.frame(paramset = 0, date = 0, detect = 0); detect <- detect[-1, ]
-
 for (i in 1:nrow(variable_params)) {
-  
-county.data <- deaths %>% 
-  mutate(day = as.numeric(date - variable_params[i, ]$sim_start)) %>% 
-  dplyr::filter(day > 0) %>%
-  dplyr::select(day, date, deaths, cases) %>% 
-  mutate(deaths = deaths - lag(deaths),
-         cases = cases - lag(cases)) %>% 
-  dplyr::filter(!is.na(deaths), !is.na(cases))
-
-county.data <- rbind(
-  data.frame(
-    day    = seq(1:(min(county.data$day) - 1))
-  , date   = as.Date(seq(1:(min(county.data$day) - 1)), origin = variable_params[i, "sim_start"])
-  , deaths = NA
-  , cases  = NA
-  )
-, county.data 
-  )
-
-mobility <- readRDS("unfolded_Jun05.rds") %>% 
-  dplyr::filter(county_name == focal.county & state_abbr == focal.state_abbr)  %>%
-  dplyr::select(datestr, sip_prop) %>% 
-  dplyr::filter(!is.na(sip_prop)) %>%
-  mutate(day = as.numeric(datestr - as.Date("2019-12-31"))) %>% 
-  arrange(day) %>% 
-  dplyr::filter(datestr >= variable_params[i, ]$sim_start) %>%
-  mutate(day = day - as.numeric((variable_params[i, ]$sim_start - as.Date("2019-12-31")))) %>%
-  dplyr::filter(!is.na(sip_prop)) %>% 
-  dplyr::filter(day > 0)
-  
-if (min(mobility$day) > 1) {
-mobility <- rbind(
-  data.frame(
-    datestr  = as.Date(seq(1:(min(mobility$day) - 1)), origin = variable_params[i, ]$sim_start)
-  , sip_prop = mean(mobility$sip_prop[1:10])
-  , day      = seq(1:(min(mobility$day) - 1))
-  )
-, mobility
-  )  
-}
- 
-mobility <- mobility %>% filter(sip_prop != 0)
 
 print(rds.name)
-print(variable_params$paramset)
-print(variable_params$log_lik)
-
-## Remove dates after one week after movement data ends
-county.data <- county.data %>% dplyr::filter(date < (max(mobility$datestr) + 7))
+print(variable_params$paramset[i])
+print(variable_params$log_lik[i])
 
 if (counter.factual) {
   
@@ -106,8 +57,8 @@ mob.covtab <- covariate_table(
 ## Set up intervention scenario
 ####
 
-int.begin    <- as.numeric((as.Date(int.init) - variable_params[i, ]$sim_start))
-int.duration <- as.Date(int.end) - as.Date(int.init)
+int.begin    <- as.numeric((as.Date(int.init) - date_origin))
+int.duration <- min(as.Date(int.end), variable_params[i, ]$sim_start + sim_length) - as.Date(int.init)
 
 int.phase1 <- nrow(mobility) + (int.begin - nrow(mobility))
 int.phase2 <- as.numeric(int.duration)
@@ -141,14 +92,12 @@ mob.covtab <- covariate_table(
     
    }
   
- , order         = "constant"
- , times         = seq(1, sim_length, by = 1)
- , detect_t0     = min(county.data[!is.na(county.data$cases), ]$day) - 1
-  
- , thresh_inf       = thresh_inf.val
- , check_int        = c(rep(1, int.phase1), rep(0, int.phase2 + int.phase3))
- , iso_mild_level   = iso_mild_level
- , iso_severe_level = iso_severe_level
+ , order                 = "constant"
+ , times                 = seq(1, sim_length, by = 1)
+ , thresh_inf            = thresh_inf.val
+ , check_int             = c(rep(1, int.phase1), rep(0, int.phase2 + int.phase3))
+ , iso_mild_level        = iso_mild_level
+ , iso_severe_level      = iso_severe_level
  , iso_mild_level_post   = iso_mild_level_post
  , iso_severe_level_post = iso_severe_level_post
   
@@ -181,62 +130,79 @@ mob.covtab <- covariate_table(
 }
 
 covid_mobility <- pomp(
-   data       = county.data
+   data       = county.data %>% select(day, cases, deaths)
  , times      = "day"
  , t0         = 1
  , covar      = mob.covtab
- , rprocess   = euler(sir_step_mobility, delta.t = 1/6)
- , rmeasure   = rmeas_multi_logis
- , dmeasure   = dmeas_multi_logis
+ , rprocess   = euler(sir_step_mobility, delta.t = dt)
+ , rmeasure   = {if(con_theta){rmeas_multi_logis_con}else{rmeas_multi_logis_ind}}
+ , dmeasure   = {if(con_theta){dmeas_multi_logis_con}else{dmeas_multi_logis_ind}}
  , rinit      = sir_init
- , partrans   = par_trans
+ , partrans   = {if(con_theta){par_trans_con}else{par_trans_ind}}
  , accumvars  = accum_names
  , paramnames = param_names
  , statenames = state_names
- , globals    = trunc_gamma
+ , globals    = globs
 )
 
 ## Second bit of the intervention will affect these parameters:
-fixed_params["beta0_sigma"]      <- int.beta0_sigma  ## heterogeneity value
-fixed_params["beta_catch"]       <- {                ## beta0 values caught by intervention
+fixed_params["beta0_k"]      <- int.beta0_k  ## heterogeneity value
+fixed_params["beta_catch"]  <- {                ## beta0 values caught by intervention
   if(int.beta_catch_type == "pct") {
     max(qgamma(p = (1 - int.beta_catch), 
-               shape = int.beta0_sigma, 
-               scale = variable_params[i, "beta0est"]/int.beta0_sigma),
+               shape = int.beta0_k, 
+               scale = variable_params[i, "beta0"]/int.beta0_k),
         0.001)
   } else{
     max(int.beta_catch, 0.001) # crude way to ensure int.beta_catch > 0, note that even this nonzero low beta_catch will be problematic but will eventually finish
   }
 }
 fixed_params["catch_eff"]        <- int.catch_eff    ## beta0 values caught by intervention
-fixed_params["sip_prop_scaling"] <- int.sip_prop_scaling
+fixed_params["sip_prop_post"]    <- SIP_post
 
 fixed_params["beta_catch_post"]  <- {                ## beta0 values caught by intervention
   if(int.beta_catch_type == "pct") {
     max(qgamma(p = (1 - int.beta_catch_post), 
-               shape = int.beta0_sigma, 
-               scale = variable_params[i, "beta0est"]/int.beta0_sigma),
+               shape = int.beta0_k_post, 
+               scale = variable_params[i, "beta0"]/int.beta0_k_post),
         0.001)
   } else{
     max(int.beta_catch_post, 0.001) # crude way to ensure int.beta_catch > 0, note that even this nonzero low beta_catch will be problematic but will eventually finish
   }
 }
 fixed_params["catch_eff_post"]   <- int.catch_eff_post
-fixed_params["beta0_sigma_post"] <- int.beta0_sigma_post  ## heterogeneity value
+fixed_params["beta0_k_post"]     <- int.beta0_k_post  ## heterogeneity value
 
 print(int.type)
+print(fixed_params["catch_eff_post"])
+print(fixed_params["beta_catch_post"])
 
 checktime <- system.time({
 
+## Simulate from fits
 SEIR.sim <- do.call(
   pomp::simulate
   , list(
-    object         = covid_mobility
-    , times        = mob.covtab@times
-    , params = c(
-      fixed_params
+    object   = covid_mobility
+    , t0     = min(as.numeric(variable_params[i, ]$sim_start - date_origin), county.data$day)
+  # , times  = 1:sim_length
+    , times  = c(county.data$day, max(county.data$day):(max(county.data$day) + sim_length - length(county.data$day)))
+    , params = c(fixed_params %>% t() %>% 
+                   as.data.frame() %>% 
+                   mutate(d  = variable_params[i, "alpha"] * lambda_a + 
+                       (1 - variable_params[i, "alpha"]) * variable_params[i, "mu"] * (lambda_p + lambda_m) + 
+                       (1 - variable_params[i, "alpha"])*(1 - variable_params[i, "mu"])*(lambda_p + lambda_s)
+                   ) %>%  
+                   # convert periods to rates
+                   mutate(gamma    = -1/(nE*dt)*log(1-nE*dt/gamma),
+                          lambda_a = -1/(nIa*dt)*log(1-nIa*dt/lambda_a),
+                          lambda_p = -1/(nIp*dt)*log(1-nIp*dt/lambda_p), 
+                          lambda_m = -1/(nIm*dt)*log(1-nIm*dt/lambda_m),
+                          lambda_s = -1/(nIs*dt)*log(1-nIs*dt/lambda_s),
+                          rho_r    = -1/dt*log(1-dt/rho_r)) %>%
+                   unlist
       , c(
-        beta0      = variable_params[i, "beta0est"]
+        beta0      = variable_params[i, "beta0"]
       , E_init     = variable_params[i, "E_init"]
       , detect_max = variable_params[i, "detect_max"]
       , detect_mid = variable_params[i, "detect_mid"]
@@ -248,19 +214,15 @@ SEIR.sim <- do.call(
       , alpha      = variable_params[i, "alpha"]
       , delta      = variable_params[i, "delta"]
       , mu         = variable_params[i, "mu"]
-      , rho_d      = variable_params[i, "rho_d"]        
+      , E_init     = variable_params[i, "E_init"]
+      , rho_d      = variable_params[i, "rho_d"]
+      , detect_t0  = min(county.data[!is.na(county.data$cases), ]$day) - 1
         ))
     , nsim         = nsim
     , format       = "d"
     , include.data = F
-    , seed         = 1001)) %>% {
-      rbind(.,
-         group_by(., day) %>%
-           dplyr::select(-.id) %>%
-           summarise_all(median) %>%
-                    mutate(.id = "median"))
-    }
-
+    , seed         = 1001))
+      
 })[3]
 
 print(checktime)
@@ -270,85 +232,23 @@ SEIR.sim <- SEIR.sim %>%
       date     = round(as.Date(day, origin = variable_params[i, ]$sim_start))
     , paramset = variable_params[i, ]$paramset)
 
-
-## Need to think about the most principled way of simulating forward from the present. For now just take the median up until the present as the
- ## starting values, and project from there
-if (sir_init.mid) {
-  
-new.startvals <- SEIR.sim %>% filter(.id == "median" & date == sir_init.mid.t)  
-new.days      <- seq(as.numeric((as.Date(sir_init.mid.t) - variable_params[i, ]$sim_start)), sim_length)
-
-mob.covtab.c <- mob.covtab
-mob.covtab.c@times <- mob.covtab@times[1:(length(new.days))]
-mob.covtab.c@table <- mob.covtab@table[, min(new.days):sim_length]
-
-covid_mobility <- pomp(
-   data       = county.data
- , times      = "day"
- , t0         = 1
- , covar      = mob.covtab.c
- , rprocess   = euler(sir_step_mobility, delta.t = 1/6)
- , rmeasure   = rmeas_multi_logis
- , dmeasure   = dmeas_multi_logis
- , rinit      = sir_init_mid
- , partrans   = par_trans
- , accumvars  = accum_names
- , paramnames = c(param_names, mid_init_param_names)
- , statenames = state_names
- , globals    = trunc_gamma
-)
-
-SEIR.sim.c <- do.call(
-  pomp::simulate
-  , list(
-    object         = covid_mobility
-    , times        = mob.covtab.c@times
-    , params = c(prev.fit[["fixed_params"]]
-      , c(
-        beta0      = variable_params[i, "beta0est"]
-      , detect_max = variable_params[i, "detect_max"]
-      , detect_mid = variable_params[i, "detect_mid"]
-      , detect_k   = variable_params[i, "detect_k"]
-      , theta      = variable_params[i, "theta"]
-      , theta2     = variable_params[i, "theta2"]
-      , beta_min   = variable_params[i, "beta_min"]
-      , Ca         = variable_params[i, "Ca"]
-      , alpha      = variable_params[i, "alpha"]
-      , delta      = variable_params[i, "delta"]
-      , mu         = variable_params[i, "mu"]
-        )
-      , unlist(c(
-        E_init     = round(new.startvals$E)
-      , S0         = round(new.startvals$S)
-      , Ia0        = round(new.startvals$Ia)
-      , Ip0        = round(new.startvals$Ip)
-      , Is0        = round(new.startvals$Is)
-      , Im0        = round(new.startvals$Im)
-      , Hr0        = round(new.startvals$Hr)
-      , Hd0        = round(new.startvals$Hd)
-      , R0         = round(new.startvals$R)
-      , D0         = round(new.startvals$D)
-      )))
-    , nsim         = nsim
-    , format       = "d"
-    , include.data = F
-    , seed         = 1001)) %>% {
-      rbind(.,
-         group_by(., day) %>%
-           dplyr::select(-.id) %>%
-           summarise_all(median) %>%
-                    mutate(.id = "median"))
-
+if(ci.epidemic){
+  epi_ids <- SEIR.sim %>% 
+    group_by(.id) %>% 
+    summarise(total_infect = max(D + R)) %>% 
+    filter(total_infect > ci.epidemic_cut*ceiling(variable_params[i, "E_init"])) %>% 
+    pull(.id)
+  print(paste0("limiting to epidemics, including ", length(epi_ids), " simulations"))
+  SEIR.sim %<>% filter(.id %in% epi_ids)
 }
 
-SEIR.sim.c <- SEIR.sim.c %>%
-  mutate(
-      date     = round(as.Date(day, origin = sir_init.mid.t))
-    , paramset = variable_params[i, ]$paramset)
-
-# SEIR.sim.c %>% filter(date == as.Date(sir_init.mid.t) + 3, .id == "median")
-# SEIR.sim %>% filter(date == as.Date(sir_init.mid.t) + 2, .id == "median")
-
+SEIR.sim %<>% {
+  rbind(.,
+        group_by(., day) %>%
+          dplyr::select(-.id) %>%
+          summarise_all(median) %>%
+          mutate(.id = "median"))
+  
 }
 
 SEIR.sim.s <- SEIR.sim %>% 
@@ -356,72 +256,66 @@ SEIR.sim.s <- SEIR.sim %>%
   group_by(day) %>%
   summarize(S = mean(S), D = mean(D))
 
-betat.t      <- variable_params[i, "beta0est"] * exp(log(variable_params[i, "beta_min"])*mob.covtab@table[which(dimnames(mob.covtab@table)[[1]] == "sip_prop"), ])
+betat.t      <- variable_params[i, "beta0"] * exp(log(variable_params[i, "beta_min"])*mob.covtab@table[which(dimnames(mob.covtab@table)[[1]] == "sip_prop"), ])
 
-Reff.t       <- with(variable_params[i, ], covid_R0(
-   beta0est      = betat.t
- , fixed_params  = c(fixed_params, unlist(variable_params[i, ]))
- , sd_strength   = 1
- , prop_S        = SEIR.sim.s$S / (
-   prev.fit[["fixed_params"]]["N"] -
-     SEIR.sim.s$D
-   )
- , inf_iso           = ifelse(int.type == "inf_iso", F, F)
- , iso_course_mild   = NA
- , iso_course_severe = NA
-  )
- )
+#Reff.t       <- with(variable_params[i, ], covid_R0(
+#   beta0est      = betat.t
+# , fixed_params  = c(fixed_params, unlist(variable_params[i, ]))
+# , sd_strength   = 1
+# , prop_S        = SEIR.sim.s$S / (variable_params[i, "N"] - SEIR.sim.s$D)
+#  )
+#  )
 
-detect.t <- c(rep(0, mob.covtab@table[which(dimnames(mob.covtab@table)[[1]] == "detect_t0"), 1])
-  , (variable_params[i, "detect_max"] / 
-    (1 + exp(-variable_params[i, "detect_k"] * (mob.covtab@times - variable_params[i, "detect_mid"])))
-    )[-seq(1, mob.covtab@table[which(dimnames(mob.covtab@table)[[1]] == "detect_t0"), 1])]
-)
+#detect.t <- c(rep(0, mob.covtab@table[which(dimnames(mob.covtab@table)[[1]] == "detect_t0"), 1])
+#  , (variable_params[i, "detect_max"] / 
+#    (1 + exp(-variable_params[i, "detect_k"] * (mob.covtab@times - variable_params[i, "detect_mid"])))
+#    )[-seq(1, mob.covtab@table[which(dimnames(mob.covtab@table)[[1]] == "detect_t0"), 1])]
+#)
 
-betat.t <- data.frame(
-  paramset = variable_params[i, ]$paramset
-, date     = seq(variable_params[i, ]$sim_start
-, variable_params[i, ]$sim_start + (sim_length - 1), by = 1)
-, betat    = betat.t
-  )
+#betat.t <- data.frame(
+#  paramset = variable_params[i, ]$paramset
+#, date     = seq(variable_params[i, ]$sim_start
+#, variable_params[i, ]$sim_start + (sim_length - 1), by = 1)
+#, betat    = betat.t
+#  )
 
-Reff.t <- data.frame(
-  paramset = variable_params[i, ]$paramset
-, date     = seq(variable_params[i, ]$sim_start
-, variable_params[i, ]$sim_start + (sim_length - 1), by = 1)
-, Reff     = Reff.t
-  )
+#Reff.t <- data.frame(
+#  paramset = variable_params[i, ]$paramset
+#, date     = seq(variable_params[i, ]$sim_start
+#, variable_params[i, ]$sim_start + (sim_length - 1), by = 1)
+#, Reff     = Reff.t
+#  )
 
-detect.t <- data.frame(
-  paramset = variable_params[i, ]$paramset
-, date     = seq(variable_params[i, ]$sim_start
-, variable_params[i, ]$sim_start + (sim_length - 1), by = 1)
-, detect   = detect.t
-  )
+#detect.t <- data.frame(
+#  paramset = variable_params[i, ]$paramset
+#, date     = seq(variable_params[i, ]$sim_start
+#, variable_params[i, ]$sim_start + (sim_length - 1), by = 1)
+#, detect   = detect.t
+#  )
 
-if (sir_init.mid) {
-SEIR.sim.c <- left_join(SEIR.sim.c, detect.t[, c(2, 3)], by = "date")
-SEIR.sim.c <- SEIR.sim.c %>% mutate(cases = I_new_sympt * detect)
-}
+#if (sir_init.mid) {
+#SEIR.sim.c <- left_join(SEIR.sim.c, detect.t[, c(2, 3)], by = "date")
+#SEIR.sim.c <- SEIR.sim.c %>% mutate(cases = I_new_sympt * detect)
+#}
 
-betat  <- rbind(betat, betat.t)
-Reff   <- rbind(Reff, Reff.t)
-detect <- rbind(detect, detect.t)
+# betat  <- rbind(betat, betat.t)
+# Reff   <- rbind(Reff, Reff.t)
+# detect <- rbind(detect, detect.t)
 
 ## Stich together output
-if (sir_init.mid) {
-if (i == 1) {
- SEIR.sim.f <- SEIR.sim.c 
-} else {
- SEIR.sim.f <- rbind(SEIR.sim.f, SEIR.sim.c) 
-}
-} else {
+#if (sir_init.mid) {
+#if (i == 1) {
+# SEIR.sim.f <- SEIR.sim.c 
+#} else {
+# SEIR.sim.f <- rbind(SEIR.sim.f, SEIR.sim.c) 
+#}
+#} else {
 if (i == 1) {
  SEIR.sim.f <- SEIR.sim  
 } else {
  SEIR.sim.f <- rbind(SEIR.sim.f, SEIR.sim) 
 }  
-}
+#}
 
 ## Keep track of progress
 if (((i / 20) %% 1) == 0) {
@@ -430,27 +324,41 @@ if (((i / 20) %% 1) == 0) {
 
 }
 
-SEIR.sim.f     <- SEIR.sim.f %>% filter(date < min(variable_params$sim_start + sim_length))
+SEIR.sim.f <- SEIR.sim.f %>% filter(date < min(variable_params$sim_start + sim_length))
 
 ####
 ## Summary for plotting
 ####
 
 SEIR.sim.f.t <- SEIR.sim.f %>% 
-  dplyr::select(date, day, .id, paramset, any_of(plot_vars))  %>%
+  dplyr::select(date, day, .id
+  #  , paramset
+    , any_of(plot_vars))  %>%
   pivot_longer(any_of(plot_vars))
 
 SEIR.sim.f.ci <- SEIR.sim.f.t %>% 
-  group_by(date, paramset, name) %>% 
+# fig4_data <- fig4_data %>% 
+  group_by(date
+  #  , paramset
+    , name
+#    , intervention
+    ) %>% 
   summarize(
-      lwr = quantile(value, 0 + ci.stoc)
+      lwr = quantile(value, 0 + ci.stoch, na.rm = T)
     , mid = {
       if (plot.median) {
-      quantile(value, c(0.500))  
+      quantile(value, c(0.500), na.rm = T)  
       } else {
-      mean(value) 
+      mean(value, na.rm = T) 
       }
     }
-    , upr = quantile(value, 1 - ci.stoc)
-  ) 
+    , upr = quantile(value, 1 - ci.stoch, na.rm = T)) 
 
+# SEIR.sim.f %>% filter(.id == 10) %>% ggplot() + geom_line(aes(date, betat))
+# SEIR.sim.f %>% filter(.id == 10) %>% ggplot() + geom_line(aes(date, I)) + geom_hline(yintercept = 1) + scale_y_log10()
+# fig4_data %>% filter(.id != "median", name == "betat", intervention == "Continue Shelter in Place") %>% ggplot() + geom_line(aes(date, value))
+# fig4_data %>% filter(.id == 4, name == "betat", intervention == "Continue Shelter in Place") %>% ggplot() + geom_line(aes(date, value))
+# fig4_data %>% filter(.id != "median", name == "I", intervention == "Continue Shelter in Place") %>% ggplot() + geom_line(aes(date, value)) + scale_y_log10()
+# fig4_data %>% filter(.id == 10, name == "I", intervention == "Continue Shelter in Place") %>% ggplot() + geom_line(aes(date, value)) + scale_y_log10()
+# fig4_data %>% filter(.id != "median", name == "I", intervention == "Continue Shelter in Place") %>% ggplot() +
+#   geom_line(aes(date, value, group = .id), alpha = 0.1) + scale_y_log10()

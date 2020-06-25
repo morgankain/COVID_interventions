@@ -1,21 +1,3 @@
-## Required packages to run this code
-needed_packages <- c(
-    "pomp"
-  , "plyr"
-  , "dplyr"
-  , "ggplot2"
-  , "magrittr"
-  , "scales"
-  , "lubridate"
-  , "tidyr"
-  , "foreach"
-  , "doParallel"
-  , "data.table"
-  , "doRNG")
-
-## load packages. Install all packages that return "FALSE"
-lapply(needed_packages, require, character.only = TRUE)
-
 sir_step_mobility <- Csnippet("
                       // adjust betat for social distancing interventions
                       // double betat;
