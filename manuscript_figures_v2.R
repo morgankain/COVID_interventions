@@ -55,9 +55,9 @@ sip_trunc_combns = function(beta_catch,
   return(out)
 }
 
-#####
+####
 ## Figure 1: model fits ----
-#####
+####
 
 int_vars <- list(
    counter.factual    = FALSE
@@ -151,9 +151,9 @@ fig1_data %>%
 ## LA with different axis
 source("manuscript_figures_v2_1b.R")
 
-#####
+####
 ## Figure 2: Interventions ----
-#####
+####
 
 int_vars <- {
 list(
@@ -327,10 +327,10 @@ fig2_data %>%
     , axis.text.x = element_text(size = 14)) +
   xlab("Date")}
 
-#####
+####
 ## Figure 3: SIP and truncation combinations ----
-#####  
-beta_catch_vals <- seq(0, 0.005, by = 0.00005)
+####  
+beta_catch_vals <- seq(0, 0.02, by = 0.00001)
 catch_eff_vals <- seq(0.5, 1, by = 0.25)
 loglik.max     <- F
 loglik.num     <- 3
@@ -401,7 +401,7 @@ fig3_data <- adply(1:length(counties_list), 1, function(i){
     return
 }, .id = NULL) 
 
-fig3_data %>% 
+fig3_curves <- fig3_data %>% 
   group_by(county, catch_eff, beta_catch_pct) %>% 
   {rbind(.,
          filter(., paramset != "data") %>% 
@@ -411,6 +411,7 @@ fig3_data %>%
                      sip = mean(sip)) %>% 
            mutate(paramset = "summary"))} %>% 
   ungroup() %>%
+  filter(!(catch_eff == 1 & beta_catch_pct > 0.005)) %>%
   mutate(., catch_eff_label = factor(paste0(as.numeric(catch_eff)*100, "% efficiency"),
                                      levels = paste0(as.numeric(unique(pull(., catch_eff)))*100, "% efficiency"))) %>% 
   {ggplot(data = filter(., paramset == "summary"),
@@ -443,91 +444,117 @@ fig3_data %>%
       scale_color_manual(values = fig1_colors) +
       scale_fill_manual(values = fig1_colors) +
       scale_shape_manual(guide = F, values = c(19, 17)) + #95)) + 
-      facet_wrap(~catch_eff_label)}
+      facet_wrap(~catch_eff_label) + 
+      theme(legend.position = c(0.9, 0.8))}
+
+fig3_curves
 
 hist_vars <- list(k = 0.16,
                   R0 = 2.5, 
                   dt = 1/6, 
                   d = 7,
-                  nsim = 1000,
+                  nsim = 10000,
+                  seed = 1001,
+                  N = 1000,
                   N_small = 10,
-                  N_large = 1000,
                   beta_catch = 0.001)
-par(mfcol = c(2, 3), las  = 1)
-hist(with(hist_vars, rgamma(nsim, shape = k*dt/d, scale = R0/k)),
-     breaks = 50,
-     freq = F,
-     xlab = "secondary cases",
-     main = "individual time step reproductive number")
-abline(v = with(hist_vars, qgamma(1 - beta_catch, shape = k*dt/d, scale = R0/k)),
-       col = "red", lty = "dashed")
-hist(with(hist_vars, replicate(nsim, sum(rgamma(d/dt, shape = k*dt/d, scale = R0/k)))),
-     breaks = 0:100,
-     freq = F,
-     xlab = "secondary cases",
-     main = "individual reproductive number")
-hist(with(hist_vars, 
-          replicate(nsim, sum(rtgamma(d/dt, shape = k*dt/d, scale = R0/k, 0, 1-beta_catch)))),
-     breaks = 0:100,
-     freq = F,
-     add = T, col = alpha("red", 0.5), border = NA)
 
-hist(with(hist_vars, replicate(nsim, mean(rgamma(N_small, shape = k*dt/d, scale = R0/k)))),
-     breaks = seq(0, 5, by = .25),
-     freq = F,
-     ylim = c(0, 4),
-     xlab = "average secondary cases",
-     main = paste0("population time step reproductive number, N = ", hist_vars$N_small))
-hist(with(hist_vars, replicate(nsim, mean(rtgamma(N_small, shape = k*dt/d, scale = R0/k, 0, 1 - beta_catch)))),
-     breaks = seq(0, 5, by = .25),
-     freq = F,
-     col = alpha("red", 0.5), border = NA,
-     add = T)
+## THE FOLLOWING ARE LARGE RANDOM NUMBER GENERATIONS, but takes < 5 mins to run 
+system.time({base_draws = with(hist_vars, {
+  set.seed(seed)
+  times = d/dt
+  return(array(rgamma(times*N*nsim, shape = k*dt/d, scale = R0/k), 
+        dim = c(times, N, nsim)))
+})})
 
-hist(with(hist_vars, 
-          replicate(nsim, 
-                    mean(replicate(N_small, 
-                                   sum(rgamma(d/dt, shape = k*dt/d, scale = R0/k)))))),
-     breaks = seq(0, 20, by = 0.25),
-     freq = F,
-     xlab = "average secondary cases",
-     main = paste0("population reproductive number, N = ", hist_vars$N_small))
-hist(with(hist_vars, replicate(nsim, mean(rtgamma(N_small, shape = k*dt/d, scale = R0/k, 0, 1 - beta_catch)))),
-     breaks = seq(0, 20, by = 0.25),
-     freq = F,
-     col = alpha("red", 0.5), border = NA,
-     add = T)
+system.time({trunc_draws = with(hist_vars, {
+  set.seed(seed)
+  times = d/dt
+  return(array(rtgamma(times*N*nsim, shape = k*dt/d, scale = R0/k, 0, 1 - beta_catch), 
+               dim = c(times, N, nsim)))
+})})
+
+fig3_hist_data = data.frame(
+  ind_step_base = base_draws[1,1,],
+  ind_step_trunc = trunc_draws[1,1,],
+  ind_inf_base = base_draws[,1,] %>% colSums(),
+  ind_inf_trunc = trunc_draws[,1,] %>% colSums(),
+  small_step_base = base_draws[1, 1:hist_vars$N_small, ] %>% colMeans,
+  small_step_trunc = trunc_draws[1, 1:hist_vars$N_small, ] %>% colMeans,
+  small_inf_base = base_draws[, 1:hist_vars$N_small,] %>% colSums %>% colMeans,
+  small_inf_trunc = trunc_draws[, 1:hist_vars$N_small,] %>% colSums %>% colMeans,
+  large_step_base = base_draws[1, , ] %>% colMeans,
+  large_step_trunc = trunc_draws[1, , ] %>% colMeans,
+  large_inf_base = base_draws %>% colSums %>% colMeans,
+  large_inf_trunc = trunc_draws %>% colSums %>% colMeans
+) %>% pivot_longer(ind_step_base:large_inf_trunc) %>%
+  separate(name, into = c("size", "time", "dist"))
+
+fig3_hist <- fig3_hist_data %>%
+  filter((time == "step" & size == "ind") | (time == "inf" & size == "large")) %>% 
+  mutate(time = factor(mapvalues(time, from = c("step", "inf"), 
+                                 to = c("4-hour time step", "infection duration")),
+                       levels = c("4-hour time step", "infection duration"))) %>% 
+  mutate( dist = mapvalues(dist, from = c("base", "trunc"), to = c("base", "truncated"))) %>%
+  mutate(size = factor(mapvalues(size, 
+                                 from = c("ind", "small", "large"), 
+                                 to = c("individual", paste0("small population, N = ", hist_vars$N_small), 
+                                        paste0("large population with N = ", hist_vars$N))),
+                       levels = c("individual", paste0("small population, N = ", hist_vars$N_small), 
+                                  paste0("large population with N = ", hist_vars$N)))) %>% 
+  unite("time_size", c("time", "size"), sep = ", ") %>% 
+  ggplot(aes(x = value, y = ..density.., group = dist, fill = dist, color = dist)) + 
+  geom_histogram(color = NA, position = "identity", alpha = 0.5) + 
+  # geom_density(adjust = 100, alpha = 0.5) +
+  geom_vline(data = data.frame(xint=with(hist_vars, qgamma(1 - beta_catch, shape = k*dt/d, scale = R0/k)),
+                               time = "4-hour time step",
+                               size = "individual") %>%
+               unite("time_size", c("time", "size"), sep = ", "),
+             aes(xintercept = xint), linetype = "dashed") +
+  facet_wrap( ~ time_size, scales = "free", nrow = 2) + 
+  scale_fill_manual(name = "Distribution", values = c("red", "blue")) + 
+  scale_color_manual(name = "Distribution", values = c("red", "blue")) + 
+  scale_y_continuous(trans = "sqrt") + 
+  scale_x_continuous(trans = "sqrt") + #, breaks = c(1, 5, 10, 20, 40, 100)) +
+  xlab("infection rate") + 
+  theme(legend.position = c(0.8, 0.8))
+fig3_hist
+
+fig3 <- gridExtra::arrangeGrob(fig3_hist, fig3_curves, 
+                               layout_matrix = matrix(c(1,2), 
+                                                      byrow  = T, nrow = 1),
+                               widths = c(1.3, 2.6))
+gridExtra::grid.arrange(fig3)
+
+figS3 <- fig3_hist_data %>%
+  mutate(time = factor(mapvalues(time, from = c("step", "inf"), to = c("4-hour time step", "infection")),
+                                 levels = c("4-hour time step", "infection"))) %>% 
+  mutate(size = factor(mapvalues(size, 
+                                 from = c("ind", "small", "large"), 
+                                 to = c("individual", paste0("small population, N = ", hist_vars$N_small), 
+                                        paste0("large population, N = ", hist_vars$N))),
+                       levels = c("individual", paste0("small population, N = ", hist_vars$N_small), 
+                                  paste0("large population, N = ", hist_vars$N)))) %>%
+  ggplot(aes(x = value, y = ..density.., group = dist, fill = dist, color = dist)) + 
+  geom_histogram(color = NA, position = "identity", alpha = 0.5) + 
+  # geom_density(adjust = 100, alpha = 0.5) + 
+  geom_vline(data = data.frame(xint=with(hist_vars, qgamma(1 - beta_catch, shape = k*dt/d, scale = R0/k)),
+                               time = "4-hour time step", 
+                               size = "individual"), 
+             aes(xintercept = xint), linetype = "dashed") +
+  facet_grid(size ~ time, scales = "free") + 
+  scale_fill_manual(values = c("red", "blue")) + 
+  scale_color_manual(values = c("red", "blue")) + 
+  scale_y_continuous(trans = "sqrt") + 
+  scale_x_continuous(trans = "sqrt", breaks = c(1, 5, 10, 20, 40, 100)) +
+  xlab("infection rate")
+
+figS3
 
 
-hist(with(hist_vars, replicate(nsim, mean(rgamma(N_large, shape = k*dt/d, scale = R0/k)))),
-     breaks = seq(0, 0.25, by = 0.02),
-     freq = F,
-     xlab = "average secondary cases",
-     main = paste0("population time step reproductive number, N = ", hist_vars$N_large))
-hist(with(hist_vars, replicate(nsim, mean(rtgamma(N_large, shape = k*dt/d, scale = R0/k, 0, 1 - beta_catch)))),
-     breaks = seq(0, 0.25, by = 0.02),
-     freq = F,
-     col = alpha("red", 0.5), border = NA,
-     add = T)
-
-## THE NEXT TWO CAN RUN SLOWLY DEPENDING ON N_LARGE AND NSIM
-hist(with(hist_vars, replicate(nsim, mean(replicate(d/dt, rgamma(N_large, shape = k*dt/d, scale = R0/k)) %>% rowSums))),
-     breaks = seq(1, 3.2, by = 0.1),
-     freq = F,
-     xlim = c(1, 3.25),
-     xlab = "average secondary cases",
-     main = paste0("population reproductive number, N = ", hist_vars$N_large))
-hist(with(hist_vars, 
-          # replicate(nsim, mean(rtgamma(N_large, shape = k*dt/d, scale = R0/k, 0, 1 - beta_catch)))),
-          replicate(nsim, mean(replicate(d/dt, rtgamma(N_large, shape = k*dt/d, scale = R0/k, 0, 1- beta_catch)) %>% rowSums))),
-     breaks = seq(1, 3.2, by = 0.1),
-     freq = F,
-     col = alpha("red", 0.5), border = NA,
-     add = T)
-
-#####
+####
 ## Figure 4: Epidemic rebound when rare ----
-#####  
+####  
 
 ## Have to run figure 3 in advance, which is annoying and likely should be fixed
 
