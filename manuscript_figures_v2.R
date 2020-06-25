@@ -329,11 +329,11 @@ fig2_data %>%
 
 ####
 ## Figure 3: SIP and truncation combinations ----
-####  
-beta_catch_vals <- seq(0, 0.02, by = 0.00001)
-catch_eff_vals <- seq(0.5, 1, by = 0.25)
-loglik.max     <- F
-loglik.num     <- 3
+#####  
+beta_catch_vals <- seq(0, 0.005, by = 0.00005)
+catch_eff_vals  <- seq(0.5, 1, by = 0.25)
+loglik.max      <- F
+loglik.num      <- 3
 
 fig3_data <- adply(1:length(counties_list), 1, function(i){
   prev.fit = readRDS(counties_list[[i]]$rds.name)
@@ -367,7 +367,7 @@ fig3_data <- adply(1:length(counties_list), 1, function(i){
   dt               <- covid_mobility@rprocess@delta.t
   
   sip_start <- arrange(pomp_data, day) %>% head(10) %>% pull(sip_prop) %>% mean
-  sip_max <- pomp_data %>% pull(sip_prop) %>% max
+  sip_max   <- pomp_data %>% pull(sip_prop) %>% max
   
   # now loop over all the top fits
   adply(1:nrow(variable_params), 1, function(j){
@@ -551,8 +551,6 @@ figS3 <- fig3_hist_data %>%
 
 figS3
 
-
-####
 ## Figure 4: Epidemic rebound when rare ----
 ####  
 
@@ -560,69 +558,63 @@ figS3
 
 counties_list <- {
   list(
-  SC =   list(
-    focal.county     = "Santa Clara"
-  , focal.state      = "California"
-  , focal.state_abbr = "CA"
-  , rds.name         = "output/Santa Clara_0_2020-06-24_cont_final.rds"
+  FC = list(
+    focal.county     = "Fulton"
+  , focal.state      = "Georgia"
+  , focal.state_abbr = "GA"
+  , rds.name         = "output/Fulton_0_2020-06-25_cont_round2.rds"
   , con_theta        = F
-  )#,
-#  KC = list(
-#    focal.county = "King",
-#    focal.state = "Washington",
-#    focal.state_abbr = "WA",
-#    rds.name = "output/King_independent_theta_200_2020-06-16.rds",
-#    con_theta = F
-#  )
+  )
 )
 }
 
 int_vars <- {
 list(
-  lift_all = list(
+  just_sip = list(
    counter.factual      = FALSE
- , int.movement         = "mid"
+ , int.movement         = c("post", "mid")
  , int.type             = "tail"
  , int.init             = "2020-07-01"
- , int.end              = "2020-08-01"
- , sim_title            = "Continue Shelter in Place"
- , thresh_inf.val       = 1
- , int.catch_eff        = 1.0
- , int.beta_catch       = 0.05
+ , sim.end              = "2020-12-01"
+ , sim_title            = "Just Shelter in Place"
+ , thresh_inf.val       = 5
+ , int.beta_catch_type  = "pct"
+ , int.catch_eff        = 0.75
+ , int.beta_catch       = 0.005
  , int.beta0_k          = 0.16
  , int.beta0_k_post     = 0.16
- , int.beta_catch_post  = 0.05
+ , int.beta_catch_post  = 0.005
  , int.catch_eff_post   = 0.00
  ),
-  continue_SIP = list(
+  minor_tail = list(
    counter.factual      = FALSE
- , int.movement         = "mid"
+ , int.movement         = c("post", "mid")
  , int.type             = "tail"
  , int.init             = "2020-07-01"
- , int.end              = "2020-08-01"
- , sim_title            = "Continue Shelter in Place"
- , thresh_inf.val       = 1
- , int.catch_eff        = 1.0
- , int.beta_catch       = 0.05
+ , sim.end              = "2020-12-01"
+ , sim_title            = "Minor tail chop"
+ , thresh_inf.val       = 5
+ , int.catch_eff        = 0.75
+ , int.beta_catch       = 0.005
  , int.beta0_k          = 0.16
  , int.beta0_k_post     = 0.16
- , int.beta_catch_post  = 0.05
- , int.catch_eff_post   = 1.00
+ , int.beta_catch_post  = 0.005
+ , int.catch_eff_post   = 0.75
 ),
-  inf_iso = list(
+  major_tail = list(
    counter.factual      = FALSE
- , int.movement         = "mid"
+ , int.movement         = c("post", "mid")
  , int.type             = "tail"
  , int.init             = "2020-07-01"
- , int.end              = "2020-08-01"
- , sim_title            = "Continue Shelter in Place"
- , thresh_inf.val       = 1
- , int.catch_eff        = 1.0
- , int.beta_catch       = 0.05
+ , sim.end              = "2020-12-01"
+ , sim_title            = "Major tail chop"
+ , thresh_inf.val       = 5
+ , int.catch_eff        = 0.75
+ , int.beta_catch       = 0.005
  , int.beta0_k          = 0.16
  , int.beta0_k_post     = 0.16
- , int.beta_catch_post  = 0.10
- , int.catch_eff_post   = 1.00
+ , int.beta_catch_post  = 0.01
+ , int.catch_eff_post   = 0.75
 )
 )}
 
@@ -631,9 +623,8 @@ source("epidemic_rebound/gamma_rebound_pomp2.R")
 source("epidemic_rebound/gamma_rebound_params.R")
 
 nsim           <- 100
-thresh_inf.val <- 10
-sim_length     <- 300     ## How many days to run the simulation
-plot_vars      <- c("cases", "deaths", "I", "betat")
+plot_vars      <- c("cases", "deaths")
+ci.stoch       <- 0.1
 
 fig4_data <- adply(1:length(int_vars), 1, 
       function(j) {
@@ -641,7 +632,7 @@ fig4_data <- adply(1:length(int_vars), 1,
       function(i) {
         with(c(counties_list[[i]], int_vars[[j]]), {
         source("epidemic_rebound/gamma_rebound.R", local = T)
-        SEIR.sim.f.t %<>% 
+        SEIR.sim.f.ci %<>% 
           full_join(county.data %>%
                       arrange(date) %>%
                       mutate(D = cumsum(ifelse(is.na(deaths), 0, deaths))*
@@ -649,9 +640,9 @@ fig4_data <- adply(1:length(int_vars), 1,
                       select(date, any_of(plot_vars)) %>%
                       pivot_longer(any_of(plot_vars), values_to = "data")) %>% 
           mutate(intervention = sim_title,
-                 county = focal.county,
-                 state = focal.state_abbr) 
-         return(SEIR.sim.f.t)
+                 county       = focal.county,
+                 state        = focal.state_abbr) 
+         return(SEIR.sim.f.ci)
         
         }
         )
@@ -660,25 +651,23 @@ fig4_data <- adply(1:length(int_vars), 1,
       }
         , .id = NULL)
 
-#fig4_data$name        <- sapply(fig4_data$name, simpleCap)
+# fig4_data <- SEIR.sim.f.ci
+
+fig4_data$name         <- sapply(fig4_data$name, simpleCap)
 fig4_data$intervention <- factor(fig4_data$intervention, levels = unique(fig4_data$intervention))
 
 fig4_colors <- c("#D67236", "dodgerblue4", "#0b775e", "magenta4")
-fig4_data   <- fig4_data %>% filter(state == "CA")
 
 check_date <- (fig4_data %>% filter(
-   name != "betat"
- , .id == "median"
+  .id           == "median"
  , intervention == "Continue Shelter in Place"
- , date > "2020-05-01"
+ , date          > "2020-05-01"
   ) %>% 
     filter(value == min(value)) %>% 
-    filter(date == min(date)))$date
+    filter(date  == min(date)))$date
 
 ## For just I plot
-fig4_data <- fig4_data %>% 
- # filter(date >= as.Date("2020-07-10")) %>%
-  filter(name != "betat")
+# fig4_data <- fig4_data %>% filter(date >= as.Date("2020-07-10")) %>% filter(name != "betat")
 
 fig4_data %>%
   ggplot(aes(x = date, y = value
@@ -691,21 +680,21 @@ fig4_data %>%
 #   ) + 
   geom_line(data = (fig4_data %>% filter(date >= check_date, .id != "median"))
     , aes(group = interaction(.id, intervention))
-    , lwd = 0.25, alpha = 0.40
+    , lwd = 0.10, alpha = 0.15
    ) +
   geom_line(data = (fig4_data %>% filter(date >= check_date, .id == "median"))
     , aes(group = interaction(.id, intervention))
-   , lwd = 1.5) +
+   , lwd = 1.0) +
 #  geom_ribbon(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place"))
 #  , alpha = 0.50, colour = NA, fill = "black") +
 #  geom_line(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place"))
 #  , colour = "black") +
   geom_line(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place", .id != "median"))
-    , lwd = 0.25, alpha = 0.40, colour = "black"
+    , lwd = 0.10, alpha = 0.15, colour = "black"
    ) +
   geom_line(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place", .id == "median"))
     , colour = "black"
-    , lwd = 1.5) +
+    , lwd = 1.0) +
   geom_vline(xintercept = check_date, linetype = "dashed", lwd = 0.5) + 
   geom_point(aes(x = date, y = data), 
              color = "black", size = 1) + 
@@ -742,7 +731,7 @@ droplevels(fig4_data) %>% filter(state == "CA", .id != "median") %>% filter(name
     , est = quantile(value, 0.500) 
     , upr = quantile(value, 0.975))
 
-fig4_data %>%
+fig4_data %>% filter(name == "Cases") %>% filter(date >= check_date) %>%
   ggplot(aes(x = date
     # , y = value
     , y = mid
@@ -750,10 +739,9 @@ fig4_data %>%
     , color = intervention
    # , group = .id
     )) +
-  geom_ribbon(data = (fig4_data %>% filter(date >= check_date))
-   , alpha = 0.50, colour = NA) +
-  geom_line(data = (fig4_data %>% filter(date >= check_date))
-   ) + 
+  geom_ribbon(
+  #  data = (fig4_data %>% filter(date >= check_date))
+    alpha = 0.50, colour = NA) +
 #  geom_line(data = (fig4_data %>% filter(date >= check_date, .id != "median"))
 #    , aes(group = interaction(.id, intervention))
 #    , lwd = 0.25, alpha = 0.40
@@ -761,17 +749,19 @@ fig4_data %>%
 #  geom_line(data = (fig4_data %>% filter(date >= check_date, .id == "median"))
 #    , aes(group = interaction(.id, intervention))
 #   , lwd = 1.5) +
-  geom_ribbon(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place"))
-  , alpha = 0.50, colour = NA, fill = "black") +
-  geom_line(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place"))
-  , colour = "black") +
+  geom_ribbon(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place", name == "Cases"))
+   , aes(
+      ymin = lwr, ymax = upr
+   )
+   , alpha = 0.50, colour = NA, fill = "black") +
+# geom_line(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place")), colour = "black") +
 #  geom_line(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place", .id != "median"))
 #    , lwd = 0.25, alpha = 0.40, colour = "black"
 #   ) +
 #  geom_line(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place", .id == "median"))
 #    , colour = "black"
 #    , lwd = 1.5) +
-  geom_vline(xintercept = check_date, linetype = "dashed", lwd = 0.5) + 
+# geom_vline(xintercept = check_date, linetype = "dashed", lwd = 0.5) + 
 # geom_point(aes(x = date, y = data), color = "black", size = 1) + 
 #  scale_y_continuous(trans = "log10") +
   scale_fill_manual(values = fig4_colors, name = "Intervention") +

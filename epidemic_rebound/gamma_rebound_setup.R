@@ -38,7 +38,8 @@ deaths  <- read.csv("us-counties.txt") %>%
  ## If COVID_fit_cont.R was just run, use parameers already stored in the global env 
 if (use.rds) {
 prev.fit         <- readRDS(rds.name)
-variable_params  <- prev.fit$mifs_local
+variable_params  <- prev.fit$mifs_local_v2
+covid_mobility   <- prev.fit[["covid_mobility"]] # get pomp object
 # variable_params <- prev.fit[["variable_params"]]
 # fixed_params    <- prev.fit[["fixed_params"]]
 }
@@ -76,20 +77,29 @@ print(variable_params$log_lik)
 }
 }
 
+pomp_data        <- data.frame(covid_mobility) %>% 
+  full_join(as.data.frame(cbind(day = covid_mobility@covar@times
+    , t(covid_mobility@covar@table)))) %>%
+    arrange(day) %>% 
+    distinct_at(vars(day), .keep_all = T) # sometimes the pomp data and covariate data disagree? not sure why..., for now default to takign the pomp data
+  dt             <- covid_mobility@rprocess@delta.t
+  date_origin    <- prev.fit[["date_origin"]][1]
+
 if (int.catch_eff_post == 0) {
 
 SIP_post <- check_R0(
 #   beta0est     = variable_params$beta0est
     beta0est     = variable_params$beta0
   , beta_min     = variable_params$beta_min
-  , fixed_params = unlist(c(fixed_params, variable_params))
+  , fixed_params = variable_params
   , sd_strength  = 1
   , prop_S       = 1
-  , desired_R    = 2.0)
+  , desired_R    = 2.0
+  )
 
 } else {
   
-SIP_post <- (fig3_data %>% filter(county == "Santa Clara", beta_catch_pct == 0.95, catch_eff == 1.0))$sip
+SIP_post <- (fig3_data %>% filter(county == focal.county, beta_catch_pct == int.beta_catch_post, catch_eff == int.catch_eff_post))$sip[1]
   
 }
 
@@ -174,3 +184,6 @@ county.data <- deaths %>%
 Reff   <- data.frame(paramset = 0, date = 0, Reff = 0)  ; Reff   <- Reff[-1, ]
 betat  <- data.frame(paramset = 0, date = 0, betat = 0) ; betat  <- betat[-1, ]
 detect <- data.frame(paramset = 0, date = 0, detect = 0); detect <- detect[-1, ]
+
+## container for the extra parameters needed
+post_params <- c()
