@@ -1,3 +1,5 @@
+# functions and variables needed for all figures
+
 source("needed_packages.R")
 source("ggplot_theme.R")
 
@@ -11,6 +13,47 @@ counties_list = {list(
 #,  BC = list(rds.name = "output/Bucks_0_2020-06-25_cont_round2.Rds")
 #,  CC = list(rds.name = "output/Chester_0_2020-06-25_cont_round2.Rds")
 )}
+
+
+## truncated gamma distribution simulator
+rtgamma = function(n, shape, scale, lower, upper, limits = "pct"){
+  if(limits == "pct"){
+    upper <- qgamma(upper, shape, scale = scale)
+    lower <- qgamma(lower, shape, scale = scale)
+  }
+  out <- rgamma(n, shape, scale = scale)
+  trunc <- which(out < lower | out > upper)
+  while(length(trunc) > 0){
+    out[trunc] <- rgamma(length(trunc), shape, scale = scale)
+    trunc <- which(out < lower | out > upper)
+  }
+  return(out)
+}
+
+
+# here's function to calculate SIP prop needed to maintain specified R with a given tail truncation
+# works with vector catch_eff and beta_catch. output is beta_catch X catch_eff in dimensions
+sip_trunc_combns = function(beta_catch, 
+                            beta_catch_type = "pct", 
+                            catch_eff, 
+                            k, beta0, beta_min, d, dt,
+                            desired_R){
+  shp = k*dt/d
+  scl = beta0/k
+  if(beta_catch_type == "pct"){
+    upper = qgamma(1 - beta_catch, shape = shp, scale = scl)
+  } else{
+    upper = beta_catch
+  }
+  
+  # calculate expected value of truncated gamma dist when truncation with 100% efficacy
+  E_trunc <- beta0/k*pgamma(upper/scl, shp+1)*gamma(shp+1)/(pgamma(upper/scl, shp)*gamma(shp))
+  
+  # expected value is weighted sum of truncated and untruncated distributions depdending on efficacy
+  out <- (log(outer(E_trunc, catch_eff, "*") + outer(rep(shp*scl, length(E_trunc)), 1-catch_eff, "*")) - 
+            log(desired_R) - log(dt) + log(d))/-log(beta_min)
+  return(out)
+}
 
 #####
 ## Figure 1: model fits ----
@@ -266,66 +309,10 @@ fig2_data %>%
 #####
 ## Figure 3: SIP and truncation combinations ----
 #####  
-
-# check calculation for truncated gamma distribution mean
-## truncated gamma distribution 
-# rtgamma = function(n, shape, scale, lower, upper, limits = "pct"){
-#   if(limits == "pct"){
-#     upper <- qgamma(upper, shape, scale = scale)
-#     lower <- qgamma(lower, shape, scale = scale)
-#   }
-#   out <- rgamma(n, shape, scale = scale)
-#   trunc <- which(out < lower | out > upper)
-#   while(length(trunc) > 0){
-#     out[trunc] <- rgamma(length(trunc), shape, scale = scale)
-#     trunc <- which(out < lower | out > upper)
-#   }
-#   return(out)
-# }
-# 
-# test <- adply(seq(1, 5, by = 0.1), 1, 
-#               function(beta0){
-#                 k = 0.16
-#                 upper = 3
-#                 sim_est = rtgamma(10000, 
-#                                   shape = k,
-#                                   scale = beta0/k, 
-#                                   0, upper, limits = "abs") %>% mean
-#                 alg_est = beta0/k*pgamma(upper*k/beta0, k+1)*gamma(k+1)/(pgamma(upper*k/beta0, k)*gamma(k))
-#                 return(data.frame(beta0 = beta0, sim = sim_est, alg = alg_est))
-#               })
-# plot(test$sim, test$alg)
-# abline(a = 0, b = 1, col = "red", lty = "dashed")
-
-# here's function to calculate SIP prop needed to maintain R=1 with a given tail truncation
-# works with vector catch_eff and beta_catch. output is beta_catch X catch_eff in dimensions
-sip_trunc_combns = function(beta_catch, beta_catch_type = "pct", 
-                            catch_eff, 
-                            k, beta0, beta_min, d, dt,
-                            desired_R){
-  shp = k*dt/d
-  scl = beta0/k
-  if(beta_catch_type == "pct"){
-    upper = qgamma(1 - beta_catch, shape = shp, scale = scl)
-  } else{
-    upper = beta_catch
-  }
-  
-  # calculate expected value of truncated gamma dist when truncation with 100% efficacy
-  #### NEED TO REDO THIS CALCULATION WITH NEW DISTRIBUTION
-  E_trunc <- beta0/k*pgamma(upper/scl, shp+1)*gamma(shp+1)/(pgamma(upper/scl, shp)*gamma(shp))
-  # print(E_trunc)
-  # expected value is weighted sum of truncated and untruncated distributions depdending on efficacy
-  out <- -(log(outer(E_trunc, catch_eff, "*") + 
-                 matrix(rep(outer(beta0*dt/d, 1 - catch_eff,"*"), length(beta_catch)), 
-                        byrow = T, nrow = length(beta_catch))) + log(d) - log(dt) - log(desired_R))/log(beta_min)
-  return(out)
-}
-
 beta_catch_vals <- seq(0, 0.005, by = 0.00005)
 catch_eff_vals <- seq(0.5, 1, by = 0.25)
 loglik.max     <- F
-loglik.num     <- 2
+loglik.num     <- 3
 
 fig3_data <- adply(1:length(counties_list), 1, function(i){
   prev.fit = readRDS(counties_list[[i]]$rds.name)
@@ -411,7 +398,7 @@ fig3_data %>%
                         color = county, 
                         fill = county, 
                         group = interaction(paramset,county))) + 
-      geom_ribbon(alpha = 0.4, color = NA) +
+      geom_ribbon(alpha = 0.25, color = NA) +
       geom_line(alpha = 0.75, size = 1.5) + 
       geom_point(aes(shape = type, size = I(size)), 
                  position = position_dodge(width = 0.0005),
@@ -436,6 +423,86 @@ fig3_data %>%
       scale_fill_manual(values = fig1_colors) +
       scale_shape_manual(guide = F, values = c(19, 17)) + #95)) + 
       facet_wrap(~catch_eff_label)}
+
+hist_vars <- list(k = 0.16,
+                  R0 = 2.5, 
+                  dt = 1/6, 
+                  d = 7,
+                  nsim = 1000,
+                  N_small = 10,
+                  N_large = 1000,
+                  beta_catch = 0.001)
+par(mfcol = c(2, 3), las  = 1)
+hist(with(hist_vars, rgamma(nsim, shape = k*dt/d, scale = R0/k)),
+     breaks = 50,
+     freq = F,
+     xlab = "secondary cases",
+     main = "individual time step reproductive number")
+abline(v = with(hist_vars, qgamma(1 - beta_catch, shape = k*dt/d, scale = R0/k)),
+       col = "red", lty = "dashed")
+hist(with(hist_vars, replicate(nsim, sum(rgamma(d/dt, shape = k*dt/d, scale = R0/k)))),
+     breaks = 0:100,
+     freq = F,
+     xlab = "secondary cases",
+     main = "individual reproductive number")
+hist(with(hist_vars, 
+          replicate(nsim, sum(rtgamma(d/dt, shape = k*dt/d, scale = R0/k, 0, 1-beta_catch)))),
+     breaks = 0:100,
+     freq = F,
+     add = T, col = alpha("red", 0.5), border = NA)
+
+hist(with(hist_vars, replicate(nsim, mean(rgamma(N_small, shape = k*dt/d, scale = R0/k)))),
+     breaks = seq(0, 5, by = .25),
+     freq = F,
+     ylim = c(0, 4),
+     xlab = "average secondary cases",
+     main = paste0("population time step reproductive number, N = ", hist_vars$N_small))
+hist(with(hist_vars, replicate(nsim, mean(rtgamma(N_small, shape = k*dt/d, scale = R0/k, 0, 1 - beta_catch)))),
+     breaks = seq(0, 5, by = .25),
+     freq = F,
+     col = alpha("red", 0.5), border = NA,
+     add = T)
+
+hist(with(hist_vars, 
+          replicate(nsim, 
+                    mean(replicate(N_small, 
+                                   sum(rgamma(d/dt, shape = k*dt/d, scale = R0/k)))))),
+     breaks = seq(0, 20, by = 0.25),
+     freq = F,
+     xlab = "average secondary cases",
+     main = paste0("population reproductive number, N = ", hist_vars$N_small))
+hist(with(hist_vars, replicate(nsim, mean(rtgamma(N_small, shape = k*dt/d, scale = R0/k, 0, 1 - beta_catch)))),
+     breaks = seq(0, 20, by = 0.25),
+     freq = F,
+     col = alpha("red", 0.5), border = NA,
+     add = T)
+
+
+hist(with(hist_vars, replicate(nsim, mean(rgamma(N_large, shape = k*dt/d, scale = R0/k)))),
+     breaks = seq(0, 0.25, by = 0.02),
+     freq = F,
+     xlab = "average secondary cases",
+     main = paste0("population time step reproductive number, N = ", hist_vars$N_large))
+hist(with(hist_vars, replicate(nsim, mean(rtgamma(N_large, shape = k*dt/d, scale = R0/k, 0, 1 - beta_catch)))),
+     breaks = seq(0, 0.25, by = 0.02),
+     freq = F,
+     col = alpha("red", 0.5), border = NA,
+     add = T)
+
+## THE NEXT TWO CAN RUN SLOWLY DEPENDING ON N_LARGE AND NSIM
+hist(with(hist_vars, replicate(nsim, mean(replicate(d/dt, rgamma(N_large, shape = k*dt/d, scale = R0/k)) %>% rowSums))),
+     breaks = seq(1, 3.2, by = 0.1),
+     freq = F,
+     xlim = c(1, 3.25),
+     xlab = "average secondary cases",
+     main = paste0("population reproductive number, N = ", hist_vars$N_large))
+hist(with(hist_vars, 
+          # replicate(nsim, mean(rtgamma(N_large, shape = k*dt/d, scale = R0/k, 0, 1 - beta_catch)))),
+          replicate(nsim, mean(replicate(d/dt, rtgamma(N_large, shape = k*dt/d, scale = R0/k, 0, 1- beta_catch)) %>% rowSums))),
+     breaks = seq(1, 3.2, by = 0.1),
+     freq = F,
+     col = alpha("red", 0.5), border = NA,
+     add = T)
 
 #####
 ## Figure 4: Epidemic rebound when rare ----
