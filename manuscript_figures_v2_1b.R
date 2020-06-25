@@ -2,7 +2,17 @@ fig1_data$county <- factor(fig1_data$county)
 {
  fig1.1 <- {fig1_data %>% 
    filter(county != "Los Angeles") %>%
-   mutate(county = paste0(county, " County, ", state)) %>%
+     mutate(county = mapvalues(county,
+                                   from = c("Santa Clara",
+                                            "King",
+                                            "Fulton",
+                                            "Miami-Dade"),
+                                    to  = c(
+                                       "Santa Clara County, CA"
+                                     , "Seattle, WA"
+                                     , "Atlanta, GA"
+                                     , "Miami, FL"
+                                   ))) %>%
    filter(date < as.Date("2020-06-08")) %>%
    filter(date >= as.Date("2020-02-10")) %>%
    filter(!(name %in% c("Reff", "Detect"))) %>%
@@ -23,7 +33,7 @@ fig1_data$county <- factor(fig1_data$county)
    theme(
      strip.background = element_blank()
      , strip.placement = "outside"
-     , strip.text.x = element_text(size = 10)
+     , strip.text.x = element_text(size = 11)
      , strip.text.y = element_text(size = 16)
      , axis.text.x = element_text(size = 12)
      , axis.title.y = element_text(margin = margin(l = 1))
@@ -40,7 +50,11 @@ fig1_data$county <- factor(fig1_data$county)
  fig1.2 <- {fig1_data %>% 
    arrange(county, paramset, date) %>%
    filter(county == "Los Angeles") %>%
-   mutate(county = paste0(county, " County, ", state)) %>%
+ #  mutate(county = paste0(county, " County, ", state)) %>%
+     mutate(county = mapvalues(county,
+                                   from = c("Los Angeles"),
+                                    to  = c("Los Angeles, CA")
+                                   )) %>%
    filter(date < as.Date("2020-06-08")) %>%
    filter(date >= as.Date("2020-02-10")) %>%
    filter(!(name %in% c("Reff", "Detect"))) %>%
@@ -72,6 +86,17 @@ fig1_data$county <- factor(fig1_data$county)
    filter(date < as.Date("2020-06-08")) %>%
    filter(date >= as.Date("2020-02-10")) %>%
    filter(name == "Reff") %>%
+     mutate(county = mapvalues(county,
+                                   from = c("Santa Clara",
+                                            "King",
+                                            "Fulton",
+                                            "Miami-Dade"),
+                                    to  = c(
+                                       "Santa Clara County, CA"
+                                     , "Seattle, WA"
+                                     , "Atlanta, GA"
+                                     , "Miami, FL"
+                                   ))) %>%
 # ugly way to calculate 7 day smoothing 
    arrange(county, paramset, date) %>%
    group_by(county, paramset) %>%
@@ -106,8 +131,8 @@ fig1_data$county <- factor(fig1_data$county)
               group = interaction(county, paramset))) +
    geom_ribbon(alpha = 0.25, color = NA) +
    geom_line(aes(size = I(width), alpha = I(alpha))) +
-   scale_color_manual(guide = F, values = fig1_colors[c(1, 2, 5, 3, 4)]) +
-   scale_fill_manual(guide  = F, values = fig1_colors[c(1, 2, 5, 3, 4)]) +
+   scale_color_manual(guide = F, values = fig1_colors[c(1, 5, 2, 3, 4)]) +
+   scale_fill_manual(guide  = F, values = fig1_colors[c(1, 5, 2, 3, 4)]) +
    geom_hline(yintercept    = 1, linetype = "dashed") + 
    ylab(expression("R"[e])) + 
    xlab("") +
