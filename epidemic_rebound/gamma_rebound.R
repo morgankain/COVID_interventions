@@ -122,10 +122,7 @@ sim_times <- seq(as.numeric(variable_params[i,]$sim_start - date_origin), max(mo
         object   = covid_mobility
         , t0     = as.numeric(variable_params[i,]$sim_start - date_origin)
         , times  = sim_times
-        , params = c(variable_params[i,] %>% unlist %>% 
-                       inset("beta_catch", value = beta_catch_val) %>% 
-                       inset("beta0_k", value = int.beta0_k) %>% 
-                       inset("catch_eff", value = int.catch_eff), unlist(post_params))
+        , params = c(variable_params[i,] %>% unlist, unlist(post_params))
         , nsim         = nsim
         , format       = "d"
         , include.data = F

@@ -88,18 +88,26 @@ pomp_data        <- data.frame(covid_mobility) %>%
 if (int.catch_eff_post == 0) {
 
 SIP_post <- check_R0(
-#   beta0est     = variable_params$beta0est
     beta0est     = variable_params$beta0
   , beta_min     = variable_params$beta_min
   , fixed_params = variable_params
   , sd_strength  = 1
   , prop_S       = 1
-  , desired_R    = 2.0
+  , desired_R    = desired.R
   )
 
 } else {
   
-SIP_post <- (fig3_data %>% filter(county == focal.county, beta_catch_pct == int.beta_catch_post, catch_eff == int.catch_eff_post))$sip[1]
+SIP_post <- sip_trunc_combns(
+                              beta_catch      = int.beta_catch_post
+                            , beta_catch_type = "pct"
+                            , catch_eff       = int.catch_eff_post
+                            , k               = variable_params$beta0_k
+                            , beta0           = variable_params$beta0
+                            , beta_min        = variable_params$beta_min
+                            , d               = variable_params$d
+                            , dt              = dt
+                            , desired_R       = desired.R)
   
 }
 

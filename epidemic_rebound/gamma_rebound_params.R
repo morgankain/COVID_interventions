@@ -3,6 +3,10 @@
 ####
 
 set.seed(10001)
+
+mobility.file      <- "mobility/unfolded_Jun15.rds"  ## Mobility data
+
+
 fitting            <- FALSE   ## Small change in pomp objects if fitting or simulating
 ## TRUE if COVID_fit previously run, FALSE if COVID_fit was just run and global environment is still full
 use.rds            <- TRUE    
@@ -40,11 +44,9 @@ meas.nb            <- TRUE    ## Negative binomial measurement process?
 import_cases       <- FALSE   ## Use importation of cases?
 fit.minus          <- 0       ## Use data until X days prior to the present
 
-fixed.E0           <- !fit.E0
 detect.logis       <- T
 
 ci.epidemic        <- TRUE    ## Remove all epidemic simulations that dont take off
-
 
 ci.epidemic_cut    <- 100      ## Criteria of throwing away a stochastic realization as not resulting in an epidemic (total # infected)
 
@@ -52,4 +54,5 @@ nE  <- 3        # must be >= 2
 nIa <- 7
 nIp <- 2        # must be >= 2
 nIm <- nIs <- 5 # must be >= 2
+desired.R          <- 2
 
