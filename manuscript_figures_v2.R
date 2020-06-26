@@ -623,8 +623,8 @@ source("ggplot_theme.R")
 source("epidemic_rebound/gamma_rebound_params.R")
 source("epidemic_rebound/gamma_rebound_pomp2.R")
 
-nsim           <- 200
-plot_vars      <- c("cases", "deaths")
+nsim           <- 10
+plot_vars      <- c("cases", "deaths", "I")
 ci.stoch       <- 0.025
 plot.median    <- F
 
@@ -638,7 +638,7 @@ fig4_data <- adply(1:length(int_vars), 1,
           full_join(county.data %>%
                       arrange(date) %>%
                       mutate(D = cumsum(ifelse(is.na(deaths), 0, deaths))*
-                               ifelse(is.na(deaths), NA, 1)) %>%
+                                 ifelse(is.na(deaths), NA, 1)) %>%
                       select(date, any_of(plot_vars)) %>%
                       pivot_longer(any_of(plot_vars), values_to = "data")) %>% 
           mutate(intervention = sim_title,
