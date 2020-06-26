@@ -102,15 +102,17 @@ SIP_post <- sip_trunc_combns(
                               beta_catch      = int.beta_catch_post
                             , beta_catch_type = "pct"
                             , catch_eff       = int.catch_eff_post
-                            , k               = variable_params$beta0_k
-                            , beta0           = variable_params$beta0
-                            , beta_min        = variable_params$beta_min
-                            , d               = variable_params$d
+                            # , k               = variable_params$beta0_k
+                            # , beta0           = variable_params$beta0
+                            # , beta_min        = variable_params$beta_min
+                            # , d               = variable_params$d
+                            , var_params      = variable_params
                             , dt              = dt
                             , desired_R       = desired.R)
   
 }
 
+  print(SIP_post)
 if (focal.county == "Fulton") {
   mobility <- readRDS(mobility.file) %>% 
     dplyr::filter((county_name == focal.county | county_name == "DeKalb") & (state_abbr == focal.state_abbr)) %>%
