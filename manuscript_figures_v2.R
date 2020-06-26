@@ -347,7 +347,7 @@ fig2_data %>%
 
 ####
 ## Figure 3: SIP and truncation combinations ----
-#####  
+####
 beta_catch_vals <- seq(0, 0.01, by = 0.00005)
 catch_eff_vals  <- seq(0.5, 1, by = 0.25)
 loglik.max      <- F
@@ -464,7 +464,8 @@ fig3_curves <- fig3_data %>%
       scale_fill_manual(values = fig1_colors) +
       scale_shape_manual(guide = F, values = c(19, 17)) + #95)) + 
       facet_wrap(~catch_eff_label) + 
-      theme(legend.position = c(0.9, 0.8))}
+      theme(legend.position = c(0.9, 0.8),
+            panel.spacing = unit(0.5, "lines"))}
 
 fig3_curves
 
@@ -512,18 +513,18 @@ fig3_hist_data = data.frame(
 fig3_hist <- fig3_hist_data %>%
   filter((time == "step" & size == "ind") | (time == "inf" & size == "large")) %>% 
   mutate(time = factor(mapvalues(time, from = c("step", "inf"), 
-                                 to = c("4-hour time step", "infection duration")),
-                       levels = c("4-hour time step", "infection duration"))) %>% 
-  mutate( dist = mapvalues(dist, from = c("base", "trunc"), to = c("base", "truncated"))) %>%
+                                 to = c("4-hour time step", "Infection duration")),
+                       levels = c("4-hour time step", "Infection duration"))) %>% 
+  mutate( dist = mapvalues(dist, from = c("base", "trunc"), to = c("Base", paste0("Truncated upper ", hist_vars$beta_catch*100, "%")))) %>%
   mutate(size = factor(mapvalues(size, 
                                  from = c("ind", "small", "large"), 
-                                 to = c("individual", paste0("small population, N = ", hist_vars$N_small), 
-                                        paste0("large population with N = ", hist_vars$N))),
-                       levels = c("individual", paste0("small population, N = ", hist_vars$N_small), 
-                                  paste0("large population with N = ", hist_vars$N)))) %>% 
+                                 to = c("individual", paste0(hist_vars$N_small, " infected" ), 
+                                        paste0(hist_vars$N, " infected"))),
+                       levels = c("individual", paste0(hist_vars$N_small, " infected" ), 
+                                  paste0(hist_vars$N, " infected")))) %>% 
   unite("time_size", c("time", "size"), sep = ", ") %>% 
-  ggplot(aes(x = value, y = ..density.., group = dist, fill = dist, color = dist)) + 
-  geom_histogram(color = NA, position = "identity", alpha = 0.5) + 
+  ggplot(aes(x = value, y = ..count.. / sum(..count..), group = dist, fill = dist, color = dist)) + 
+  geom_histogram(color = NA, position = "identity", alpha = 0.8) + 
   # geom_density(adjust = 100, alpha = 0.5) +
   geom_vline(data = data.frame(xint=with(hist_vars, qgamma(1 - beta_catch, shape = k*dt/d, scale = R0/k)),
                                time = "4-hour time step",
@@ -531,27 +532,39 @@ fig3_hist <- fig3_hist_data %>%
                unite("time_size", c("time", "size"), sep = ", "),
              aes(xintercept = xint), linetype = "dashed") +
   facet_wrap( ~ time_size, scales = "free", nrow = 2) + 
-  scale_fill_manual(name = "Distribution", values = c("red", "blue")) + 
-  scale_color_manual(name = "Distribution", values = c("red", "blue")) + 
-  scale_y_continuous(trans = "sqrt") + 
+  scale_fill_manual(name = "Distribution", values = c("#F21A00", "#3B9AB2")) + 
+  scale_color_manual(name = "Distribution", values = c("#F21A00", "#3B9AB2")) + 
+  scale_y_continuous(trans = "sqrt", labels = scales::percent_format(accuracy = 1)) + 
   scale_x_continuous(trans = "sqrt") + #, breaks = c(1, 5, 10, 20, 40, 100)) +
-  xlab("infection rate") + 
-  theme(legend.position = c(0.8, 0.8))
+  xlab("Transmission rate") + 
+  ylab("Proportion") + 
+  theme(legend.position = c(0.785, 0.9)) 
 fig3_hist
+
+# Only a few small comments, bottom left is number infected? 
+# If so the title is a bit confusing. 
+# Scale the y axis in the histograms? 
+# Other than that just tiny axis cosmetics and stuff 
+# but I think this is about all we need to show in the
+# main text and the big 6 panel figure in the supp will 
+# fill in the rest
+
 
 fig3 <- gridExtra::arrangeGrob(fig3_hist, fig3_curves, 
                                layout_matrix = matrix(c(1,2), 
                                                       byrow  = T, nrow = 1),
                                widths = c(1.3, 2.6))
-gridExtra::grid.arrange(fig3)
+# gridExtra::grid.arrange(fig3)
+ggsave("figures/Manuscript2/Figure3.pdf", fig3,
+       width = 20, height = 9)
 
 figS3 <- fig3_hist_data %>%
   mutate(time = factor(mapvalues(time, from = c("step", "inf"), to = c("4-hour time step", "infection")),
                                  levels = c("4-hour time step", "infection"))) %>% 
   mutate(size = factor(mapvalues(size, 
                                  from = c("ind", "small", "large"), 
-                                 to = c("individual", paste0("small population, N = ", hist_vars$N_small), 
-                                        paste0("large population, N = ", hist_vars$N))),
+                                 to = c("individual", paste0(hist_vars$N_small, " infected" ), 
+                                        paste0(hist_vars$N, " infected"))),
                        levels = c("individual", paste0("small population, N = ", hist_vars$N_small), 
                                   paste0("large population, N = ", hist_vars$N)))) %>%
   ggplot(aes(x = value, y = ..density.., group = dist, fill = dist, color = dist)) + 
