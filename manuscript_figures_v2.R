@@ -123,9 +123,13 @@ fig1_data <- plyr::ldply(counties_list,
                       select(date, any_of(plot_vars)) %>%
                       pivot_longer(any_of(plot_vars), values_to = "data")) %>%
             as.data.frame() %>%
-            rbind(., (Reff %>% mutate(name = "Reff", lwr = NA, mid = Reff, upr = NA, .groups = NA, data = NA) %>%
-                select(-Reff) %>% dplyr::select(date, paramset, everything()))) %>%
-            rbind(., (detect %>% mutate(name = "detect", lwr = NA, mid = detect, upr = NA, .groups = NA, data = NA) %>% 
+            ungroup %>%
+            rbind(., (Reff %>% 
+                        transmute(date = date, paramset = paramset, name = "Reff", 
+                                  lwr = NA, mid = Reff, upr = NA, data = NA))) %>%
+            rbind(., (detect %>% 
+                        transmute(date = date, paramset = paramset, name = "detect",
+                                  lwr = NA, mid = detect, upr = NA, data = NA) %>%
                 select(-detect) %>% dplyr::select(date, paramset, everything()))) %>%
             mutate(intervention = sim_title,
                  county = variable_params[1, "county"] %>% as.character,
