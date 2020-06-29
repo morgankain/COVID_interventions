@@ -80,7 +80,7 @@ fig1_data %<>% mutate(name = mapvalues(name, from = c("cases", "deaths", "Reff",
      , strip.text.y = element_blank()
      , strip.text.x = element_text(size = 11)
      , axis.text.x = element_text(size = 12)
-     , plot.margin = unit(c(0.20,0.25,0.25,0), "cm")) +
+     , plot.margin = unit(c(0.25,0.25,0.25,0), "cm")) +
     xlab("")
    }
  
