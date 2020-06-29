@@ -2,6 +2,8 @@
 source("needed_packages.R")
 source("ggplot_theme.R")
 
+
+# this is the list of counties used for figures 1 - 3
 counties_list = {list(
    SC = list(rds.name = "output/Santa Clara_0_2020-06-25_cont_round2.Rds")
  , LA = list(rds.name = "output/Los Angeles_0_2020-06-25_cont_round2.Rds")
@@ -566,7 +568,7 @@ figS3 <- fig3_hist_df %>%
                                         paste0(hist_vars$N_small, " infected" ), 
                                         paste0(hist_vars$N, " infected"))),
                        levels = c("Individual",
-                                  paste0(hist_vars$N_small, " infected" ), 
+                                  paste0(hist_vars$N_small, " infected" ),
                                   paste0(hist_vars$N, " infected")),
                        ordered = T)) %>% 
   ggplot(aes(x = value, y = ..count.. / sum(..count..), group = dist, fill = dist)) + 
@@ -873,7 +875,7 @@ fig4_extinct <- {fig4_sum %>%
     ylab("Proportion of epidemic\nsimulations extinct") + 
     scale_y_continuous(labels = scales::percent_format(accuracy = 1)) + 
     scale_x_continuous(labels = scales::percent_format(accuracy = 1)) + 
-    theme(legend.position = c(0.6, 0.72),
+    theme(legend.position = c(0.6, 0.73),
           legend.text = element_text(size = 12),
           legend.title = element_text(size = 12))}
 
@@ -902,19 +904,22 @@ fig4_traj <- {fig4_sum %>%
     filter(threshold_I == 1) %>%
     filter(grepl("percent", file)) %>% 
     filter(!(catch_eff %in% c(0.2, 0.4, 0.8))) %>% 
-    mutate(catch_eff = as.factor(catch_eff)) %>%
+    mutate(catch_eff_label = factor(scales::percent(catch_eff, accuracy = 1),
+                                    levels = c("0%", "60%", "100%"))) %>%
     filter(days_post >= -2*7, days_post <= 6*7) %>% 
     ggplot(aes(x = days_post, 
                y = mean, 
                ymax = upr_99, 
                ymin = lwr_99,
-               color = catch_eff, 
-               fill = catch_eff,
-               group = catch_eff)) + 
+               color = catch_eff_label, 
+               fill = catch_eff_label,
+               group = catch_eff_label)) + 
     geom_ribbon(color = NA, alpha = 0.5) +
     geom_line() + 
-    scale_fill_manual(values = fig4_traj_colors, name = "Efficiency of truncation") +
-    scale_color_manual(values = fig4_traj_colors, name = "Efficiency of truncation") +
+    scale_fill_manual(values = fig4_traj_colors, 
+                      name = "Efficiency of truncation") +
+    scale_color_manual(values = fig4_traj_colors, 
+                       name = "Efficiency of truncation") +
     theme(legend.position = c(0.3, 0.85)) +
     xlab("Days since intervention relaxation") +
     ylab("Concurrent infections")}
