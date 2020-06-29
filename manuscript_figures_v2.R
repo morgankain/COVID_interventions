@@ -573,10 +573,13 @@ figS3 <- fig3_hist_df %>%
                        ordered = T)) %>% 
   ggplot(aes(x = value, y = ..count.. / sum(..count..), group = dist, fill = dist)) + 
   geom_histogram(color = NA, position = "identity", alpha = 0.8) + 
-  geom_vline(data = data.frame(xint=with(hist_vars, 
+  geom_vline(data = data.frame(xint=with(hist_vars,
                                          qgamma(1 - beta_catch, shape = k*dt/d, scale = R0/k)),
-                               time = "4-hour time step", 
-                               size = "Individual"), 
+                               time = "4-hour time step",
+                               size = factor("Individual", 
+                                             levels = c("Individual",
+                                                        paste0(hist_vars$N_small, " infected" ),
+                                                        paste0(hist_vars$N, " infected")))),
              aes(xintercept = xint), linetype = "dashed") +
   facet_grid(size ~ time, scales = "free") + 
   scale_fill_manual(name = "Distribution", values = c("#F21A00", "#3B9AB2")) + 
@@ -857,6 +860,7 @@ fig4_sum <- adply(list.files("./output/figure4_data", full.names = T, pattern = 
                     return(test_sum)})
 
 fig4_colors = c("tomato4", "darkgoldenrod2", "slateblue")
+fig4_traj_colors = c("#DC863B", "#0B775E", "#046C9A")
 fig4_extinct <- {fig4_sum %>% 
     filter(days_post == 6*7) %>%
     filter(beta_catch == 0.001) %>%
@@ -877,7 +881,9 @@ fig4_extinct <- {fig4_sum %>%
     scale_x_continuous(labels = scales::percent_format(accuracy = 1)) + 
     theme(legend.position = c(0.6, 0.73),
           legend.text = element_text(size = 12),
-          legend.title = element_text(size = 12))}
+          legend.title = element_text(size = 12),
+          legend.background = element_rect(colour = "transparent", fill = "transparent"),
+          plot.margin = margin(t = 25.5, r = 5.5, b = 5.5, l = 5.5))}
 
 fig4_uprCI <- {fig4_sum %>% 
     filter(days_post == 6*7) %>%
@@ -896,9 +902,8 @@ fig4_uprCI <- {fig4_sum %>%
     xlab("Efficiency of truncation") +
     ylab("Upper 99% on concurrent infected") + 
     scale_x_continuous(labels = scales::percent_format(accuracy = 1)) + 
-    theme(plot.margin = margin(l = 20, r = 5.5))}
+    theme(plot.margin = margin(l = 20, t = 25.5, b = 5.5, r = 5.5))}
 
-fig4_traj_colors = c("#DC863B", "#0B775E", "#046C9A")
 fig4_traj <- {fig4_sum %>% 
     filter(beta_catch == 0.001) %>%
     filter(threshold_I == 1) %>%
@@ -922,7 +927,8 @@ fig4_traj <- {fig4_sum %>%
                        name = "Efficiency of truncation") +
     theme(legend.position = c(0.3, 0.85)) +
     xlab("Days since intervention relaxation") +
-    ylab("Concurrent infections")}
+    ylab("Concurrent infections") +
+    theme(plot.margin = margin(t = 25.5, r = 5.5, b = 5.5, l = 5.5))}
 
 fig4 <- gridExtra::arrangeGrob(fig4_extinct, fig4_uprCI, fig4_traj, 
                                layout_matrix = matrix(c(3, 3, 1, 2), 
@@ -933,6 +939,8 @@ ggsave("figures/Manuscript2/Figure4.pdf",
        fig4, 
        width = 12, 
        height = 7)
+
+
 
 
 figS4_extinct <- {fig4_sum %>% 
@@ -953,8 +961,9 @@ figS4_extinct <- {fig4_sum %>%
     scale_x_continuous(labels = scales::percent_format(accuracy = 0.001)) + 
     theme(legend.position = c(0.6, 0.72),
           legend.text = element_text(size = 12),
+          legend.background = element_rect(colour = "transparent", fill = "transparent"),
           legend.title = element_text(size = 12),
-          plot.margin = margin(l = 5.5, r = 10))}
+          plot.margin = margin(l = 5.5, r = 11, t = 20.5, b = 5.5))}
 # figS4_extinct
 
 figS4_uprCI <- {fig4_sum %>% 
@@ -974,7 +983,8 @@ figS4_uprCI <- {fig4_sum %>%
     xlab("Upper percentile of transmission rates averted") +
     ylab("Upper 99% on concurrent infected") +
     scale_x_continuous(labels = scales::percent_format(accuracy = 0.001)) + 
-    theme(plot.margin = margin(l = 20, r = 10))}
+    theme(plot.margin = margin(l = 20.5, r = 11, t = 20.5, b = 5.5))}
+
 figS4 <- gridExtra::arrangeGrob(figS4_extinct, figS4_uprCI, 
                                 layout_matrix = matrix(c(1, 2), 
                                                        byrow  = F, nrow = 2),
@@ -983,3 +993,37 @@ ggsave("figures/Manuscript2/FigureS4.pdf",
        figS4, 
        width = 6, 
        height = 7)
+
+
+# supplement figure with erlang distributed infection periods ----
+pdf("figures/Manuscript2/FigureS5.pdf",
+    width = 12, height = 5)
+par(mfrow = c(1,3))
+hist_vars = list(R0 = 2.5,
+                 k = 0.16, 
+                 nstage = 7,
+                 dt = 1/6,
+                 d_avg = 7,
+                 nsim = 1e6)
+
+set.seed(1001)
+with(hist_vars, replicate(nsim, {rgamma(1, k, scale = R0/k)}) %>% 
+  {hist(., breaks = 100,main = paste0("A. entire infection Gamma(",k, ", ", R0, "/", k, ")\nmean = ", mean(.), "\nvariance = ", var(.)))})
+
+with(hist_vars, replicate(nsim, {
+  d <- rgeom(1, dt/d_avg)+1
+  sum(rgamma(d, k*dt/d_avg, scale = R0/k))}) %>% 
+  {hist(., breaks = 100,main = paste0("B. 1 geometrically distributed infection period\nmean = ", 
+                                      mean(.), "\nvariance = ", var(.)))})
+
+with(hist_vars, replicate(nsim, {
+  d <- sum(rgeom(nstage, nstage*1/d_avg*dt)+1)
+  sum(rgamma(d, k*dt/d_avg, scale = R0/k))}) %>% 
+  {hist(., 
+        breaks = 100,
+        main = paste0("C. ", nstage, 
+                      " geometrically distributed infection periods\nmean = ", 
+                      mean(.), 
+                      "\nvariance = ", 
+                      var(.)))})
+dev.off()
