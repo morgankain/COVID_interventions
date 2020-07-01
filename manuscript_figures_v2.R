@@ -689,7 +689,7 @@ fig4_scale_extinct <- {fig4_scale %>%
           legend.text = element_text(size = 12),
           legend.title = element_text(size = 12),
           legend.background = element_rect(colour = "transparent", fill = "transparent"),
-          plot.margin = margin(t = 25.5, r = 5.5, b = 5.5, l = 5.5))}
+          plot.margin = margin(t = 25.5, r = 9.5, b = 5.5, l = 5.5))}
 
 fig4_scale_uprCI <- {fig4_scale %>% 
     mutate(file = mapvalues(X1, from = as.character(1:9),
@@ -708,10 +708,10 @@ fig4_scale_uprCI <- {fig4_scale %>%
                        name = "Remaining infected when interventions relaxed",
                        guide = F) +
     xlab("Efficiency of truncation") +
-    ylab("Upper 99% on concurrent infected") + 
-    ylim(0, 2300) +
+    ylab("99th percentile of concurrent infected") + 
+    ylim(0, 2350) +
     scale_x_continuous(labels = scales::percent_format(accuracy = 1)) + 
-    theme(plot.margin = margin(l = 20, t = 25.5, b = 5.5, r = 5.5),
+    theme(plot.margin = margin(l = 20, t = 25.5, b = 5.5, r = 9.5),
           legend.position = c(0.6, 0.73),
           legend.text = element_text(size = 12),
           legend.title = element_text(size = 12),
@@ -747,66 +747,66 @@ fig4_scale_traj <- {fig4_scale %>%
 
 
 
-fig4_noscale <- {adply(gsub(".Rds|_run2", "", list.files("./output/figure4_noscale_data", pattern = "Rds")) %>% unique,
-                    1,
-                    function(j){
-                      print(j)
-                      files = list.files("./output/figure4_noscale_data", full.names = T, pattern = j)
-                      print(files)
-                      test <- adply(1:length(files),
-                                    1,
-                                    function(k){
-                                      readRDS(files[k]) %>% mutate(.id = paste0(.id, "_", k))
-                                    })
-                      test_sum <- test %>%
-                        select(-data, -X1, -county, -state) %>%
-                        filter(!is.na(.id)) %>%
-                        pivot_wider() %>%
-                        group_by(.id, beta_catch, catch_eff, threshold_I) %>%
-                        arrange(day) %>%
-                        mutate(any_cross = max(thresh_crossed)) %>%
-                        filter(any_cross > 0) %>%
-                        mutate(first_cross = first(which(thresh_crossed > 0))  + first(date),
-                               days_post = as.numeric(date - first_cross),
-                               max_post = max(days_post)) %>%
-                        ungroup %>%
-                        unite("intervention", beta_catch:threshold_I, remove = F) %>%
-                        select(-any_cross, -first_cross) %>%
-                        mutate(value = I) %>%
-                        group_by(days_post,
-                                 intervention,
-                                 beta_catch,
-                                 catch_eff,
-                                 threshold_I) %>%
-                        mutate(extinct = (value == 0)) %>%
-                        summarise(n = n(),
-                                  prop_extinct = sum(extinct)/n(),
-                                  lwr = min(value),
-                                  lwr_005 = quantile(ifelse(extinct, NA, value), 0.005, na.rm = T),
-                                  lwr_025 = quantile(ifelse(extinct, NA, value), 0.025, na.rm = T),
-                                  lwr_05 = quantile(ifelse(extinct, NA, value), 0.05, na.rm = T),
-                                  lwr_01 = quantile(ifelse(extinct, NA, value), 0.01, na.rm = T),
-                                  lwr_10 = quantile(ifelse(extinct, NA, value), 0.1, na.rm = T),
-                                  lwr_99_all = quantile(value, 0.005),
-                                  lwr_95_all = quantile(value, 0.025),
-                                  lwr_90_all = quantile(value, 0.05),
-                                  upr = max(value),
-                                  upr_995 = quantile(ifelse(extinct, NA, value), 0.995, na.rm = T),
-                                  upr_99 = quantile(ifelse(extinct, NA, value), 0.99, na.rm = T),
-                                  upr_975 = quantile(ifelse(extinct, NA, value), 0.975, na.rm = T),
-                                  upr_95 = quantile(ifelse(extinct, NA, value), 0.95, na.rm = T),
-                                  upr_90 = quantile(ifelse(extinct, NA, value), 0.90, na.rm = T),
-                                  upr_99_all = quantile(value, 0.995),
-                                  upr_95_all = quantile(value, 0.975),
-                                  upr_90_all = quantile(value, 0.95),
-                                  med_all = median(value),
-                                  mean_all = mean(value),
-                                  mean = mean(ifelse(extinct, NA, value), na.rm = T),
-                                  median = median(ifelse(extinct, NA, value), na.rm = T),
-                                  .groups = "drop") %>%
-                        mutate(file = j)
-                      return(test_sum)})}
-saveRDS( fig4_noscale, "output/figure4_noscale_data/figure4_noscale_summary_stats.rds")
+# fig4_noscale <- {adply(gsub(".Rds|_run2", "", list.files("./output/figure4_noscale_data", pattern = "Rds")) %>% unique,
+#                     1,
+#                     function(j){
+#                       print(j)
+#                       files = list.files("./output/figure4_noscale_data", full.names = T, pattern = j)
+#                       print(files)
+#                       test <- adply(1:length(files),
+#                                     1,
+#                                     function(k){
+#                                       readRDS(files[k]) %>% mutate(.id = paste0(.id, "_", k))
+#                                     })
+#                       test_sum <- test %>%
+#                         select(-data, -X1, -county, -state) %>%
+#                         filter(!is.na(.id)) %>%
+#                         pivot_wider() %>%
+#                         group_by(.id, beta_catch, catch_eff, threshold_I) %>%
+#                         arrange(day) %>%
+#                         mutate(any_cross = max(thresh_crossed)) %>%
+#                         filter(any_cross > 0) %>%
+#                         mutate(first_cross = first(which(thresh_crossed > 0))  + first(date),
+#                                days_post = as.numeric(date - first_cross),
+#                                max_post = max(days_post)) %>%
+#                         ungroup %>%
+#                         unite("intervention", beta_catch:threshold_I, remove = F) %>%
+#                         select(-any_cross, -first_cross) %>%
+#                         mutate(value = I) %>%
+#                         group_by(days_post,
+#                                  intervention,
+#                                  beta_catch,
+#                                  catch_eff,
+#                                  threshold_I) %>%
+#                         mutate(extinct = (value == 0)) %>%
+#                         summarise(n = n(),
+#                                   prop_extinct = sum(extinct)/n(),
+#                                   lwr = min(value),
+#                                   lwr_005 = quantile(ifelse(extinct, NA, value), 0.005, na.rm = T),
+#                                   lwr_025 = quantile(ifelse(extinct, NA, value), 0.025, na.rm = T),
+#                                   lwr_05 = quantile(ifelse(extinct, NA, value), 0.05, na.rm = T),
+#                                   lwr_01 = quantile(ifelse(extinct, NA, value), 0.01, na.rm = T),
+#                                   lwr_10 = quantile(ifelse(extinct, NA, value), 0.1, na.rm = T),
+#                                   lwr_99_all = quantile(value, 0.005),
+#                                   lwr_95_all = quantile(value, 0.025),
+#                                   lwr_90_all = quantile(value, 0.05),
+#                                   upr = max(value),
+#                                   upr_995 = quantile(ifelse(extinct, NA, value), 0.995, na.rm = T),
+#                                   upr_99 = quantile(ifelse(extinct, NA, value), 0.99, na.rm = T),
+#                                   upr_975 = quantile(ifelse(extinct, NA, value), 0.975, na.rm = T),
+#                                   upr_95 = quantile(ifelse(extinct, NA, value), 0.95, na.rm = T),
+#                                   upr_90 = quantile(ifelse(extinct, NA, value), 0.90, na.rm = T),
+#                                   upr_99_all = quantile(value, 0.995),
+#                                   upr_95_all = quantile(value, 0.975),
+#                                   upr_90_all = quantile(value, 0.95),
+#                                   med_all = median(value),
+#                                   mean_all = mean(value),
+#                                   mean = mean(ifelse(extinct, NA, value), na.rm = T),
+#                                   median = median(ifelse(extinct, NA, value), na.rm = T),
+#                                   .groups = "drop") %>%
+#                         mutate(file = j)
+#                       return(test_sum)})}
+# saveRDS( fig4_noscale, "output/figure4_noscale_data/figure4_noscale_summary_stats.rds")
 
 
 # fig4_noscale <- readRDS("output/figure4_noscale_data/figure4_noscale_summary_stats.rds")
@@ -825,7 +825,7 @@ fig4_noscale_extinct <- {fig4_noscale %>%
     scale_color_manual(values = fig4_colors, 
                        guide = F,
                        name = "Remaining infected when interventions relaxed") +
-    xlab("") + 
+    xlab("Efficiency of truncation") + 
     ylab("Proportion of epidemic\nsimulations extinct") + 
     scale_y_continuous(labels = scales::percent_format(accuracy = 1),
                        limits = c(0.58, 0.99)) + 
@@ -834,7 +834,7 @@ fig4_noscale_extinct <- {fig4_noscale %>%
           legend.text = element_text(size = 12),
           legend.title = element_text(size = 12),
           legend.background = element_rect(colour = "transparent", fill = "transparent"),
-          plot.margin = margin(t = 25.5, r = 5.5, b = 5.5, l = 5.5))}
+          plot.margin = margin(t = 25.5, r = 9.5, b = 5.5, l = 5.5))}
 
 fig4_noscale_uprCI <- {fig4_noscale %>% 
     filter(days_post == 6*7) %>%
@@ -849,11 +849,11 @@ fig4_noscale_uprCI <- {fig4_noscale %>%
     geom_point() +
     scale_color_manual(values = fig4_colors, 
                        name = "Remaining infected when\ninterventions relaxed") +
-    xlab("") +
-    ylab("Upper 99% on concurrent infected") + 
-    ylim(0, 2300) +
+    xlab("Efficiency of truncation") +
+    ylab("99th percentile of concurrent infected") + 
+    ylim(0, 2350) +
     scale_x_continuous(labels = scales::percent_format(accuracy = 1)) + 
-    theme(plot.margin = margin(l = 20, t = 25.5, b = 5.5, r = 5.5),
+    theme(plot.margin = margin(l = 20, t = 25.5, b = 5.5, r = 9.5),
           legend.position = c(0.6, 0.77),
           legend.text = element_text(size = 12),
           legend.title = element_text(size = 12),
@@ -881,25 +881,39 @@ fig4_noscale_traj <- {fig4_noscale %>%
     scale_color_manual(values = fig4_traj_colors, 
                        name = "Efficiency of truncation") +
     theme(legend.position = c(0.45, 0.8)) +
-    xlab("") +
+    xlab("Days since intervention relaxation") +
     ylab("Concurrent infections") +
     theme(plot.margin = margin(t = 25.5, r = 5.5, b = 5.5, l = 5.5))}
 
-fig4 <- gridExtra::arrangeGrob(fig4_noscale_traj, fig4_noscale_extinct, fig4_noscale_uprCI, 
-                               fig4_scale_traj, fig4_scale_extinct, fig4_scale_uprCI, 
-                               layout_matrix = matrix(c(1, 2, 3, 4, 5, 6), 
-                                                      byrow  = T, nrow = 2),
-                               widths = c(1.5, 1.5, 1.5))
+fig4 <- gridExtra::arrangeGrob(
+  gridExtra::arrangeGrob(fig4_noscale_traj, fig4_noscale_extinct, fig4_noscale_uprCI, 
+                         layout_matrix = matrix(c(1, 2, 3), 
+                                                byrow  = T, nrow = 1),
+                         widths = c(1.5, 1.5, 1.5), 
+                         clip = "off",
+                         padding = unit(2, "line"),
+                         top = grid::textGrob("Truncation with no shelter-in-place adjustment, resulting in variable mean", 
+                                              x = 0.05, y = 0.7, hjust = 0, gp = gpar(fontsize=18, fontface = "bold"))),
+  gridExtra::arrangeGrob(fig4_scale_traj, fig4_scale_extinct, fig4_scale_uprCI, 
+                         layout_matrix = matrix(c(1, 2, 3), 
+                                                byrow  = T, nrow = 1),
+                         widths = c(1.5, 1.5, 1.5), 
+                         clip = "off",
+                         padding = unit(2, "line"),
+                         top = grid::textGrob("Truncation with shelter-in-place adjustment, resulting in fixed mean", 
+                                              x = 0.05, hjust = 0, y = 0.7, gp = gpar(fontsize=18, fontface = "bold"))))
+
 # gridExtra::grid.arrange(fig4)
+
 ggsave("figures/Manuscript2/Figure4_v2.pdf", 
        fig4, 
-       width = 12, 
-       height = 9)
+       width = 13, 
+       height = 10)
 
 
 
 # Figure S4 ----
-figS4_extinct <- {fig4_sum %>% 
+figS4_extinct <- {fig4_scale %>% 
     mutate(file = mapvalues(X1, from = as.character(1:9),
                             to = gsub(".Rds|_run2", "", list.files("./output/figure4_scale_data", pattern = "Rds")) %>% unique)) %>%
     filter(days_post == 6*7) %>%
@@ -924,7 +938,7 @@ figS4_extinct <- {fig4_sum %>%
           plot.margin = margin(l = 5.5, r = 11, t = 20.5, b = 5.5))}
 # figS4_extinct
 
-figS4_uprCI <- {fig4_sum %>% 
+figS4_uprCI <- {fig4_scale %>% 
     mutate(file = mapvalues(X1, from = as.character(1:9),
                             to = gsub(".Rds|_run2", "", list.files("./output/figure4_scale_data", pattern = "Rds")) %>% unique)) %>%
     filter(days_post == 6*7) %>%
@@ -941,7 +955,7 @@ figS4_uprCI <- {fig4_sum %>%
                        name = "Remaining infected when\ninterventions are relaxed",
                        guide = F) +
     xlab("Upper percentile of transmission rates averted") +
-    ylab("Upper 99% on concurrent infected") +
+    ylab("99th percentile of concurrent infected") +
     scale_x_continuous(labels = scales::percent_format(accuracy = 0.001)) + 
     theme(plot.margin = margin(l = 20.5, r = 11, t = 20.5, b = 5.5))}
 
