@@ -15,7 +15,7 @@ fig1_data$county <- factor(fig1_data$county)
                                    ))) %>%
    filter(date < as.Date("2020-06-08")) %>%
    filter(date >= as.Date("2020-02-10")) %>%
-   filter(!(name %in% c("Reff", "Detect"))) %>%
+  # filter(!(name %in% c("Reff", "Detect"))) %>%
    group_by(county) %>% 
    mutate(nparams = 0.5/length(unique(paramset))) %>% 
    ggplot(aes(x = date, y = mid, ymin = lwr, ymax = upr, 
