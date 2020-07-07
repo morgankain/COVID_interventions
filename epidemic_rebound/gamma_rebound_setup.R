@@ -85,32 +85,17 @@ pomp_data        <- data.frame(covid_mobility) %>%
   dt             <- covid_mobility@rprocess@delta.t
   date_origin    <- prev.fit[["date_origin"]][1]
 
-if (int.catch_eff_post == 0) {
+#SIP_post <- sip_trunc_combns(
+#                              beta_catch      = int.beta_catch_post
+#                            , beta_catch_type = "pct"
+#                            , catch_eff       = int.catch_eff_post
+#                            , var_params      = variable_params
+#                            , dt              = dt
+#                            , desired_R       = desired.R
+#  )
 
-SIP_post <- check_R0(
-    beta0est     = variable_params$beta0
-  , beta_min     = variable_params$beta_min
-  , fixed_params = variable_params
-  , sd_strength  = 1
-  , prop_S       = 1
-  , desired_R    = desired.R
-  )
-
-} else {
+  print(SIP_post)
   
-SIP_post <- sip_trunc_combns(
-                              beta_catch      = int.beta_catch_post
-                            , beta_catch_type = "pct"
-                            , catch_eff       = int.catch_eff_post
-                            , k               = variable_params$beta0_k
-                            , beta0           = variable_params$beta0
-                            , beta_min        = variable_params$beta_min
-                            , d               = variable_params$d
-                            , dt              = dt
-                            , desired_R       = desired.R)
-  
-}
-
 if (focal.county == "Fulton") {
   mobility <- readRDS(mobility.file) %>% 
     dplyr::filter((county_name == focal.county | county_name == "DeKalb") & (state_abbr == focal.state_abbr)) %>%

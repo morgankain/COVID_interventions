@@ -13,7 +13,6 @@ counties_list = {list(
 #,  CC = list(rds.name = "output/Chester_0_2020-06-25_cont_round2.Rds")
 )}
 
-
 ## truncated gamma distribution simulator
 rtgamma = function(n, shape, scale, lower, upper, limits = "pct"){
   if(limits == "pct"){
@@ -35,10 +34,28 @@ rtgamma = function(n, shape, scale, lower, upper, limits = "pct"){
 sip_trunc_combns = function(beta_catch, 
                             beta_catch_type = "pct", 
                             catch_eff, 
-                            k, beta0, beta_min, d, dt,
+                            #k, beta0, beta_min, d, 
+                            var_params,
+                            dt,
                             desired_R){
+  k = var_params["beta0_k"] %>% unlist
+  beta0 = var_params["beta0"] %>% unlist
+  beta_min = var_params["beta_min"] %>% unlist
+  d = var_params["d"] %>% unlist
+  inf =  var_params["alpha"] * var_params["Ca"] +
+    (1 - var_params["alpha"]) * var_params["mu"] * 
+    ((var_params["lambda_p"]/(var_params["lambda_p"] + var_params["lambda_m"])) * var_params["Cp"] +
+       (var_params["lambda_m"]/(var_params["lambda_p"] + var_params["lambda_m"])) * var_params["Cm"]) +
+    (1 - var_params["alpha"]) * (1 - var_params["mu"]) * 
+    ((var_params["lambda_p"]/(var_params["lambda_p"] + var_params["lambda_s"])) * var_params["Cp"] + 
+       (var_params["lambda_s"]/(var_params["lambda_p"] + var_params["lambda_s"])) * var_params["Cs"]) %>% 
+    unlist
+  
   shp = k*dt/d
   scl = beta0/k
+  # print(shp)
+  # print(scl)
+  # print(beta_catch)
   if(beta_catch_type == "pct"){
     upper = qgamma(1 - beta_catch, shape = shp, scale = scl)
   } else{
@@ -50,9 +67,21 @@ sip_trunc_combns = function(beta_catch,
   
   # expected value is weighted sum of truncated and untruncated distributions depdending on efficacy
   out <- (log(outer(E_trunc, catch_eff, "*") + outer(rep(shp*scl, length(E_trunc)), 1-catch_eff, "*")) - 
-            log(desired_R) - log(dt) + log(d))/-log(beta_min)
+            log(desired_R) - log(dt) + log(d) + log(inf))/-log(beta_min)
   return(out)
 }
+
+
+fig1_colors = c(
+    "#FF0000"
+  , "#00A08A"
+  , "#F2AD00"
+  , "dodgerblue3"
+  , "maroon3"
+  , "#F98400"
+  , "#5BBCD6"
+  , "black"
+)
 
 ####
 ## Figure 1: model fits ----
@@ -104,17 +133,6 @@ fig1_data <- plyr::ldply(counties_list,
 })}, .id = NULL)
 
 # plot the fits and data
-fig1_colors = c(
-  "#FF0000"
-, "#00A08A"
-, "#F2AD00"
-, "dodgerblue3"
-, "maroon3"
-, "#F98400"
-, "#5BBCD6"
-, "black"
-  )#[c(1,4,5,2,3)]
-
 fig1_data$name <- sapply(fig1_data$name, simpleCap)
 
 ## LA with same axis
@@ -188,8 +206,8 @@ list(
 , int.type            = "tail"
 , int.init            = "2020-07-01"
 , sim_end             = "2020-08-31"
-, sim_title           = "Superspreading_1%Tail_75%Eff"
-, int.beta_catch      = 0.01
+, sim_title           = "Superspreading_05%Tail_75%Eff"
+, int.beta_catch      = 0.005
 , int.beta_catch_type = "pct"
 , int.catch_eff       = 0.75
 ),
@@ -199,8 +217,8 @@ list(
 , int.type            = "tail"
 , int.init            = "2020-07-01"
 , sim_end             = "2020-08-31"
-, sim_title           = "Superspreading_2%Tail_50%Eff"
-, int.beta_catch      = 0.02
+, sim_title           = "Superspreading_1%Tail_50%Eff"
+, int.beta_catch      = 0.01
 , int.beta_catch_type = "pct"
 , int.catch_eff       = 0.50
 ),
@@ -211,7 +229,7 @@ list(
 , int.init            = "2020-07-01"
 , sim_end             = "2020-08-31"
 , sim_title           = "Superspreading_1%Tail_100%Eff"
-, int.beta_catch      = 0.01
+, int.beta_catch      = 0.003
 , int.beta_catch_type = "pct"
 , int.catch_eff       = 1.0
 )
@@ -221,10 +239,10 @@ list(
 sim_vars <- list(
  loglik.max       = TRUE
 , plot_vars       = c("cases", "deaths")
-, ci.stoc         = 0.10
+, ci.stoc         = 0.025
 , ci.epidemic     = T
-, ci.epidemic_cut = 500
-, nsim            = 100
+, ci.epidemic_cut = 100
+, nsim            = 300
 , plot.median     = F
   )
 
@@ -254,8 +272,10 @@ fig2_data <- ldply(int_vars, function(j) {
 }
 , .id = NULL)
 
-fig2_colors <- c("#D67236", "dodgerblue4", "#0b775e", "magenta4")
+fig2_colors <- c("#D67236", "dodgerblue4", "#0b775e", "magenta4", "red3")
 fig2_data$name <- sapply(fig2_data$name, simpleCap)
+
+# fig2_data <- readRDS("fig2_data.Rds")
 
 fig2_data %>% 
   filter(date >= as.Date("2020-02-10")) %>%
@@ -263,20 +283,25 @@ fig2_data %>%
     "Continue SIP"
   , "Isolate"
   , "Lift"
-  , "Superspreading_1%Tail_75%Eff"
-# , "Superspreading_2%Tail_50%Eff"
-# , "Superspreading_1%Tail_100%Eff"
+#  , "Superspreading_05%Tail_75%Eff"
+ , "Superspreading_1%Tail_50%Eff"
+ , "Superspreading_1%Tail_100%Eff"
                              )) %>% 
    mutate(intervention = mapvalues(intervention,
                                    from = c("Continue SIP",
                                             "Isolate",
                                             "Lift",
-                                            "Superspreading_1%Tail_75%Eff"),
+                                    #  , "Superspreading_05%Tail_75%Eff"
+   "Superspreading_1%Tail_50%Eff"
+ , "Superspreading_1%Tail_100%Eff"
+                                     ),
                                     to  = c(
                                        "Continue shelter in place"
                                      , "Infected isolation"
                                      , "Lift all interventions"
-                                     , "Superspreading Averted(Top 1% of\ndistribution removed with 75% effectiveness)"
+                                     , "Superspreading Averted(Top 1% of\ndistribution removed with 50% effectiveness)"
+                                     , "Superspreading Averted(Top .3% of\ndistribution removed with 100% effectiveness)"
+                                      #  , "Superspreading Averted(Top .5% of\ndistribution removed with 75% effectiveness)"
                                    ))) %>%
    mutate(county = mapvalues(county,
                                    from = c("King",
@@ -286,11 +311,17 @@ fig2_data %>%
                                        "Seattle, WA"
                                      , "Los Angeles, CA"
                                    ))) %>% 
+  mutate(name = mapvalues(name, 
+    from = c("Cases", "Deaths")
+  , to   = c("Daily Cases", "Daily Deaths")
+  )) %>%
    mutate(intervention = factor(intervention, levels = c(
      "Lift all interventions"
    , "Continue shelter in place"
    , "Infected isolation"
-   , "Superspreading Averted(Top 1% of\ndistribution removed with 75% effectiveness)"
+  # , "Superspreading Averted(Top 1% of\ndistribution removed with 75% effectiveness)"
+   , "Superspreading Averted(Top 1% of\ndistribution removed with 50% effectiveness)"
+   , "Superspreading Averted(Top .3% of\ndistribution removed with 100% effectiveness)"
      ))) %>% {
     ggplot(aes(x = date, y = mid, 
               ymin = lwr, ymax = upr, 
@@ -310,10 +341,11 @@ fig2_data %>%
   geom_vline(xintercept = as.Date("2020-07-01"), linetype = "dashed", lwd = 0.5) + 
   geom_point(aes(x = date, y = data), 
              color = "black", size = 1) + 
-  scale_y_continuous(trans = "log10", labels = trans_format('log10', math_format(10^.x))) +
-  scale_fill_manual(values = fig2_colors[c(2,1,3,4)]
+  scale_y_continuous(trans = "pseudo_log", breaks = c(1, 10, 100, 1000, 10000)) +
+      #+ #, labels = trans_format('log10', math_format(10^.x))) +
+  scale_fill_manual(values = fig2_colors[c(2,1,3,4,5)]
     , name = "Intervention") +
-  scale_color_manual(values = fig2_colors[c(2,1,3,4)]
+  scale_color_manual(values = fig2_colors[c(2,1,3,4,5)]
     , name = "Intervention") +
   ylab("") + 
   theme(
@@ -376,12 +408,13 @@ fig3_data <- adply(1:length(counties_list), 1, function(i){
       sip = sip_trunc_combns(beta_catch_vals, 
                              "pct",
                              catch_eff_vals, 
-                             k = params_row["beta0_k"],
-                             beta0 = params_row["beta0"],
-                             beta_min = params_row["beta_min"],
-                             d = params_row["d"],
+                             var_params = params_row,
+                             # k = params_row["beta0_k"],
+                             # beta0 = params_row["beta0"],
+                             # beta_min = params_row["beta_min"],
+                             # d = params_row["d"],
                              dt = dt,
-                             desired_R = 2.0) %>% 
+                             desired_R = 1.0) %>% 
         magrittr::set_colnames(paste0("catch_eff_", catch_eff_vals)),
       county = as.character(variable_params[j,"county"]),
       paramset = j) %>% return
@@ -569,44 +602,44 @@ counties_list <- {
 
 int_vars <- {
 list(
-  just_sip = list(
-   counter.factual      = FALSE
- , int.movement         = c("post", "mid")
- , int.type             = "tail"
- , int.init             = "2020-07-01"
- , sim_end              = "2020-12-01"
- , sim_title            = "Just Shelter in Place"
- , thresh_inf.val       = 5
- , int.beta_catch_type  = "pct"
- , int.catch_eff        = 0.75
- , int.beta_catch       = 0.005
- , int.beta0_k          = 0.16
- , int.beta0_k_post     = 0.16
- , int.beta_catch_post  = 0.005
- , int.catch_eff_post   = 0.00
+ just_sip = list(
+     counter.factual      = FALSE
+   , int.movement         = c("post", "mid")
+   , int.type             = "tail"
+   , int.init             = "2020-07-01"
+   , sim_end              = "2021-01-31"
+   , sim_title            = "Just Shelter in Place"
+   , thresh_inf.val       = 2
+   , int.beta_catch_type  = "pct"
+   , int.catch_eff        = 0.75
+   , int.beta_catch       = 0.005
+   , int.beta0_k          = 0.16
+   , int.beta0_k_post     = 0.16
+   , int.beta_catch_post  = 0
+   , int.catch_eff_post   = 1
  ),
   minor_tail = list(
    counter.factual      = FALSE
  , int.movement         = c("post", "mid")
  , int.type             = "tail"
  , int.init             = "2020-07-01"
- , sim_end              = "2020-12-01"
+ , sim_end              = "2021-01-31"
  , sim_title            = "Minor tail chop"
- , thresh_inf.val       = 5
+ , thresh_inf.val       = 2
  , int.beta_catch_type  = "pct"
  , int.catch_eff        = 0.75
  , int.beta_catch       = 0.005
  , int.beta0_k          = 0.16
  , int.beta0_k_post     = 0.16
  , int.beta_catch_post  = 0.001
- , int.catch_eff_post   = 0.75
+ , int.catch_eff_post   = 1
 ),
   major_tail = list(
    counter.factual      = FALSE
  , int.movement         = c("post", "mid")
  , int.type             = "tail"
  , int.init             = "2020-07-01"
- , sim_end              = "2020-12-01"
+ , sim_end              = "2021-01-31"
  , sim_title            = "Major tail chop"
  , thresh_inf.val       = 5
  , int.beta_catch_type  = "pct"
@@ -614,18 +647,18 @@ list(
  , int.beta_catch       = 0.005
  , int.beta0_k          = 0.16
  , int.beta0_k_post     = 0.16
- , int.beta_catch_post  = 0.003
- , int.catch_eff_post   = 0.75
-)
-)}
+ , int.beta_catch_post  = 0.002
+ , int.catch_eff_post   = 1
+))}
 
 source("ggplot_theme.R")
 source("epidemic_rebound/gamma_rebound_params.R")
 source("epidemic_rebound/gamma_rebound_pomp2.R")
 
-nsim           <- 10
-plot_vars      <- c("cases", "deaths", "I")
+plot_vars      <- c("cases", "deaths", "I", "thresh_crossed")
+nsim           <- 1000
 ci.stoch       <- 0.025
+ci.epidemics   <- T
 plot.median    <- F
 
 fig4_data <- adply(1:length(int_vars), 1, 
@@ -658,21 +691,15 @@ fig4_data <- adply(1:length(int_vars), 1,
 fig4_data$name         <- sapply(fig4_data$name, simpleCap)
 fig4_data$intervention <- factor(fig4_data$intervention, levels = unique(fig4_data$intervention))
 
-fig4_colors <- c("#D67236", "dodgerblue4", "#0b775e", "magenta4")
-
-#check_date <- (fig4_data %>% filter(
-#  .id           == "median"
-# , intervention == "Just Shelter in Place"
-# , date          > "2020-05-01"
-#  ) %>% 
-#    filter(value == min(value)) %>% 
-#    filter(date  == min(date)))$date
+fig4_colors <- c("dodgerblue4", "#D67236", "firebrick3", "#0b775e")
+# fig4_colors <- c("#D67236", "dodgerblue4", "red", "#0b775e", "magenta4")
 
 check_date <- (fig4_data %>% filter(
 #  .id           == "median"
-   intervention == "Just Shelter in Place"
+   intervention == "Shelter in Place check"
  , date          > "2020-05-01"
-  ) %>% dplyr::filter(mid == 0) %>% 
+ , name         == "I"
+  ) %>% dplyr::filter(mid <= 10) %>% 
     filter(date  == min(date)))$date
 
 ## For just I plot
@@ -740,43 +767,28 @@ check_date <- (fig4_data %>% filter(
 #    , est = quantile(value, 0.500) 
 #    , upr = quantile(value, 0.975))
 
-fig4_data <- fig4_data %>% filter(date > "2020-03-01")
+check_date <- as.Date("2020-10-15")
 
-fig4_data %>% filter(name == "Cases") %>% filter(date >= check_date) %>%
-  ggplot(aes(x = date
-    # , y = value
-    , y = mid
-   # , group = .id
-    )) +
+fig4_data %>% filter(name == "I") %>% 
+  filter(date > "2020-07-01") %>% {
+    ggplot(aes(x = date, y = mid), data = filter(., date >= check_date)) +
   geom_ribbon(
     aes(
       ymin = lwr, ymax = upr
     , fill  = intervention
     , color = intervention
     )
-  #  data = (fig4_data %>% filter(date >= check_date))
   , alpha = 0.50, colour = NA) +
-#  geom_line(data = (fig4_data %>% filter(date >= check_date, .id != "median"))
-#    , aes(group = interaction(.id, intervention))
-#    , lwd = 0.25, alpha = 0.40
-#   ) +
-#  geom_line(data = (fig4_data %>% filter(date >= check_date, .id == "median"))
-#    , aes(group = interaction(.id, intervention))
-#   , lwd = 1.5) +
-  geom_ribbon(data = (fig4_data %>% filter(date <= check_date, intervention == "Just Shelter in Place", name == "Cases"))
-   , aes(
-      ymin = lwr, ymax = upr
-   )
+      geom_line(aes(color = intervention), data = filter(., date >= check_date), 
+                lwd = 0.5) +
+      geom_ribbon(data = filter(., date <= check_date, 
+                                intervention == "Just Shelter in Place check")
+                  , aes(ymin = lwr, ymax = upr)
    , alpha = 0.50, colour = NA, fill = "black") +
-  geom_line(data = (fig4_data %>% filter(date <= check_date, intervention == "Just Shelter in Place", name == "Cases")), colour = "black") +
-#  geom_line(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place", .id != "median"))
-#    , lwd = 0.25, alpha = 0.40, colour = "black"
-#   ) +
-#  geom_line(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place", .id == "median"))
-#    , colour = "black"
-#    , lwd = 1.5) +
-# geom_vline(xintercept = check_date, linetype = "dashed", lwd = 0.5) + 
-# geom_point(aes(x = date, y = data), color = "black", size = 1) + 
+#  geom_line(data = filter(., date <= check_date, 
+#                          intervention == "Just Shelter in Place check"), colour = "black") +
+#      geom_vline(xintercept = check_date, linetype = "dashed", lwd = 0.5) +
+      geom_point(aes(x = date, y = data), color = "black", size = 1) +
 #  scale_y_continuous(trans = "log10") +
   scale_fill_manual(values = fig4_colors, name = "Intervention") +
   scale_color_manual(values = fig4_colors, name = "Intervention") +
@@ -789,6 +801,6 @@ fig4_data %>% filter(name == "Cases") %>% filter(date >= check_date) %>%
     , strip.placement = "outside"
     , strip.text = element_text(size = 16)
     , axis.text.x = element_text(size = 14)) +
-  xlab("Date") + 
-  geom_point(data = (county.data %>% filter(date > "2020-03-01"))
-    , aes(date, cases), lwd = 2, colour = "black")
+  xlab("Date") +
+  scale_y_continuous(trans = "log10")
+  }
