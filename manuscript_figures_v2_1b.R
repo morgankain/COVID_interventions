@@ -1,6 +1,3 @@
-fig1_data$county <- factor(fig1_data$county)
-fig1_data %<>% mutate(name = mapvalues(name, from = c("cases", "deaths", "Reff", "detect"),
-                                       to = c("Daily cases", "Daily deaths", "Reff", "detect")))
 {
  fig1.1 <- {fig1_data %>% 
    filter(county != "Los Angeles") %>%
@@ -15,9 +12,10 @@ fig1_data %<>% mutate(name = mapvalues(name, from = c("cases", "deaths", "Reff",
                                      , "Atlanta, GA"
                                      , "Miami, FL"
                                    ))) %>%
-   filter(date < as.Date("2020-06-19")) %>%
+       # filter(date < as.Date("2020-06-19")) %>%
+       filter(date < as.Date("2020-08-14")) %>%
    filter(date >= as.Date("2020-02-10")) %>%
-  # filter(!(name %in% c("Reff", "Detect"))) %>%
+   filter(!(name %in% c("Reff", "Detect"))) %>%
    group_by(county) %>% 
    mutate(nparams = 0.5/length(unique(paramset))) %>% 
    ggplot(aes(x = date, y = mid, ymin = lwr, ymax = upr, 
@@ -27,7 +25,14 @@ fig1_data %<>% mutate(name = mapvalues(name, from = c("cases", "deaths", "Reff",
    geom_line() +
    geom_point(aes(x = date, y = data), 
               color = "black", size = 0.75) + 
-   scale_y_continuous(trans = "sqrt") + 
+   scale_y_continuous(trans = "pseudo_log", 
+                      breaks = function(x){
+                         if(max(x) > 1000){
+                            c(1, 10, 100, 1000, 5000)
+                         } else{ 
+                            c(1, 10, 50, 100, 500)
+                         }
+                      }) + 
    scale_fill_manual(guide = F, values = fig1_colors) +
    scale_color_manual(guide = F, values = fig1_colors) +
    facet_grid(name ~ county, scales = "free_y", switch = "y")  +
@@ -49,7 +54,7 @@ fig1_data %<>% mutate(name = mapvalues(name, from = c("cases", "deaths", "Reff",
   #                                                    r = -35)))
    }
  
- fig1.2 <- {fig1_data %>% 
+ fig1.2 <- {fig1_data %>%  
    arrange(county, paramset, date) %>%
    filter(county == "Los Angeles") %>%
  #  mutate(county = paste0(county, " County, ", state)) %>%
@@ -57,7 +62,8 @@ fig1_data %<>% mutate(name = mapvalues(name, from = c("cases", "deaths", "Reff",
                                    from = c("Los Angeles"),
                                     to  = c("Los Angeles, CA")
                                    )) %>%
-   filter(date < as.Date("2020-06-19")) %>%
+       # filter(date < as.Date("2020-06-19")) %>%
+       filter(date < as.Date("2020-08-14")) %>%
    filter(date >= as.Date("2020-02-10")) %>%
    filter(!(name %in% c("Reff", "Detect"))) %>%
    group_by(county) %>% 
@@ -69,7 +75,14 @@ fig1_data %<>% mutate(name = mapvalues(name, from = c("cases", "deaths", "Reff",
    geom_line() +
    geom_point(aes(x = date, y = data), 
               color = "black", size = 0.75) + 
-   scale_y_continuous(trans = "sqrt", position = "right") + 
+   scale_y_continuous(trans = "pseudo_log", position = "right",
+                      breaks = function(x){
+                         if(max(x) > 10000){
+                            c(1, 10, 100, 1000, 10000)
+                         } else{ 
+                            c(1, 10, 100, 1000, 5000)
+                         }
+                      }) + 
    scale_fill_manual(guide = F, values = fig1_colors[5]) +
    scale_color_manual(guide = F, values = fig1_colors[5]) +
    facet_grid(name ~ county, scales = "free_y", switch = "y")  +
@@ -85,7 +98,8 @@ fig1_data %<>% mutate(name = mapvalues(name, from = c("cases", "deaths", "Reff",
    }
  
  fig1.3 <- {fig1_data %>% 
-   filter(date < as.Date("2020-06-19")) %>%
+   # filter(date < as.Date("2020-06-19")) %>%
+       filter(date < as.Date("2020-08-14")) %>%
    filter(date >= as.Date("2020-02-10")) %>%
    filter(name == "Reff") %>%
      mutate(county = mapvalues(county,
@@ -150,7 +164,8 @@ fig1_data %<>% mutate(name = mapvalues(name, from = c("cases", "deaths", "Reff",
  }
  
  fig1.4 <- {fig1_data %>% 
-       filter(date < as.Date("2020-06-19")) %>%
+       # filter(date < as.Date("2020-06-19")) %>%
+       filter(date < as.Date("2020-08-14")) %>%
        filter(date >= as.Date("2020-04-15")) %>%
        filter(name == "Reff") %>%
        mutate(county = mapvalues(county,
@@ -231,3 +246,4 @@ fig1 <- gridExtra::arrangeGrob(fig1.1, fig1.2, fig1.3,  fig1.4,
          width = 12,
          height = 8)
 }
+
