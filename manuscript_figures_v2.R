@@ -205,7 +205,7 @@ fig1_data$county <- factor(fig1_data$county)
 ## LA with different axis
 source("manuscript_figures_v2_1b.R")
 
-# Pairs plots ----
+# Figures S2-S6: Pairs plots ----
 # IFR = prob of dying given severe (delta) x prob of severe given pre-symptomatic (1 - mu) x prob of pre-symptomatic given infection (1 - alpha)
 lapply(fig1_data_all, "[[", "all_params")  %>% dplyr::bind_rows() %>% 
   group_by(county) %>% 
@@ -226,7 +226,12 @@ lapply(fig1_data_all, "[[", "all_params")  %>% dplyr::bind_rows() %>%
                             ))) %>%  
   ungroup() %>% 
   mutate(start_date = as.numeric(sim_start - as.Date("2019-12-31"))) %>%
-  select(-(Cp:d), -detect_t0, -etime) %>%
+  select(-(Cp:d), -detect_t0, -etime, - sim_start) %>%
+  # sort columns sensibly for plotting
+  select(Ca, alpha, delta , mu, rho_d, start_date, # sobol sampled params
+         E_init, beta0, beta_min, detect_k, detect_mid, detect_max, theta, theta2, # fit params
+         IFR, log_lik, log_lik.se, # calculated params
+         everything() )%>%  
   d_ply(.(county), function(county_data){
     pdf(paste0("figures/Manuscript2/pairs_",
                gsub(",", "", gsub(" ", "_", county_data$county %>% unique, fixed = T), fixed = T), 
@@ -245,7 +250,7 @@ lapply(fig1_data_all, "[[", "all_params")  %>% dplyr::bind_rows() %>%
   })
   
 
-# Violins for different parameters ----
+# Figure S10: Violins for different parameters ----
 fig_param_violins <- lapply(fig1_data_all, "[[", "all_params")  %>% dplyr::bind_rows() %>% 
   mutate(county = factor(county)) %>%
   group_by(county) %>% 
@@ -288,7 +293,7 @@ ggsave("figures/Manuscript2/Figure_param_violins.pdf",
        fig_param_violins)
 
 
-# Detection rates and IFR ----
+# Figure S11: Detection rates and IFR ----
 fig_detect <- fig1_data %>% filter(name == "Detect") %>% 
   # join in the parameter data to get ascertainment rate
   left_join(lapply(fig1_data_all, "[[", "sim_params")  %>% dplyr::bind_rows() %>% 
@@ -364,13 +369,13 @@ gridExtra::grid.arrange(fig_detect_IFR)
 ggsave("figures/Manuscript2/Figure_detect_IFR.pdf", fig_detect_IFR, 
        width = 10, height = 10)
 
-# trajectory figures for supplement ----
+# Figure S8: trajectory figures for supplement ----
 fig_trajectory <- lapply(fig1_data_all, "[[", "trajectory") %>% dplyr::bind_rows() %>% 
   filter((county == "Los Angeles" & paramset %in% c("1", "data") & .id %in% c(4, 6, 8, "data", "median")) | 
            (county == "King" & paramset %in% c("1", "data") & .id %in% c(1, 6, 16, "data", "median"))) %>% 
   mutate(type = mapvalues(.id, 
                           from = c(as.character(1:500)), 
-                          to = rep("sim", 500)),
+                          to = rep("sim", 500)) %>% as.character,
          name = mapvalues(name, from = c("cases", "deaths"), 
                           to = c("Daily Reported Cases", "Daily Deaths")), 
          county = mapvalues(county,
@@ -385,25 +390,36 @@ fig_trajectory <- lapply(fig1_data_all, "[[", "trajectory") %>% dplyr::bind_rows
                               , "Atlanta, GA"
                               , "Miami, FL",
                               "Los Angeles, CA"
-                            ))) %>%
-  ggplot(aes(x = date, y = value, 
-             group = interaction(.id, paramset), 
-             color = type)) + 
-  geom_line() + 
-  facet_grid(name ~ county, scales = "free", 
-             switch = "y")  + 
-  scale_y_continuous(trans = "pseudo_log", 
-                     breaks = function(x){
-                       if(max(x) > 1000){
-                         c(0, 1, 10, 100, 500, 1000, 5000, 10000)
-                       } else{ c(0, 1, 5, 10, 50, 100, 250)}}) + 
-  scale_color_manual(values = c("grey", "black", "red")) + 
-  xlab("") + ylab("") + 
-  theme(strip.placement = "outside", 
-        strip.text=element_text(size = 20))
+                            ))) %>% 
+  group_by(county) %>%
+  mutate(.id = ifelse(type == "sim", 
+                        as.character(dense_rank(as.numeric(.id))), 
+                        type)) %>% 
+  {ggplot(data = .,
+          mapping = aes(x = date, y = value, 
+             group = interaction(.id, paramset, county))) + 
+      geom_line(aes(color = .id)) + 
+      facet_grid(name ~ county, scales = "free", 
+                 switch = "y")  + 
+      scale_y_continuous(trans = "pseudo_log", 
+        breaks = function(x){
+          if(max(x) > 1000){
+            c(0, 1, 10, 100, 500, 1000, 5000, 10000)
+          } else{ c(0, 1, 5, 10, 50, 100, 250)}}) + 
+      scale_color_manual(values = c(alpha("#377eb8", 0.7), 
+                                    alpha("#4daf4a", 0.7),
+                                    alpha("#984ea3", 0.7),
+                                    "red", "black"),
+                         name = "type", 
+                         labels = function(x){
+                           ifelse(is.na(as.numeric(x)), x, paste0("simulation ", x))
+                             }) + 
+      xlab("") + ylab("") + 
+      theme(strip.placement = "outside", 
+            strip.text=element_text(size = 20))}
 
 ggsave("figures/Manuscript2/Figure_trajectories.pdf", 
-       fig_trajectory)
+       fig_trajectory,width =  10, height = 8)
 ####
 ## Figure 2: Interventions ----
 ####
@@ -765,9 +781,10 @@ fig3_hist <- fig3_hist_df %>%
                                   paste0(hist_vars$N, " infected")))) %>% 
   unite("time_size", c("time", "size"), sep = ", ") %>% 
   ggplot(aes(x = value, 
-             y = ..count.. / sum(..count..),
+             y = ..count../sum(..count..),
              group = dist, fill = dist, color = dist)) + 
   geom_histogram(color = NA, position = "identity", alpha = 0.8) +
+  # geom_density(trim = TRUE) +
   geom_vline(data = data.frame(xint=with(hist_vars, qgamma(1 - beta_catch, shape = k*dt/d, scale = R0/k)),
                                time = "4-hour time step",
                                size = "individual") %>%
@@ -776,10 +793,12 @@ fig3_hist <- fig3_hist_df %>%
   facet_wrap( ~ time_size, scales = "free", nrow = 2) + 
   scale_fill_manual(name = "Distribution", values = c("#F21A00", "#3B9AB2")) + 
   scale_color_manual(name = "Distribution", values = c("#F21A00", "#3B9AB2")) + 
-  scale_y_continuous(trans = "sqrt", labels = scales::percent_format(accuracy = 1)) + 
-  scale_x_continuous(trans = "sqrt") + #, breaks = c(1, 5, 10, 20, 40, 100)) +
+  # scale_y_continuous(trans = "pseudo_log") + 
+  scale_y_continuous(trans = "sqrt",
+                     labels = scales::percent_format(accuracy = 1)) +
+  scale_x_continuous(trans = "sqrt") + 
   xlab("Transmission rate") + 
-  ylab("Proportion") + 
+  ylab("Proportion") +
   theme(legend.position = c(0.785, 0.9)) 
 fig3_hist
 
@@ -791,6 +810,7 @@ fig3 <- gridExtra::arrangeGrob(fig3_hist, fig3_curves,
 ggsave("figures/Manuscript2/Figure3.pdf", fig3,
        width = 20, height = 9)
 
+# Figure S7: truncations effect on distrubutions ----
 figS3 <- fig3_hist_df %>%
   mutate(time = factor(mapvalues(time, from = c("step", "inf"), 
                                  to = c("4-hour time step", "Infection duration")),
@@ -805,8 +825,10 @@ figS3 <- fig3_hist_df %>%
                                   paste0(hist_vars$N_small, " infected" ),
                                   paste0(hist_vars$N, " infected")),
                        ordered = T)) %>% 
-  ggplot(aes(x = value, y = ..count.. / sum(..count..), group = dist, fill = dist)) + 
-  geom_histogram(color = NA, position = "identity", alpha = 0.8) + 
+  ggplot(aes(x = value, y = ..count.. / sum(..count..), 
+             group = dist, fill = dist, color = dist)) + 
+  geom_histogram(color = NA, position = "identity", alpha = 0.8) +
+  # geom_density() + 
   geom_vline(data = data.frame(xint=with(hist_vars,
                                          qgamma(1 - beta_catch, shape = k*dt/d, scale = R0/k)),
                                time = "4-hour time step",
@@ -1202,7 +1224,7 @@ ggsave("figures/Manuscript2/FigureS4.pdf",
        width = 6, 
        height = 7)
 
-# Figure 4 version with no SIP scaling ----
+# Figure S13: version of figure 4 with no SIP scaling ----
 
 fig5_data <- adply(list.files("./output/figure4_noscale_data", 
                               full.names = T, pattern = "Rds"),
@@ -1269,10 +1291,12 @@ fig5_data %>%
   geom_point()
   
 
-# Figure S5: supplement figure showing effect of multiple gamma distributed infection periods on variance----
-pdf("figures/Manuscript2/FigureS5.pdf",
-    width = 12, height = 5)
-par(mfrow = c(1,3))
+# Figure S14: supplement figure showing effect of multiple gamma distributed infection periods on variance----
+pdf("figures/Manuscript2/variance_comparison.pdf",
+    width = 8, height = 5)
+par(mfrow = c(1,3), 
+    mar = c(5, 5, 5, 1),
+    cex = 0.75)
 hist_vars = list(R0 = 2.5,
                  k = 0.16, 
                  nstage = 7,
@@ -1282,23 +1306,35 @@ hist_vars = list(R0 = 2.5,
 
 set.seed(1001)
 with(hist_vars, replicate(nsim, {rgamma(1, k, scale = R0/k)}) %>% 
-  {hist(., breaks = 100,main = paste0("A. entire infection Gamma(",k, ", ", R0, "/", k, ")\nmean = ", mean(.), "\nvariance = ", var(.)))})
+  {hist(., breaks = 50, main = "",
+        las = 1, ylab = "")
+    title(main = paste0("A. entire infection\nGamma(",k, ", ", R0, "/", k, 
+                        ")\nmean = ", round(mean(.), 2), 
+                        "\nvariance = ", round(var(.), 2)),
+          cex.main = 1)
+    title(ylab = "Frequency", line = 4)
+    })
 
 with(hist_vars, replicate(nsim, {
   d <- rgeom(1, dt/d_avg)+1
   sum(rgamma(d, k*dt/d_avg, scale = R0/k))}) %>% 
-  {hist(., breaks = 100,main = paste0("B. 1 geometrically distributed infection period\nmean = ", 
-                                      mean(.), "\nvariance = ", var(.)))})
+  {hist(., breaks = 50, main = "",
+        las = 1, ylab = "")
+    title(main = paste0("B. 1 geometrically distributed\ninfection period\nmean = ", 
+                               round(mean(.), 2), "\nvariance = ", round(var(.), 2)),
+          cex.main = 1)
+    title(ylab = "Frequency", line = 4)})
 
 with(hist_vars, replicate(nsim, {
   d <- sum(rgeom(nstage, nstage*1/d_avg*dt)+1)
   sum(rgamma(d, k*dt/d_avg, scale = R0/k))}) %>% 
-  {hist(., 
-        breaks = 100,
-        main = paste0("C. ", nstage, 
-                      " geometrically distributed infection periods\nmean = ", 
-                      mean(.), 
-                      "\nvariance = ", 
-                      var(.)))})
+  {hist(., breaks = 50, main = "",
+        las = 1, ylab = "")
+    title(main = paste0("C. ", nstage, 
+                        " geometrically distributed\ninfection periods\nmean = ", 
+                        round(mean(.), 2), 
+                        "\nvariance = ", 
+                        round(var(.), 2)),
+          cex.main = 1)
+    title(ylab = "Frequency", line = 4)})
 dev.off()
->>>>>>> b0f1377cef9c454b268494c5df28f4ed8a341f43
