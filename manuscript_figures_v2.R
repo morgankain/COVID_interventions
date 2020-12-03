@@ -4,11 +4,21 @@ source("ggplot_theme.R")
 
 # this is the list of counties used for figures 1 - 3
 counties_list = {list(
-   SC = list(rds.name = "output/Santa Clara_CA_0_ran_100620_cont_round4.Rds")
- , LA = list(rds.name = "output/Los Angeles_CA_0_ran_100620_cont_round4.Rds")
- , KC = list(rds.name = "output/King_WA_0_ran_100620_cont_round4.Rds")
- , FC = list(rds.name = "output/Fulton_GA_0_ran_100620_cont_round4.Rds")
- , MD = list(rds.name = "output/Miami-Dade_FL_0_ran_100620_cont_round4.Rds")
+  SC = list(rds.name = 
+               "output/Santa Clara_CA_0_ran_100620_cont_round4.Rds")
+               # "output/Santa Clara_0_2020-06-25_cont_round2.Rds")
+ , LA = list(rds.name = 
+               "output/Los Angeles_CA_0_ran_100620_cont_round4.Rds")
+               # "output/Los Angeles_0_2020-06-25_cont_round2.Rds")
+ , KC = list(rds.name = 
+               "output/King_WA_0_ran_100620_cont_round4.Rds")
+               # "output/King_0_2020-06-25_cont_round2.Rds")
+ , FC = list(rds.name = 
+               "output/Fulton_GA_0_ran_100620_cont_round4.Rds")
+               # "output/Fulton_0_2020-06-25_cont_round2.Rds")
+ , MD = list(rds.name = 
+               "output/Miami-Dade_FL_0_ran_100620_cont_round4.Rds")
+               # "output/Miami-Dade_0_2020-06-25_cont_round2.Rds")
 #,  MC = list(rds.name = "output/Mercer_0_2020-06-25_cont_round2.Rds")
 #,  BC = list(rds.name = "output/Bucks_0_2020-06-25_cont_round2.Rds")
 #,  CC = list(rds.name = "output/Chester_0_2020-06-25_cont_round2.Rds")
@@ -92,15 +102,15 @@ int_vars <- list(
    counter.factual    = FALSE
  , int.movement       = c("post", "post")
  , int.type           = c("none")
- , int.init           = c("2020-07-01")
- , sim_end            = "2020-07-01"
+ , int.init           = c("2020-09-01")
+ , sim_end            = "2020-09-01"
  , sim_title          = "Reality"                                        
 )
 
 sim_vars <- list(
    loglik.max      = F
  , loglik.num      = 10
- # , loglik.thresh   = 
+ # , loglik.thresh   = 2
  , ci.stoc         = 0.025
  , ci.epidemic     = T
  , ci.epidemic_cut = 500
@@ -109,8 +119,8 @@ sim_vars <- list(
  , plot.median     = T
   )
 
-# run the simulations for all locations
-fig1_data <- plyr::ldply(counties_list, 
+# run the simulations for all locations, also saving parameters, and individual sims 
+fig1_data_all <- plyr::llply(counties_list, 
       function(i){
         source("COVID_simulate_cont_params.R", local = T)
         with(c(i, int_vars, sim_vars), {
@@ -125,17 +135,38 @@ fig1_data <- plyr::ldply(counties_list,
                       pivot_longer(any_of(plot_vars), values_to = "data")) %>%
             as.data.frame() %>%
             ungroup %>%
+            mutate(name = mapvalues(name, 
+                                    from = c("cases", "deaths"), 
+                                    to =  c("Daily reported\ncases", "Daily deaths"))) %>% 
             rbind(., (Reff %>% 
                         transmute(date = date, paramset = paramset, name = "Reff", 
                                   lwr = NA, mid = Reff, upr = NA, data = NA))) %>%
-            # rbind(., (detect %>% 
-            #             transmute(date = date, paramset = paramset, name = "detect",
-            #                       lwr = NA, mid = detect, upr = NA, data = NA))) %>%
+            rbind(., (detect %>%
+                        transmute(date = date, paramset = paramset, name = "Detect",
+                                  lwr = NA, mid = detect, upr = NA, data = NA))) %>%
             mutate(intervention = sim_title,
                  county = variable_params[1, "county"] %>% as.character,
                  state  = variable_params[1, "state"] %>% as.character)
-        return(SEIR.sim.f.ci)
-})}, .id = NULL)
+          SEIR.sim.f.t %<>% data.frame() %>%
+            rbind(pomp_data %>%
+                    arrange(day) %>%
+                    mutate(D = cumsum(ifelse(is.na(deaths), 0, deaths)) *
+                             ifelse(is.na(deaths), NA, 1),
+                           date = day + date_origin) %>%
+                    select(date, day, any_of(plot_vars)) %>%
+                    pivot_longer(any_of(plot_vars)) %>% 
+                    mutate(.id = 'data', paramset = "data")) %>%
+            as.data.frame() %>%
+            mutate(county = variable_params[1, "county"] %>% as.character,
+                   state  = variable_params[1, "state"] %>% as.character)
+        return(list(CI = SEIR.sim.f.ci,
+                    trajectory = SEIR.sim.f.t, 
+                    sim_params = variable_params,
+                    all_params = variable_params_full))
+})})
+
+fig1_data = lapply(fig1_data_all, "[[", "CI") %>% dplyr::bind_rows()
+fig1_data$county <- factor(fig1_data$county)
 
 # plot the fits and data
 # fig1_data$name <- sapply(fig1_data$name, simpleCap)
@@ -173,6 +204,221 @@ fig1_data <- plyr::ldply(counties_list,
 ## LA with different axis
 source("manuscript_figures_v2_1b.R")
 
+# Figures S2-S6: Pairs plots ----
+# IFR = prob of dying given severe (delta) x prob of severe given pre-symptomatic (1 - mu) x prob of pre-symptomatic given infection (1 - alpha)
+lapply(fig1_data_all, "[[", "all_params")  %>% dplyr::bind_rows() %>% 
+  group_by(county) %>% 
+  mutate(IFR = delta*(1-mu)*(1 - alpha), 
+         log_lik_rank = rank(-log_lik),
+         county = mapvalues(county,
+                            from = c("Santa Clara",
+                                     "King",
+                                     "Fulton",
+                                     "Miami-Dade",
+                                     "Los Angeles"),
+                            to  = c(
+                              "Santa Clara County, CA"
+                              , "Seattle, WA"
+                              , "Atlanta, GA"
+                              , "Miami, FL",
+                              "Los Angeles, CA"
+                            ))) %>%  
+  ungroup() %>% 
+  mutate(start_date = as.numeric(sim_start - as.Date("2019-12-31"))) %>%
+  select(-(Cp:d), -detect_t0, -etime, - sim_start) %>%
+  # sort columns sensibly for plotting
+  select(Ca, alpha, delta , mu, rho_d, start_date, # sobol sampled params
+         E_init, beta0, beta_min, detect_k, detect_mid, detect_max, theta, theta2, # fit params
+         IFR, log_lik, log_lik.se, # calculated params
+         everything() )%>%  
+  d_ply(.(county), function(county_data){
+    pdf(paste0("figures/Manuscript2/pairs_",
+               gsub(",", "", gsub(" ", "_", county_data$county %>% unique, fixed = T), fixed = T), 
+               ".pdf"),
+        height = 12, width = 12)
+    pairs(as.formula("~."),  
+           data = county_data %>% select_if(is.numeric) %>% select(-log_lik_rank),
+           col = county_data %>% 
+            select_if(is.numeric) %>%
+            transmute(col = ifelse(log_lik_rank <= 10, "red", alpha("grey", 0.5))) %>%
+            pull(col),
+          lower.panel = NULL,
+          main = county_data$county %>% unique, 
+           las = 1)
+    dev.off()
+  })
+  
+
+# Figure S10: Violins for different parameters ----
+fig_param_violins <- lapply(fig1_data_all, "[[", "all_params")  %>% dplyr::bind_rows() %>% 
+  mutate(county = factor(county)) %>%
+  group_by(county) %>% 
+  mutate(IFR = delta*(1-mu)*(1 - alpha), 
+         log_lik_rank = rank(-log_lik),
+         county = factor(county, 
+                         levels = c(setdiff(levels(county), "Los Angeles"), "Los Angeles")),
+         county = mapvalues(county,
+                            from = c("Santa Clara",
+                                     "King",
+                                     "Fulton",
+                                     "Miami-Dade",
+                                     "Los Angeles"),
+                            to  = c(
+                              "Santa Clara County, CA"
+                              , "Seattle, WA"
+                              , "Atlanta, GA"
+                              , "Miami, FL",
+                              "Los Angeles, CA"
+                            ))) %>%  
+  ungroup() %>%
+  select(-(Cp:d), -detect_t0, -etime, -sim_start) %>%
+  pivot_longer(-c(mif_round, county, state, log_lik_rank, log_lik, log_lik.se)) %>%
+  {ggplot(aes(y = value, 
+              x = county,
+              fill = county,
+              color = county,
+              group = interaction(county, name)),
+          data = .) + 
+      geom_violin() + 
+      geom_point(aes(x = county, y = value), 
+                 color = "black",
+                 data = filter(., log_lik_rank <= 10)) + 
+      facet_wrap(~name, scales = "free") +
+      scale_color_manual(values = fig1_colors, 
+                         aesthetics = c("color", "fill")) +
+      theme(axis.text.x = element_blank())}
+
+ggsave("figures/Manuscript2/Figure_param_violins.pdf", 
+       fig_param_violins)
+
+
+# Figure S11: Detection rates and IFR ----
+fig_detect <- fig1_data %>% filter(name == "Detect") %>% 
+  # join in the parameter data to get ascertainment rate
+  left_join(lapply(fig1_data_all, "[[", "sim_params")  %>% dplyr::bind_rows() %>% 
+              group_by(county) %>% 
+              mutate(paramset = rank(-log_lik)) %>% 
+              select(county, state, paramset, alpha), 
+            by = c("state", "county", "paramset")) %>% 
+  mutate(ascertainment = mid*(1-alpha),
+         county = as.factor(county),
+         county = factor(county, 
+                         levels = c(setdiff(levels(county), "Los Angeles"), "Los Angeles")),
+         county = mapvalues(county,
+                            from = c("Santa Clara",
+                                     "King",
+                                     "Fulton",
+                                     "Miami-Dade",
+                                     "Los Angeles"),
+                            to  = c(
+                              "Santa Clara County, CA"
+                              , "Seattle, WA"
+                              , "Atlanta, GA"
+                              , "Miami, FL",
+                              "Los Angeles, CA"
+                            ))) %>%
+  ggplot(aes(x = date, y = ascertainment, 
+             group = interaction(paramset, county),
+             color = county)) + 
+  geom_line() + 
+  facet_wrap(~county, ncol = 1) + 
+  scale_color_manual(guide = F, values = fig1_colors) +
+  ylab("Ascertainment rate")
+
+fig_IFR_detectMax <- lapply(fig1_data_all, "[[", "all_params")  %>% dplyr::bind_rows() %>% 
+  mutate(county = as.factor(county),
+         county = factor(county, 
+                         levels = c(setdiff(levels(county), "Los Angeles"), "Los Angeles")),
+         county = mapvalues(county,
+                            from = c("Santa Clara",
+                                     "King",
+                                     "Fulton",
+                                     "Miami-Dade",
+                                     "Los Angeles"),
+                            to  = c(
+                              "Santa Clara County, CA"
+                              , "Seattle, WA"
+                              , "Atlanta, GA"
+                              , "Miami, FL",
+                              "Los Angeles, CA"
+                            ))) %>%
+  group_by(county) %>% 
+  mutate(log_lik_rank = rank(-log_lik)) %>% 
+  ungroup %>%
+  mutate(IFR = delta*(1-mu)*(1 - alpha),
+         ascertainment_max = detect_max*(1 - alpha)) %>%  
+  {ggplot(data = filter(., log_lik_rank > 10), 
+          mapping = aes(x = IFR, y = ascertainment_max, color = (log_lik_rank > 10))) + 
+      geom_point(color = alpha("grey", 0.5)) + 
+      geom_point(data = filter(., log_lik_rank <= 10), 
+                 mapping = aes(color = county), 
+                 cex = 2) +
+      scale_color_manual(guide = F, values = fig1_colors) +
+      scale_y_continuous(trans = "pseudo_log") + 
+      facet_wrap(~county, ncol = 1) + 
+      xlab("Infection Fatality Rate") + 
+      ylab("Ascertainment rate asymptote")}
+
+fig_detect_IFR <- gridExtra::arrangeGrob(fig_detect, fig_IFR_detectMax,
+                               layout_matrix = matrix(c(1, 2), 
+                                                      byrow  = T, ncol = 2)) 
+
+gridExtra::grid.arrange(fig_detect_IFR)
+
+ggsave("figures/Manuscript2/Figure_detect_IFR.pdf", fig_detect_IFR, 
+       width = 10, height = 10)
+
+# Figure S8: trajectory figures for supplement ----
+fig_trajectory <- lapply(fig1_data_all, "[[", "trajectory") %>% dplyr::bind_rows() %>% 
+  filter((county == "Los Angeles" & paramset %in% c("1", "data") & .id %in% c(4, 6, 8, "data", "median")) | 
+           (county == "King" & paramset %in% c("1", "data") & .id %in% c(1, 6, 16, "data", "median"))) %>% 
+  mutate(type = mapvalues(.id, 
+                          from = c(as.character(1:500)), 
+                          to = rep("sim", 500)) %>% as.character,
+         name = mapvalues(name, from = c("cases", "deaths"), 
+                          to = c("Daily Reported Cases", "Daily Deaths")), 
+         county = mapvalues(county,
+                            from = c("Santa Clara",
+                                     "King",
+                                     "Fulton",
+                                     "Miami-Dade",
+                                     "Los Angeles"),
+                            to  = c(
+                              "Santa Clara County, CA"
+                              , "Seattle, WA"
+                              , "Atlanta, GA"
+                              , "Miami, FL",
+                              "Los Angeles, CA"
+                            ))) %>% 
+  group_by(county) %>%
+  mutate(.id = ifelse(type == "sim", 
+                        as.character(dense_rank(as.numeric(.id))), 
+                        type)) %>% 
+  {ggplot(data = .,
+          mapping = aes(x = date, y = value, 
+             group = interaction(.id, paramset, county))) + 
+      geom_line(aes(color = .id)) + 
+      facet_grid(name ~ county, scales = "free", 
+                 switch = "y")  + 
+      scale_y_continuous(trans = "pseudo_log", 
+        breaks = function(x){
+          if(max(x) > 1000){
+            c(0, 1, 10, 100, 500, 1000, 5000, 10000)
+          } else{ c(0, 1, 5, 10, 50, 100, 250)}}) + 
+      scale_color_manual(values = c(alpha("#377eb8", 0.7), 
+                                    alpha("#4daf4a", 0.7),
+                                    alpha("#984ea3", 0.7),
+                                    "red", "black"),
+                         name = "type", 
+                         labels = function(x){
+                           ifelse(is.na(as.numeric(x)), x, paste0("simulation ", x))
+                             }) + 
+      xlab("") + ylab("") + 
+      theme(strip.placement = "outside", 
+            strip.text=element_text(size = 20))}
+
+ggsave("figures/Manuscript2/Figure_trajectories.pdf", 
+       fig_trajectory,width =  10, height = 8)
 ####
 ## Figure 2: Interventions ----
 ####
@@ -383,23 +629,18 @@ loglik.num      <- 10
 
 fig3_curve_data <- adply(1:length(counties_list), 1, function(i){
   prev.fit = readRDS(counties_list[[i]]$rds.name)
-  if("mifs_local_v2" %in% names(prev.fit)){ # get second round of mifs if it exists
-    variable_params  <- prev.fit[["mifs_local_v2"]] # otherwise get the first round
-  } else{
-    variable_params  <- prev.fit[["mifs_local"]] # otherwise get the first round
-  }
+  variable_params = prev.fit[grepl("mifs_local", names(prev.fit))] %>% 
+    bind_rows(.id = "mif_round") %>% 
+    filter(log_lik != 0) 
   if (loglik.max) {
     variable_params <- variable_params %>% 
-      filter(log_lik != 0) %>% 
       filter(log_lik == max(log_lik))
   } else {
     if (is.na(loglik.num)) {
       variable_params <- variable_params %>% 
-        filter(log_lik != 0) %>% 
         filter(log_lik > (max(log_lik) - loglik.thresh))  
     } else {
       variable_params <- variable_params %>% 
-        filter(log_lik != 0) %>% 
         arrange(desc(log_lik)) %>%
         slice(1:loglik.num)
     }
@@ -417,17 +658,14 @@ fig3_curve_data <- adply(1:length(counties_list), 1, function(i){
   
   # now loop over all the top fits
   adply(1:nrow(variable_params), 1, function(j){
-    params_row = unlist(variable_params[j,])
+    params_row = variable_params %>% 
+      select_if(is.numeric) %>% magrittr::extract(j,) %>% unlist
     data.frame(
       beta_catch_pct = beta_catch_vals,
       sip = sip_trunc_combns(beta_catch_vals, 
                              "pct",
                              catch_eff_vals, 
                              var_params = params_row,
-                             # k = params_row["beta0_k"],
-                             # beta0 = params_row["beta0"],
-                             # beta_min = params_row["beta_min"],
-                             # d = params_row["d"],
                              dt = dt,
                              desired_R = 1.0) %>% 
         magrittr::set_colnames(paste0("catch_eff_", catch_eff_vals)),
@@ -495,8 +733,6 @@ fig3_curves <- fig3_curve_data %>%
       theme(legend.position = c(0.9, 0.8),
             panel.spacing = unit(0.5, "lines"))}
 
-fig3_curves
-
 hist_vars <- list(k = 0.16,
                   R0 = 2.5, 
                   dt = 1/6, 
@@ -553,9 +789,11 @@ fig3_hist <- fig3_hist_df %>%
                                   paste0(hist_vars$N_small, " infected" ), 
                                   paste0(hist_vars$N, " infected")))) %>% 
   unite("time_size", c("time", "size"), sep = ", ") %>% 
-  ggplot(aes(x = value, y = ..count.. / sum(..count..), group = dist, fill = dist, color = dist)) + 
-  geom_histogram(color = NA, position = "identity", alpha = 0.8) + 
-  # geom_density(adjust = 100, alpha = 0.5) +
+  ggplot(aes(x = value, 
+             y = ..count../sum(..count..),
+             group = dist, fill = dist, color = dist)) + 
+  geom_histogram(color = NA, position = "identity", alpha = 0.8) +
+  # geom_density(trim = TRUE) +
   geom_vline(data = data.frame(xint=with(hist_vars, qgamma(1 - beta_catch, shape = k*dt/d, scale = R0/k)),
                                time = "4-hour time step",
                                size = "individual") %>%
@@ -564,10 +802,12 @@ fig3_hist <- fig3_hist_df %>%
   facet_wrap( ~ time_size, scales = "free", nrow = 2) + 
   scale_fill_manual(name = "Distribution", values = c("#F21A00", "#3B9AB2")) + 
   scale_color_manual(name = "Distribution", values = c("#F21A00", "#3B9AB2")) + 
-  scale_y_continuous(trans = "sqrt", labels = scales::percent_format(accuracy = 1)) + 
-  scale_x_continuous(trans = "sqrt") + #, breaks = c(1, 5, 10, 20, 40, 100)) +
+  # scale_y_continuous(trans = "pseudo_log") + 
+  scale_y_continuous(trans = "sqrt",
+                     labels = scales::percent_format(accuracy = 1)) +
+  scale_x_continuous(trans = "sqrt") + 
   xlab("Transmission rate") + 
-  ylab("Proportion") + 
+  ylab("Proportion") +
   theme(legend.position = c(0.785, 0.9)) 
 fig3_hist
 
@@ -579,6 +819,7 @@ fig3 <- gridExtra::arrangeGrob(fig3_hist, fig3_curves,
 ggsave("figures/Manuscript2/Figure3.pdf", fig3,
        width = 20, height = 9)
 
+# Figure S7: truncations effect on distrubutions ----
 figS3 <- fig3_hist_df %>%
   mutate(time = factor(mapvalues(time, from = c("step", "inf"), 
                                  to = c("4-hour time step", "Infection duration")),
@@ -593,8 +834,10 @@ figS3 <- fig3_hist_df %>%
                                   paste0(hist_vars$N_small, " infected" ),
                                   paste0(hist_vars$N, " infected")),
                        ordered = T)) %>% 
-  ggplot(aes(x = value, y = ..count.. / sum(..count..), group = dist, fill = dist)) + 
-  geom_histogram(color = NA, position = "identity", alpha = 0.8) + 
+  ggplot(aes(x = value, y = ..count.. / sum(..count..), 
+             group = dist, fill = dist, color = dist)) + 
+  geom_histogram(color = NA, position = "identity", alpha = 0.8) +
+  # geom_density() + 
   geom_vline(data = data.frame(xint=with(hist_vars,
                                          qgamma(1 - beta_catch, shape = k*dt/d, scale = R0/k)),
                                time = "4-hour time step",
@@ -683,212 +926,6 @@ ggsave("figures/Manuscript2/FigureS3.pdf",
 # saveRDS( fig4_scale, "output/figure4_scale_data/figure4_scale_summary_stats.rds")
 fig4_scale <- readRDS("output/figure4_scale_data/figure4_scale_summary_stats.rds")
 
-<<<<<<< HEAD
-int_vars <- {
-list(
- just_sip = list(
-     counter.factual      = FALSE
-   , int.movement         = c("post", "mid")
-   , int.type             = "tail"
-   , int.init             = "2020-07-01"
-   , sim_end              = "2021-01-31"
-   , sim_title            = "Just Shelter in Place"
-   , thresh_inf.val       = 2
-   , int.beta_catch_type  = "pct"
-   , int.catch_eff        = 0.75
-   , int.beta_catch       = 0.005
-   , int.beta0_k          = 0.16
-   , int.beta0_k_post     = 0.16
-   , int.beta_catch_post  = 0
-   , int.catch_eff_post   = 1
- ),
-  minor_tail = list(
-   counter.factual      = FALSE
- , int.movement         = c("post", "mid")
- , int.type             = "tail"
- , int.init             = "2020-07-01"
- , sim_end              = "2021-01-31"
- , sim_title            = "Minor tail chop"
- , thresh_inf.val       = 2
- , int.beta_catch_type  = "pct"
- , int.catch_eff        = 0.75
- , int.beta_catch       = 0.005
- , int.beta0_k          = 0.16
- , int.beta0_k_post     = 0.16
- , int.beta_catch_post  = 0.001
- , int.catch_eff_post   = 1
-),
-  major_tail = list(
-   counter.factual      = FALSE
- , int.movement         = c("post", "mid")
- , int.type             = "tail"
- , int.init             = "2020-07-01"
- , sim_end              = "2021-01-31"
- , sim_title            = "Major tail chop"
- , thresh_inf.val       = 5
- , int.beta_catch_type  = "pct"
- , int.catch_eff        = 0.75
- , int.beta_catch       = 0.005
- , int.beta0_k          = 0.16
- , int.beta0_k_post     = 0.16
- , int.beta_catch_post  = 0.002
- , int.catch_eff_post   = 1
-))}
-
-source("ggplot_theme.R")
-source("epidemic_rebound/gamma_rebound_params.R")
-source("epidemic_rebound/gamma_rebound_pomp2.R")
-
-plot_vars      <- c("cases", "deaths", "I", "thresh_crossed")
-nsim           <- 1000
-ci.stoch       <- 0.025
-ci.epidemics   <- T
-plot.median    <- F
-
-fig4_data <- adply(1:length(int_vars), 1, 
-      function(j) {
-        adply(1:length(counties_list), 1,
-      function(i) {
-        with(c(counties_list[[i]], int_vars[[j]]), {
-        source("epidemic_rebound/gamma_rebound.R", local = T)
-        SEIR.sim.f.ci %<>% 
-          full_join(county.data %>%
-                      arrange(date) %>%
-                      mutate(D = cumsum(ifelse(is.na(deaths), 0, deaths))*
-                                 ifelse(is.na(deaths), NA, 1)) %>%
-                      select(date, any_of(plot_vars)) %>%
-                      pivot_longer(any_of(plot_vars), values_to = "data")) %>% 
-          mutate(intervention = sim_title,
-                 county       = focal.county,
-                 state        = focal.state_abbr) 
-         return(SEIR.sim.f.ci)
-        
-        }
-        )
-      }
-        )
-      }
-        , .id = NULL)
-
-# fig4_data <- SEIR.sim.f.ci
-
-fig4_data$name         <- sapply(fig4_data$name, simpleCap)
-fig4_data$intervention <- factor(fig4_data$intervention, levels = unique(fig4_data$intervention))
-
-fig4_colors <- c("dodgerblue4", "#D67236", "firebrick3", "#0b775e")
-# fig4_colors <- c("#D67236", "dodgerblue4", "red", "#0b775e", "magenta4")
-
-check_date <- (fig4_data %>% filter(
-#  .id           == "median"
-   intervention == "Shelter in Place check"
- , date          > "2020-05-01"
- , name         == "I"
-  ) %>% dplyr::filter(mid <= 10) %>% 
-    filter(date  == min(date)))$date
-
-## For just I plot
-# fig4_data <- fig4_data %>% filter(date >= as.Date("2020-07-10")) %>% filter(name != "betat")
-
-#fig4_data %>%
-#  ggplot(aes(x = date, y = value
- #  , ymin = lwr, ymax = upr, fill  = intervention
-#    , color = intervention
-#    , group = .id)) +
-#  geom_ribbon(data = (fig4_data %>% filter(date >= check_date))
-#   , alpha = 0.50, colour = NA) +
-#  geom_line(data = (fig4_data %>% filter(date >= check_date))
-#   ) + 
-#  geom_line(data = (fig4_data %>% filter(date >= check_date, .id != "median"))
-#    , aes(group = interaction(.id, intervention))
-#    , lwd = 0.10, alpha = 0.15
-#   ) +
-#  geom_line(data = (fig4_data %>% filter(date >= check_date, .id == "median"))
-#    , aes(group = interaction(.id, intervention))
-#   , lwd = 1.0) +
-#  geom_ribbon(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place"))
-#  , alpha = 0.50, colour = NA, fill = "black") +
-#  geom_line(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place"))
-#  , colour = "black") +
-#  geom_line(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place", .id != "median"))
-#    , lwd = 0.10, alpha = 0.15, colour = "black"
-#   ) +
-#  geom_line(data = (fig4_data %>% filter(date <= check_date, intervention == "Continue Shelter in Place", .id == "median"))
-#    , colour = "black"
-#    , lwd = 1.0) +
-#  geom_vline(xintercept = check_date, linetype = "dashed", lwd = 0.5) + 
-#  geom_point(aes(x = date, y = data), 
-#             color = "black", size = 1) + 
-#  scale_fill_manual(values = fig4_colors, name = "Intervention") +
-#  scale_color_manual(values = fig4_colors, name = "Intervention") +
-#  facet_grid(name ~ county, scales = "free_y", switch = "y")  +
-#  ylab("") + 
-#  scale_y_log10() + 
-#  theme(
-#    strip.background = element_blank()
-#    , legend.position  = c(0.850, 0.885)
-#    , legend.background = element_blank()
-#    , strip.placement = "outside"
-#    , strip.text = element_text(size = 16)
-#    , axis.text.x = element_text(size = 14)) +
-#  xlab("Date")
-
-#droplevels(fig4_data) %>% 
-#  filter(state == "CA", .id != "median") %>% 
-#  filter(name == "cases") %>% 
-#  filter(day > 290) %>% 
-#  group_by(.id, intervention) %>%
-#  summarize(new_cases = sum(value)) %>% 
-#  filter(new_cases == 0) %>% 
-#  group_by(intervention) %>%
-#  summarize(prop_extinct = n() / nsim)
-
-#droplevels(fig4_data) %>% filter(state == "CA", .id != "median") %>% filter(name == "I") %>% filter(day == max(day)) %>% 
-#  group_by(.id, intervention) %>%
-#  summarize(new_cases = sum(value)) %>% 
-#  group_by(intervention) %>%
-#  summarize(
-#     lwr = quantile(value, 0.025)
-#    , est = quantile(value, 0.500) 
-#    , upr = quantile(value, 0.975))
-
-check_date <- as.Date("2020-10-15")
-
-fig4_data %>% filter(name == "I") %>% 
-  filter(date > "2020-07-01") %>% {
-    ggplot(aes(x = date, y = mid), data = filter(., date >= check_date)) +
-  geom_ribbon(
-    aes(
-      ymin = lwr, ymax = upr
-    , fill  = intervention
-    , color = intervention
-    )
-  , alpha = 0.50, colour = NA) +
-      geom_line(aes(color = intervention), data = filter(., date >= check_date), 
-                lwd = 0.5) +
-      geom_ribbon(data = filter(., date <= check_date, 
-                                intervention == "Just Shelter in Place check")
-                  , aes(ymin = lwr, ymax = upr)
-   , alpha = 0.50, colour = NA, fill = "black") +
-#  geom_line(data = filter(., date <= check_date, 
-#                          intervention == "Just Shelter in Place check"), colour = "black") +
-#      geom_vline(xintercept = check_date, linetype = "dashed", lwd = 0.5) +
-      geom_point(aes(x = date, y = data), color = "black", size = 1) +
-#  scale_y_continuous(trans = "log10") +
-  scale_fill_manual(values = fig4_colors, name = "Intervention") +
-  scale_color_manual(values = fig4_colors, name = "Intervention") +
- # facet_grid(name ~ county, scales = "free_y", switch = "y")  +
-  ylab("Cases") + 
-  theme(
-    strip.background = element_blank()
-    , legend.position  = c(0.250, 0.885)
-    , legend.background = element_blank()
-    , strip.placement = "outside"
-    , strip.text = element_text(size = 16)
-    , axis.text.x = element_text(size = 14)) +
-  xlab("Date") +
-  scale_y_continuous(trans = "log10")
-  }
-=======
 fig4_colors = c("tomato4", "darkgoldenrod2", "slateblue")
 fig4_traj_colors = c("#DC863B", "#0B775E", "#046C9A")
 fig4_scale_extinct <- {fig4_scale %>% 
@@ -1037,7 +1074,7 @@ fig4_scale_traj <- {fig4_scale %>%
 # saveRDS( fig4_noscale, "output/figure4_noscale_data/figure4_noscale_summary_stats.rds")
 
 
-# fig4_noscale <- readRDS("output/figure4_noscale_data/figure4_noscale_summary_stats.rds")
+fig4_noscale <- readRDS("output/figure4_noscale_data/figure4_noscale_summary_stats.rds")
 fig4_noscale_extinct <- {fig4_noscale %>% 
     filter(days_post == 6*7) %>%
     filter(beta_catch == 0.001) %>%
@@ -1121,7 +1158,7 @@ fig4 <- gridExtra::arrangeGrob(
                          clip = "off",
                          padding = unit(2, "line"),
                          top = grid::textGrob("Truncation with no shelter-in-place adjustment, resulting in variable mean", 
-                                              x = 0.05, y = 0.7, hjust = 0, gp = gpar(fontsize=18, fontface = "bold"))),
+                                              x = 0.05, y = 0.7, hjust = 0, gp = grid::gpar(fontsize=18, fontface = "bold"))),
   gridExtra::arrangeGrob(fig4_scale_traj, fig4_scale_extinct, fig4_scale_uprCI, 
                          layout_matrix = matrix(c(1, 2, 3), 
                                                 byrow  = T, nrow = 1),
@@ -1129,9 +1166,9 @@ fig4 <- gridExtra::arrangeGrob(
                          clip = "off",
                          padding = unit(2, "line"),
                          top = grid::textGrob("Truncation with shelter-in-place adjustment, resulting in fixed mean", 
-                                              x = 0.05, hjust = 0, y = 0.7, gp = gpar(fontsize=18, fontface = "bold"))))
+                                              x = 0.05, hjust = 0, y = 0.7, gp = grid::gpar(fontsize=18, fontface = "bold"))))
 
-# gridExtra::grid.arrange(fig4)
+gridExtra::grid.arrange(fig4)
 
 ggsave("figures/Manuscript2/Figure4_v2.pdf", 
        fig4, 
@@ -1196,7 +1233,7 @@ ggsave("figures/Manuscript2/FigureS4.pdf",
        width = 6, 
        height = 7)
 
-# Figure 4 version with no SIP scaling ----
+# Figure S13: version of figure 4 with no SIP scaling ----
 
 fig5_data <- adply(list.files("./output/figure4_noscale_data", 
                               full.names = T, pattern = "Rds"),
@@ -1263,10 +1300,12 @@ fig5_data %>%
   geom_point()
   
 
-# Figure S5: supplement figure showing effect of multiple gamma distributed infection periods on variance----
-pdf("figures/Manuscript2/FigureS5.pdf",
-    width = 12, height = 5)
-par(mfrow = c(1,3))
+# Figure S14: supplement figure showing effect of multiple gamma distributed infection periods on variance----
+pdf("figures/Manuscript2/variance_comparison.pdf",
+    width = 8, height = 5)
+par(mfrow = c(1,3), 
+    mar = c(5, 5, 5, 1),
+    cex = 0.75)
 hist_vars = list(R0 = 2.5,
                  k = 0.16, 
                  nstage = 7,
@@ -1276,17 +1315,29 @@ hist_vars = list(R0 = 2.5,
 
 set.seed(1001)
 with(hist_vars, replicate(nsim, {rgamma(1, k, scale = R0/k)}) %>% 
-  {hist(., breaks = 100,main = paste0("A. entire infection Gamma(",k, ", ", R0, "/", k, ")\nmean = ", mean(.), "\nvariance = ", var(.)))})
+  {hist(., breaks = 50, main = "",
+        las = 1, ylab = "")
+    title(main = paste0("A. entire infection\nGamma(",k, ", ", R0, "/", k, 
+                        ")\nmean = ", round(mean(.), 2), 
+                        "\nvariance = ", round(var(.), 2)),
+          cex.main = 1)
+    title(ylab = "Frequency", line = 4)
+    })
 
 with(hist_vars, replicate(nsim, {
   d <- rgeom(1, dt/d_avg)+1
   sum(rgamma(d, k*dt/d_avg, scale = R0/k))}) %>% 
-  {hist(., breaks = 100,main = paste0("B. 1 geometrically distributed infection period\nmean = ", 
-                                      mean(.), "\nvariance = ", var(.)))})
+  {hist(., breaks = 50, main = "",
+        las = 1, ylab = "")
+    title(main = paste0("B. 1 geometrically distributed\ninfection period\nmean = ", 
+                               round(mean(.), 2), "\nvariance = ", round(var(.), 2)),
+          cex.main = 1)
+    title(ylab = "Frequency", line = 4)})
 
 with(hist_vars, replicate(nsim, {
   d <- sum(rgeom(nstage, nstage*1/d_avg*dt)+1)
   sum(rgamma(d, k*dt/d_avg, scale = R0/k))}) %>% 
+<<<<<<< HEAD
   {hist(., 
         breaks = 100,
         main = paste0("C. ", nstage, 
@@ -1295,3 +1346,15 @@ with(hist_vars, replicate(nsim, {
                       "\nvariance = ", 
                       var(.)))})
 dev.off()
+=======
+  {hist(., breaks = 50, main = "",
+        las = 1, ylab = "")
+    title(main = paste0("C. ", nstage, 
+                        " geometrically distributed\ninfection periods\nmean = ", 
+                        round(mean(.), 2), 
+                        "\nvariance = ", 
+                        round(var(.), 2)),
+          cex.main = 1)
+    title(ylab = "Frequency", line = 4)})
+dev.off()
+>>>>>>> 08fab88404b2f829c00aaeee4b7cedf3682cada5

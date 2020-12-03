@@ -43,7 +43,15 @@ variable_params  <- prev.fit[["mifs_local_v2"]]
 }
   
 ## old for when we had two fitting stages
-  
+  # if("mifs_local_v2" %in% names(prev.fit)){ # get second round of mifs if it exists
+  #   variable_params  <- prev.fit[["mifs_local_v2"]] # otherwise get the first round
+  # } else{
+  #   variable_params  <- prev.fit[["mifs_local"]] # otherwise get the first round
+  # }
+  # combine all of the rounds of mif locals 
+  variable_params = prev.fit[grepl("mifs_local", names(prev.fit))] %>% bind_rows(.id = "mif_round") %>% 
+    filter(log_lik != 0) 
+
 #if("mifs_local_v2" %in% names(prev.fit)){ # get second round of mifs if it exists
 #  variable_params  <- prev.fit[["mifs_local_v2"]]  # otherwise get the first round
 #} else{
@@ -62,13 +70,13 @@ pomp_data        <- data.frame(covid_mobility) %>%
   
 ## drop the rows that have 0s for likelihood (in case exited prematurely) 
  ## and keep only the best fits as defined by loglik
+variable_params_full = variable_params 
+
 if (loglik.max) {
   
 variable_params <- variable_params %>% 
-  filter(log_lik != 0) %>% 
   filter(log_lik == max(log_lik))
 
-# print(variable_params$paramset)
 print(paste0("subsetting to top parameter set"))
 print(variable_params$log_lik)
 
@@ -77,7 +85,6 @@ print(variable_params$log_lik)
   if (is.na(loglik.num)) {
     
 variable_params <- variable_params %>% 
-filter(log_lik != 0) %>% 
 filter(log_lik > (max(log_lik) - loglik.thresh)) 
 
 print(paste0("subsetting to ", nrow(variable_params), " parameter sets by likelihood threshold"))
@@ -86,7 +93,6 @@ print(variable_params$log_lik)
   } else {
     
 variable_params <- variable_params %>% 
-filter(log_lik != 0) %>% 
 arrange(desc(log_lik)) %>%
 slice(1:loglik.num)
 
@@ -101,8 +107,8 @@ if (!params.all) {
 }
 
 ## remove character parameters from variable params
-county.details  <- variable_params %>% dplyr::select(state, county)
-variable_params <- variable_params %>% dplyr::select(-state, -county)
+#county.details  <- variable_params %>% dplyr::select(state, county)
+#variable_params <- variable_params %>% dplyr::select(-state, -county)
 
 ####
 ## Set up covariate table for counterfactual scenarios
@@ -244,7 +250,8 @@ sim_times <- seq(as.numeric(variable_params[i,]$sim_start - date_origin), max(mo
         object   = covid_mobility_sim
         , t0     = as.numeric(variable_params[i,]$sim_start - date_origin)
         , times  = sim_times
-        , params = variable_params[i,] %>% unlist %>% 
+        , params = variable_params %>% dplyr::select_if(is.numeric) %>% 
+          magrittr::extract(i,) %>% unlist %>% 
                        inset("beta_catch", value = beta_catch_val) %>% 
                        inset("beta0_k", value = int.beta0_k) %>% 
                        inset("catch_eff", value = int.catch_eff)
@@ -301,7 +308,7 @@ Reff.t <- full_join(SEIR.sim.s, betat.t) %>% arrange(day) %>%
       , date     = pull(., date)
       , Reff     = covid_R0(
         beta0est      = pull(., betat)
-        , fixed_params  = unlist(variable_params[i, ])
+        , fixed_params  = variable_params %>% dplyr::select_if(is.numeric) %>% magrittr::extract(i,) %>% unlist
         , sd_strength   = 1
         , prop_S        = pull(.,S) / (variable_params[i, "N"] - pull(.,D))
       )
