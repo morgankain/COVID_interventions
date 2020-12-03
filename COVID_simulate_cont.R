@@ -9,7 +9,7 @@
 ## For detailed conceivable intervention scenarios and details on how tosimulate them see:
 ## "potential_intervention_details_and_plots.R"
 
-options(warning.length = 4000L)
+options(warning.length = 6000L)
 
 set.seed(10001)
 # source("needed_packages.R")
@@ -20,10 +20,11 @@ registerDoParallel(cores = usable.cores)
 ## Bring in pomp objects. 
 # source("COVID_pomp_gammabeta.R", local = T)
 # all we need from this is the R0 calculation, and we don't want to read in anything else, so lets just grab those lines
-read_start = grep("covid_R0", readLines("COVID_pomp_gammabeta.R"))
-read_end = grep("}", readLines("COVID_pomp_gammabeta.R"))
-read_end = read_end[which(read_end > read_start)] %>% min
+read_start <- grep("covid_R0", readLines("COVID_pomp_gammabeta.R"))
+read_end   <- grep("}", readLines("COVID_pomp_gammabeta.R"))
+read_end   <- read_end[which(read_end > read_start)] %>% min
 source(textConnection(readLines("COVID_pomp_gammabeta.R")[read_start:read_end]))
+print("27")
 
 ## Load the previously saved fits
  ## If COVID_fit_cont.R was just run, use parameters already stored in the global env 
@@ -31,19 +32,32 @@ if (use.rds) {
   print(rds.name)
   prev.fit         <- readRDS(rds.name)
   covid_mobility   <- prev.fit[["covid_mobility"]] # get pomp object
-  if("mifs_local_v2" %in% names(prev.fit)){ # get second round of mifs if it exists
-    variable_params  <- prev.fit[["mifs_local_v2"]] # otherwise get the first round
-  } else{
-    variable_params  <- prev.fit[["mifs_local"]] # otherwise get the first round
-  }
+
+## return a different fitting stopping place depending on the location
+if (ifelse(length(grep("Fulton", rds.name)) > 0, 1, 0) | ifelse(length(grep("Los", rds.name)) > 0, 1, 0) |ifelse(length(grep("King", rds.name)) > 0, 1, 0)) {
+variable_params  <- prev.fit[["mifs_local_v4"]]
+} else if (ifelse(length(grep("Santa", rds.name)) > 0, 1, 0)) { 
+variable_params  <- prev.fit[["mifs_local_v3"]] 
+} else {
+variable_params  <- prev.fit[["mifs_local_v2"]]   
+}
   
-  pomp_data        <- data.frame(covid_mobility) %>% 
-    full_join(as.data.frame(cbind(day = covid_mobility@covar@times, 
-                                  t(covid_mobility@covar@table)))) %>%
+## old for when we had two fitting stages
+  
+#if("mifs_local_v2" %in% names(prev.fit)){ # get second round of mifs if it exists
+#  variable_params  <- prev.fit[["mifs_local_v2"]]  # otherwise get the first round
+#} else{
+#  variable_params  <- prev.fit[["mifs_local"]] # otherwise get the first round
+#}
+  
+pomp_data        <- data.frame(covid_mobility) %>% 
+  full_join(as.data.frame(cbind(day = covid_mobility@covar@times
+    , t(covid_mobility@covar@table)))) %>%
     arrange(day) %>% 
     distinct_at(vars(day), .keep_all = T) # sometimes the pomp data and covariate data disagree? not sure why..., for now default to takign the pomp data
   dt               <- covid_mobility@rprocess@delta.t
   date_origin      <- prev.fit[["date_origin"]][1]
+
 }
   
 ## drop the rows that have 0s for likelihood (in case exited prematurely) 
@@ -86,6 +100,9 @@ if (!params.all) {
   variable_params <- variable_params[sample(1:nrow(variable_params), nparams), ]
 }
 
+## remove character parameters from variable params
+county.details  <- variable_params %>% dplyr::select(state, county)
+variable_params <- variable_params %>% dplyr::select(-state, -county)
 
 ####
 ## Set up covariate table for counterfactual scenarios
@@ -95,7 +112,7 @@ if (counter.factual) {
   if (cf.type == "no_int") {
     
     mob.covtab <- covariate_table(
-      sip_prop         = rep(mean(head(mobility$sip_prop, 7)), sim_length)
+      sip_prop           = rep(mean(head(mobility$sip_prop, 7)), sim_length)
       , order            = "constant"
       , times            = seq(1, sim_length, by = 1)
       , detect_t0        = min(county.data[!is.na(county.data$cases), ]$day) - 1
@@ -140,8 +157,8 @@ if (counter.factual) {
   ####
 
   ## Covariate table with all of the intervention scenarios
-    int.init = as.Date(int.init)
-    sim_end = as.Date(sim_end)
+    int.init <- as.Date(int.init)
+    sim_end  <- as.Date(sim_end)
     
     # some catches for problematic interventions
     if(min(int.init) < (max(pomp_data$day) + date_origin)){ # catch if interventions start before the data end
@@ -159,9 +176,9 @@ if (counter.factual) {
     if(sum(keep_ints) < length(int.init)){ 
       print(paste("dropping last ", length(int.init) - sum(keep_ints), " interventions that begin after sim_end"))
     }
-    int.init = int.init[keep_ints] # trim to interventions before the sim_end date
-    int.type = int.type[keep_ints] # apply same trim to intervention types and movenent
-    int.movement = int.movement[c(TRUE, keep_ints)] # need to add a T for the movement that occurs between data and first intervention
+    int.init     <- int.init[keep_ints] # trim to interventions before the sim_end date
+    int.type     <- int.type[keep_ints] # apply same trim to intervention types and movenent
+    int.movement <- int.movement[c(TRUE, keep_ints)] # need to add a T for the movement that occurs between data and first intervention
     
     print(int.type)
     
@@ -172,9 +189,8 @@ if (counter.factual) {
     )
     
     post_mob <- mean(tail(pomp_data$sip_prop, 3))
-    pre_mob <- mean(head(pomp_data$sip_prop, 7))
-    mid_mob <- (pre_mob + post_mob)/2
-    
+    pre_mob  <- mean(head(pomp_data$sip_prop, 7))
+    mid_mob  <- (pre_mob + post_mob)/2
     
     mob.covtab <- covariate_table(
       sip_prop           = c(pomp_data$sip_prop, 
@@ -186,7 +202,7 @@ if (counter.factual) {
       , times            = seq(min(pomp_data$day), as.numeric(sim_end - date_origin), by = 1)
       , iso_mild_level   = rep((c("none", "none", int.type) == "inf_iso")*iso_mild_level, int.phases)
       , iso_severe_level = rep((c("none", "none", int.type) == "inf_iso")*iso_severe_level, int.phases)
-      , intervention      = rep(as.numeric(mapvalues(c("none", "none", int.type),
+      , intervention     = rep(as.numeric(mapvalues(c("none", "none", int.type),
                                          from = c("none", "tail", "inf_iso"),
                                          to   = c(0, 1, 2))), int.phases)   
       )
@@ -194,6 +210,8 @@ if (counter.factual) {
 
 # use it to make a new pomp object
 covid_mobility_sim <- pomp(covid_mobility, covar = mob.covtab)
+
+print("212")
 
 ####
 ## Simulate: loop over rows of variable_params
@@ -248,7 +266,7 @@ if (ci.epidemic) {
   epi_ids <- SEIR.sim %>% 
     group_by(.id) %>% 
     summarise(total_infect = max(D + R), .groups = "drop") %>% 
-    filter(total_infect > ci.epidemic_cut*ceiling(variable_params[i, "E_init"])) %>% 
+  # filter(total_infect > ci.epidemic_cut*ceiling(variable_params[i, "E_init"])) %>% 
     filter(total_infect > ci.epidemic_cut) %>% #*ceiling(variable_params[i, "E_init"])) %>% 
     pull(.id)
   print(paste0("limiting to epidemics, including ", length(epi_ids), " simulations"))
@@ -290,22 +308,6 @@ Reff.t <- full_join(SEIR.sim.s, betat.t) %>% arrange(day) %>%
     )
     }
 
-# Reff.t <- data.frame(
-#   paramset = i
-#   , date     = mob.covtab@times + date_origin
-#   , Reff     = covid_R0(
-#     beta0est      = betat.t$betat
-#     , fixed_params  = unlist(variable_params[i, ])
-#     , sd_strength   = 1
-#     , prop_S        = SEIR.sim.s$S / (variable_params[i, "N"] - SEIR.sim.s$D)
-#   )
-# )
-
-# detect.t <- c(rep(0, min(county.data[!is.na(county.data$cases), ]$day) - 1)
-#               , (variable_params[i, "detect_max"] /
-#                    (1 + exp(-variable_params[i, "detect_k"] * (mob.covtab@times - variable_params[i, "detect_mid"])))
-#               )[-seq(1, min(county.data[!is.na(county.data$cases), ]$day) - 1)]
-# )
 detect.t <- data.frame(
   paramset = i
   , date     = mob.covtab@times + date_origin
@@ -331,6 +333,8 @@ if (((i / 20) %% 1) == 0) {
 }
 
 }
+
+print("335")
 
 ####
 ## Summary for plotting

@@ -2,14 +2,13 @@
 source("needed_packages.R")
 source("ggplot_theme.R")
 
-
 # this is the list of counties used for figures 1 - 3
 counties_list = {list(
-   SC = list(rds.name = "output/Santa Clara_0_2020-06-25_cont_round2.Rds")
- , LA = list(rds.name = "output/Los Angeles_0_2020-06-25_cont_round2.Rds")
- , KC = list(rds.name = "output/King_0_2020-06-25_cont_round2.Rds")
- , FC = list(rds.name = "output/Fulton_0_2020-06-25_cont_round2.Rds")
- , MD = list(rds.name = "output/Miami-Dade_0_2020-06-25_cont_round2.Rds")
+   SC = list(rds.name = "output/Santa Clara_CA_0_ran_100620_cont_round4.Rds")
+ , LA = list(rds.name = "output/Los Angeles_CA_0_ran_100620_cont_round4.Rds")
+ , KC = list(rds.name = "output/King_WA_0_ran_100620_cont_round4.Rds")
+ , FC = list(rds.name = "output/Fulton_GA_0_ran_100620_cont_round4.Rds")
+ , MD = list(rds.name = "output/Miami-Dade_FL_0_ran_100620_cont_round4.Rds")
 #,  MC = list(rds.name = "output/Mercer_0_2020-06-25_cont_round2.Rds")
 #,  BC = list(rds.name = "output/Bucks_0_2020-06-25_cont_round2.Rds")
 #,  CC = list(rds.name = "output/Chester_0_2020-06-25_cont_round2.Rds")
@@ -184,24 +183,24 @@ list(
   counter.factual    = FALSE
 , int.movement       = c("post", "post")
 , int.type           = "none"
-, int.init           = "2020-07-01"
-, sim_end            = "2020-08-31"
+, int.init           = "2020-08-15"
+, sim_end            = "2020-10-01"
 , sim_title          = "Continue SIP"                                    
 ),
   continue_SIP = list(
   counter.factual    = FALSE
 , int.movement       = c("post", "pre")
 , int.type           = "none"
-, int.init           = "2020-07-01"
-, sim_end            = "2020-08-31"
+, int.init           = "2020-08-15"
+, sim_end            = "2020-10-01"
 , sim_title          = "Lift"                                        
 ),
   inf_iso = list(
   counter.factual    = FALSE
 , int.movement       = c("post", "mid")
 , int.type           = "inf_iso"
-, int.init           = "2020-07-01"
-, sim_end            = "2020-08-31"
+, int.init           = "2020-08-15"
+, sim_end            = "2020-10-01"
 , sim_title          = "Isolate"
 , iso_mild_level     = 0.1
 , iso_severe_level   = 0.1
@@ -210,8 +209,8 @@ list(
   counter.factual     = FALSE
 , int.movement        = c("post", "mid")
 , int.type            = "tail"
-, int.init            = "2020-07-01"
-, sim_end             = "2020-08-31"
+, int.init            = "2020-08-15"
+, sim_end             = "2020-10-01"
 , sim_title           = "Superspreading_05%Tail_75%Eff"
 , int.beta_catch      = 0.005
 , int.beta_catch_type = "pct"
@@ -221,8 +220,8 @@ list(
   counter.factual     = FALSE
 , int.movement        = c("post", "mid")
 , int.type            = "tail"
-, int.init            = "2020-07-01"
-, sim_end             = "2020-08-31"
+, int.init            = "2020-08-15"
+, sim_end             = "2020-10-01"
 , sim_title           = "Superspreading_1%Tail_50%Eff"
 , int.beta_catch      = 0.01
 , int.beta_catch_type = "pct"
@@ -232,8 +231,8 @@ list(
   counter.factual     = FALSE
 , int.movement        = c("post", "mid")
 , int.type            = "tail"
-, int.init            = "2020-07-01"
-, sim_end             = "2020-08-31"
+, int.init            = "2020-08-15"
+, sim_end             = "2020-10-01"
 , sim_title           = "Superspreading_1%Tail_100%Eff"
 , int.beta_catch      = 0.003
 , int.beta_catch_type = "pct"
@@ -247,17 +246,19 @@ sim_vars <- list(
 , plot_vars       = c("cases", "deaths")
 , ci.stoc         = 0.025
 , ci.epidemic     = T
-, ci.epidemic_cut = 100
+, ci.epidemic_cut = 500
 , nsim            = 300
-, plot.median     = F
+, plot.median     = T
   )
 
 fig2_data <- ldply(int_vars, function(j) {
-  ldply(counties_list[c("KC", "LA")], function (i) {
+  ldply(counties_list[c("KC", "MD", "LA")], function (i) {
     source("COVID_simulate_cont_params.R", local = T)
     with(c(i, j, sim_vars), {
       print(int.beta_catch)
       source("./COVID_simulate_cont.R", local = T)
+      print("out")
+      assign("SEIR.sim.f.ci", SEIR.sim.f.ci, .GlobalEnv)
       SEIR.sim.f.ci %<>% 
         full_join(pomp_data %>%
                     arrange(day) %>%
@@ -267,8 +268,8 @@ fig2_data <- ldply(int_vars, function(j) {
                     select(date, any_of(plot_vars)) %>%
                     pivot_longer(any_of(plot_vars), values_to = "data")) %>%
         mutate(intervention = sim_title,
-               county = variable_params[1, "county"] %>% as.character,
-               state = variable_params[1, "state"] %>% as.character) 
+               county = county.details[1, "county"] %>% as.character,
+               state = county.details[1, "state"] %>% as.character) 
       return(SEIR.sim.f.ci)
       
     }
@@ -289,80 +290,88 @@ fig2_data %>%
     "Continue SIP"
   , "Isolate"
   , "Lift"
-#  , "Superspreading_05%Tail_75%Eff"
- , "Superspreading_1%Tail_50%Eff"
- , "Superspreading_1%Tail_100%Eff"
+   , "Superspreading_05%Tail_75%Eff"
+#  , "Superspreading_1%Tail_50%Eff"
+#  , "Superspreading_1%Tail_100%Eff"
                              )) %>% 
    mutate(intervention = mapvalues(intervention,
                                    from = c("Continue SIP",
                                             "Isolate",
                                             "Lift",
-                                    #  , "Superspreading_05%Tail_75%Eff"
-   "Superspreading_1%Tail_50%Eff"
- , "Superspreading_1%Tail_100%Eff"
+                                            "Superspreading_05%Tail_75%Eff"
+#   "Superspreading_1%Tail_50%Eff"
+# , "Superspreading_1%Tail_100%Eff"
                                      ),
                                     to  = c(
                                        "Continue shelter in place"
-                                     , "Infected isolation"
+                                     , "Symptomatic Infected isolation"
                                      , "Lift all interventions"
-                                     , "Superspreading Averted(Top 1% of\ndistribution removed with 50% effectiveness)"
-                                     , "Superspreading Averted(Top .3% of\ndistribution removed with 100% effectiveness)"
-                                      #  , "Superspreading Averted(Top .5% of\ndistribution removed with 75% effectiveness)"
+                                   #  , "Superspreading Averted(Top 1% of\ndistribution removed with 50% effectiveness)"
+                                    # , "Superspreading Averted(Top .3% of\ndistribution removed with 100% effectiveness)"
+                                      , "Superspreading Averted(Top 0.5% of\ndistribution removed with 75% effectiveness)"
                                    ))) %>%
    mutate(county = mapvalues(county,
-                                   from = c("King",
-                                            "Los Angeles"
+                                   from = c("King"
+                                          , "Los Angeles"
+                                          , "Miami-Dade" 
                                      ),
                                     to  = c(
                                        "Seattle, WA"
                                      , "Los Angeles, CA"
+                                      , "Miami, FL"
                                    ))) %>% 
   mutate(name = mapvalues(name, 
     from = c("Cases", "Deaths")
-  , to   = c("Daily Cases", "Daily Deaths")
+  , to   = c("Daily reported cases", "Daily deaths")
   )) %>%
    mutate(intervention = factor(intervention, levels = c(
      "Lift all interventions"
    , "Continue shelter in place"
-   , "Infected isolation"
-  # , "Superspreading Averted(Top 1% of\ndistribution removed with 75% effectiveness)"
-   , "Superspreading Averted(Top 1% of\ndistribution removed with 50% effectiveness)"
-   , "Superspreading Averted(Top .3% of\ndistribution removed with 100% effectiveness)"
+   , "Symptomatic Infected isolation"
+   , "Superspreading Averted(Top 0.5% of\ndistribution removed with 75% effectiveness)"
+  # , "Superspreading Averted(Top 1% of\ndistribution removed with 50% effectiveness)"
+  # , "Superspreading Averted(Top .3% of\ndistribution removed with 100% effectiveness)"
      ))) %>% {
     ggplot(aes(x = date, y = mid, 
               ymin = lwr, ymax = upr, 
               fill  = intervention, color = intervention),
           data = .) +
       facet_grid(name ~ county, scales = "free_y", switch = "y")  +
-      geom_ribbon(data = (filter(., date >= as.Date("2020-07-01")))
-                  , alpha = 0.50, colour = NA) +
-  geom_line(data = (filter(., date >= as.Date("2020-07-01")))) +
-  geom_ribbon(data = (filter(., date <= as.Date("2020-07-01")
+      geom_ribbon(data = (filter(., date >= as.Date("2020-08-15")))
+                  , colour = NA) +
+  geom_line(data = (filter(., date >= as.Date("2020-08-15"))), lwd = 1.5) +
+  geom_ribbon(data = (filter(., date <= as.Date("2020-08-15")
                              , intervention == "Lift all interventions"))
-  , alpha = 0.50, colour = NA, fill = "black") +
-  geom_line(data = (filter(., date <= as.Date("2020-07-01")
+  , alpha = 0.20, colour = NA, fill = "black") +
+  geom_line(data = (filter(., date <= as.Date("2020-08-15")
    , intervention == "Lift all interventions"
     ))
   , colour = "black") +
-  geom_vline(xintercept = as.Date("2020-07-01"), linetype = "dashed", lwd = 0.5) + 
+  geom_vline(xintercept = as.Date("2020-08-15"), linetype = "dashed", lwd = 0.5) + 
   geom_point(aes(x = date, y = data), 
              color = "black", size = 1) + 
-  scale_y_continuous(trans = "pseudo_log", breaks = c(1, 10, 100, 1000, 10000)) +
-      #+ #, labels = trans_format('log10', math_format(10^.x))) +
-  scale_fill_manual(values = fig2_colors[c(2,1,3,4,5)]
+  scale_y_continuous(trans = "pseudo_log", breaks = c(1, 10, 100, 1000, 5000, 10000, 100000) 
+      , labels = c("1", "10", "100", "1000", "5000", expression("10"^4), expression("10"^5))) + 
+      # trans_format('log10', math_format(10^.x))) +
+  scale_fill_manual(values = alpha(fig2_colors[c(2,1,3,4,5)], c(0.3, 0.5, 0.3, 0.3, 0.3))
     , name = "Intervention") +
   scale_color_manual(values = fig2_colors[c(2,1,3,4,5)]
     , name = "Intervention") +
   ylab("") + 
   theme(
     strip.background = element_blank()
-    , legend.position  = c(0.670, 0.905)
+    , legend.position  = c(0.465, 0.885)
     , legend.text = element_text(size = 12)
     , legend.background = element_blank()
     , strip.placement = "outside"
     , strip.text = element_text(size = 16)
-    , axis.text.x = element_text(size = 14)) +
+    , axis.text.x = element_text(size = 17)
+    , axis.text.y = element_text(size = 17)
+    , axis.title.x = element_text(size = 19)
+    , axis.title.y = element_text(size = 19)) +
   xlab("Date")}
+
+ggsave(filename = "/Users/Morgan/Desktop/Figure2.pdf", plot = last_plot(), width = 16.5,  height = 10, units = c("in"))
 
 ####
 ## Figure 3: SIP and truncation combinations ----
@@ -1286,4 +1295,3 @@ with(hist_vars, replicate(nsim, {
                       "\nvariance = ", 
                       var(.)))})
 dev.off()
->>>>>>> b0f1377cef9c454b268494c5df28f4ed8a341f43
