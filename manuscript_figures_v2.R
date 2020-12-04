@@ -783,7 +783,7 @@ fig3_hist <- fig3_hist_df %>%
   ggplot(aes(x = value, 
              y = ..count../sum(..count..),
              group = dist, fill = dist, color = dist)) + 
-  geom_histogram(color = NA, position = "identity", alpha = 0.8) +
+  geom_histogram(olor = NA, position = "identity", alpha = 0.8) +
   # geom_density(trim = TRUE) +
   geom_vline(data = data.frame(xint=with(hist_vars, qgamma(1 - beta_catch, shape = k*dt/d, scale = R0/k)),
                                time = "4-hour time step",
@@ -791,8 +791,9 @@ fig3_hist <- fig3_hist_df %>%
                unite("time_size", c("time", "size"), sep = ", "),
              aes(xintercept = xint), linetype = "dashed") +
   facet_wrap( ~ time_size, scales = "free", nrow = 2) + 
-  scale_fill_manual(name = "Distribution", values = c("#F21A00", "#3B9AB2")) + 
-  scale_color_manual(name = "Distribution", values = c("#F21A00", "#3B9AB2")) + 
+  scale_fill_manual(name = "Distribution", values = c("#F21A00", "#3B9AB2"), 
+                    aesthetics = c("fill", "color")) + 
+  # scale_color_manual(name = "Distribution", values = c("#F21A00", "#3B9AB2")) + 
   # scale_y_continuous(trans = "pseudo_log") + 
   scale_y_continuous(trans = "sqrt",
                      labels = scales::percent_format(accuracy = 1)) +
@@ -1168,7 +1169,7 @@ ggsave("figures/Manuscript2/Figure4_v2.pdf",
 
 
 
-# Figure S4 ----
+# Figure S13: truncation effects over trucation percentile ----
 figS4_extinct <- {fig4_scale %>% 
     mutate(file = mapvalues(X1, from = as.character(1:9),
                             to = gsub(".Rds|_run2", "", list.files("./output/figure4_scale_data", pattern = "Rds")) %>% unique)) %>%
@@ -1183,7 +1184,7 @@ figS4_extinct <- {fig4_scale %>%
     geom_point() + 
     scale_color_manual(values = fig4_colors, 
                        name = "Remaining infected when interventions relaxed") +
-    xlab("Efficiency of truncation") + 
+    xlab("Upper percentile of transmission rates averted") + 
     ylab("Proportion of epidemic\nsimulations extinct") + 
     scale_y_continuous(labels = scales::percent_format(accuracy = 1)) + 
     scale_x_continuous(labels = scales::percent_format(accuracy = 0.001)) + 
@@ -1219,77 +1220,10 @@ figS4 <- gridExtra::arrangeGrob(figS4_extinct, figS4_uprCI,
                                 layout_matrix = matrix(c(1, 2), 
                                                        byrow  = F, nrow = 2),
                                 widths = c(1.5))
-ggsave("figures/Manuscript2/FigureS4.pdf", 
+ggsave("figures/Manuscript2/figure_resurgence_truncation_percentile.pdf", 
        figS4, 
        width = 6, 
        height = 7)
-
-# Figure S13: version of figure 4 with no SIP scaling ----
-
-fig5_data <- adply(list.files("./output/figure4_noscale_data", 
-                              full.names = T, pattern = "Rds"),
-                   1,
-                   function(j){
-                     test <- readRDS(j)
-                     
-                     test_sum <- test %>% select(-data, -X1, -county, -state) %>% 
-                       filter(!is.na(.id)) %>% 
-                       pivot_wider() %>% 
-                       group_by(.id, beta_catch, catch_eff, threshold_I) %>% 
-                       arrange(day) %>% 
-                       mutate(any_cross = max(thresh_crossed)) %>%
-                       filter(any_cross > 0) %>%
-                       mutate(first_cross = first(which(thresh_crossed > 0))  + first(date),
-                              days_post = as.numeric(date - first_cross),
-                              max_post = max(days_post)) %>% 
-                       ungroup %>% 
-                       unite("intervention", beta_catch:threshold_I, remove = F) %>% 
-                       select(-any_cross, -first_cross) %>%
-                       mutate(value = I) %>%
-                       group_by(days_post, 
-                                intervention, 
-                                beta_catch,
-                                catch_eff, 
-                                threshold_I) %>%
-                       mutate(extinct = (value == 0)) %>%
-                       summarise(n = n(),
-                                 prop_extinct = sum(extinct)/n(),
-                                 lwr = min(value),
-                                 lwr_005 = quantile(ifelse(extinct, NA, value), 0.005, na.rm = T),
-                                 lwr_025 = quantile(ifelse(extinct, NA, value), 0.025, na.rm = T),
-                                 lwr_05 = quantile(ifelse(extinct, NA, value), 0.05, na.rm = T),
-                                 lwr_01 = quantile(ifelse(extinct, NA, value), 0.01, na.rm = T),
-                                 lwr_10 = quantile(ifelse(extinct, NA, value), 0.1, na.rm = T),
-                                 lwr_99_all = quantile(value, 0.005),
-                                 lwr_95_all = quantile(value, 0.025),
-                                 lwr_90_all = quantile(value, 0.05),
-                                 upr = max(value),
-                                 upr_995 = quantile(ifelse(extinct, NA, value), 0.995, na.rm = T),
-                                 upr_99 = quantile(ifelse(extinct, NA, value), 0.99, na.rm = T),
-                                 upr_975 = quantile(ifelse(extinct, NA, value), 0.975, na.rm = T),
-                                 upr_95 = quantile(ifelse(extinct, NA, value), 0.95, na.rm = T),
-                                 upr_90 = quantile(ifelse(extinct, NA, value), 0.90, na.rm = T),
-                                 upr_99_all = quantile(value, 0.995),
-                                 upr_95_all = quantile(value, 0.975),
-                                 upr_90_all = quantile(value, 0.95),
-                                 med_all = median(value),
-                                 mean_all = mean(value),
-                                 mean = mean(ifelse(extinct, NA, value), na.rm = T),
-                                 median = median(ifelse(extinct, NA, value), na.rm = T),
-                                 .groups = "drop")
-                     return(test_sum)
-                   })
-
-fig5_data %>% 
-  filter(days_post == 6*7) %>%
-  mutate(threshold_I = as.factor(threshold_I)) %>%
-  ggplot(aes(x = catch_eff, 
-             y = upr_99, 
-             group = threshold_I,
-             color = threshold_I)) +
-  geom_line() + 
-  geom_point()
-  
 
 # Figure S14: supplement figure showing effect of multiple gamma distributed infection periods on variance----
 pdf("figures/Manuscript2/variance_comparison.pdf",
