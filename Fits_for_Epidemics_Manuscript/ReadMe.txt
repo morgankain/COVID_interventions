@@ -1,0 +1,1 @@
+Each .Rds file contains 5 list entries. The first four contain parameter values and likelihoods after 4 consecutive rounds of mif2 filtering. For details on the mif2 parameters see the methods section of "Chopping the tail: how preventing superspreading can help to maintain COVID-19 control" in Epidemics. The fifth list entry ("date_origin") gives the zero reference date.
