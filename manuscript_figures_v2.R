@@ -1271,16 +1271,6 @@ with(hist_vars, replicate(nsim, {
 with(hist_vars, replicate(nsim, {
   d <- sum(rgeom(nstage, nstage*1/d_avg*dt)+1)
   sum(rgamma(d, k*dt/d_avg, scale = R0/k))}) %>% 
-<<<<<<< HEAD
-  {hist(., 
-        breaks = 100,
-        main = paste0("C. ", nstage, 
-                      " geometrically distributed infection periods\nmean = ", 
-                      mean(.), 
-                      "\nvariance = ", 
-                      var(.)))})
-dev.off()
-=======
   {hist(., breaks = 50, main = "",
         las = 1, ylab = "")
     title(main = paste0("C. ", nstage, 
@@ -1291,4 +1281,3 @@ dev.off()
           cex.main = 1)
     title(ylab = "Frequency", line = 4)})
 dev.off()
->>>>>>> 08fab88404b2f829c00aaeee4b7cedf3682cada5
